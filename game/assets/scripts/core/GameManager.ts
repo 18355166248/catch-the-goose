@@ -127,29 +127,24 @@ export class GameManager extends Component {
     // ---------- 场景搭建 ----------
 
     private buildBox() {
-        const S = GameManager.BOX_SIZE, H = GameManager.WALL_H, T = 0.3;
-        const wood = this.makeMat(new Color(235, 230, 225), 'wood_dark');
+        const S = GameManager.BOX_SIZE;
+        // 突出的平台（舞台式）：物件全程无遮挡，围栏只留物理不留视觉
         const woodFloor = this.makeMat(new Color(235, 230, 225), 'wood_floor');
-        // 地板 + 四壁（静态刚体）。碰撞体比可见墙高一倍多，物件再蹦也翻不出去
-        const wallColl = (w: number, l: number) => v3(w, H * 3, l);
-        const wallCenter = v3(0, H, 0);
-        this.makeStaticBox('floor', v3(0, -T / 2, 0), v3(S + T * 2, T, S + T * 2), woodFloor);
-        this.makeStaticBox('wallN', v3(0, H / 2, -S / 2 - T / 2), v3(S + T * 2, H, T), wood, wallColl(S + T * 2, T), wallCenter);
-        this.makeStaticBox('wallS', v3(0, H / 2, S / 2 + T / 2), v3(S + T * 2, H, T), wood, wallColl(S + T * 2, T), wallCenter);
-        this.makeStaticBox('wallW', v3(-S / 2 - T / 2, H / 2, 0), v3(T, H, S), wood, wallColl(T, S), wallCenter);
-        this.makeStaticBox('wallE', v3(S / 2 + T / 2, H / 2, 0), v3(T, H, S), wood, wallColl(T, S), wallCenter);
+        const woodEdge = this.makeMat(new Color(190, 150, 115), 'wood_dark');
+        // 台面（顶面 y=0）+ 更宽的深色底座（层叠出"突出"感）
+        this.makeStaticBox('floor', v3(0, -0.25, 0), v3(S + 1.0, 0.5, S + 1.0), woodFloor);
+        this.makeVisualBox('base', v3(0, -0.62, 0), v3(S + 1.8, 0.32, S + 1.8), woodEdge);
 
-        // 盒口沿条（浅色红木压边，勾出盒子轮廓）
-        const rim = this.makeMat(new Color(200, 150, 110), 'wood_floor');
-        const RT = T + 0.16, RH = 0.12;
-        this.makeVisualBox('rimN', v3(0, H + RH / 2, -S / 2 - T / 2), v3(S + T * 2 + 0.3, RH, RT), rim);
-        this.makeVisualBox('rimS', v3(0, H + RH / 2, S / 2 + T / 2), v3(S + T * 2 + 0.3, RH, RT), rim);
-        this.makeVisualBox('rimW', v3(-S / 2 - T / 2, H + RH / 2, 0), v3(RT, RH, S + 0.3), rim);
-        this.makeVisualBox('rimE', v3(S / 2 + T / 2, H + RH / 2, 0), v3(RT, RH, S + 0.3), rim);
+        // 隐形围栏（只有碰撞体，无渲染）：拦住物件不滚出台面
+        const WH = 5, WT = 0.25;
+        this.makeInvisibleWall('fenceN', v3(0, WH / 2, -S / 2 - WT / 2), v3(S + 1.0, WH, WT));
+        this.makeInvisibleWall('fenceS', v3(0, WH / 2, S / 2 + WT / 2), v3(S + 1.0, WH, WT));
+        this.makeInvisibleWall('fenceW', v3(-S / 2 - WT / 2, WH / 2, 0), v3(WT, WH, S));
+        this.makeInvisibleWall('fenceE', v3(S / 2 + WT / 2, WH / 2, 0), v3(WT, WH, S));
 
-        // 大背景板（带暗角的暖棕渐变，unlit 不受光，和盒子拉开层次）
+        // 大背景板（带暗角的暖棕渐变，unlit 不受光，和平台拉开层次）
         const bg = this.makeMat(new Color(255, 255, 255), 'backdrop', false);
-        this.makeVisualBox('backdrop', v3(0, -0.8, -2), v3(44, 0.1, 44), bg);
+        this.makeVisualBox('backdrop', v3(0, -0.9, -2), v3(44, 0.1, 44), bg);
 
         // 托盘：深色底座 + 内嵌象牙槽位
         const trayBase = this.makeMat(new Color(70, 44, 28), 'wood_dark');
@@ -160,6 +155,17 @@ export class GameManager extends Component {
             const p = this.slotPos(i);
             this.makeVisualBox(`slotPad${i}`, v3(p.x, 0.03, p.z), v3(0.66, 0.05, 0.72), pad);
         }
+    }
+
+    /** 只有物理没有外观的围栏 */
+    private makeInvisibleWall(name: string, pos: Vec3, size: Vec3) {
+        const n = new Node(name);
+        n.setParent(this.node);
+        n.setPosition(pos);
+        const rb = n.addComponent(RigidBody);
+        rb.type = RigidBody.Type.STATIC;
+        const col = n.addComponent(BoxCollider);
+        col.size = size;
     }
 
     /** 只有外观没有物理的盒子（槽位垫片等） */
