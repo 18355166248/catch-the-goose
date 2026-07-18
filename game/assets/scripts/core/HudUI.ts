@@ -51,8 +51,8 @@ export class HudUI {
 
         const defs: Array<[PropKind, string]> = [['remove', '移出'], ['magnet', '凑齐'], ['shuffle', '打乱']];
         defs.forEach(([kind, text], i) => {
-            this.propLabels[kind] = this.makeLabel(canvasNode, `「${text}」`, 34,
-                { bottom: 36 }, (i - 1) * 210, green, () => onProp(kind));
+            this.propLabels[kind] = this.makeLabel(canvasNode, `「${text}」`, 30,
+                { bottom: 40 }, (i - 1) * 190, green, () => onProp(kind));
         });
     }
 

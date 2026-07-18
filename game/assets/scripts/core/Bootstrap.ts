@@ -18,7 +18,7 @@ if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
     // 防重复自举（双保险）：
     // 1) globalThis 按场景 uuid 加锁——脚本模块被评估两遍时两个副本共享同一把锁
     // 2) 节点名兜底
-    (globalThis as any).__bootVer = 10; // 自测用：确认页面加载的是本版脚本
+    (globalThis as any).__bootVer = 11; // 自测用：确认页面加载的是本版脚本
 
     // 竖屏设计分辨率（微信小游戏目标形态），宽度固定、高度随屏幕
     view.setDesignResolutionSize(720, 1280, ResolutionPolicy.FIXED_WIDTH);

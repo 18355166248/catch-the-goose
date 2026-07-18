@@ -93,9 +93,28 @@ export class GameManager extends Component {
         for (const c of n.children) this.forceLayer(c);
     }
 
+    private patrolTimer = 0;
+
     update(dt: number) {
         this.hud?.sync();
         if (!this.playing) return;
+        // 逃逸回收：物件被挤出盒外或停在墙顶时，抓回盒内重新掉落
+        this.patrolTimer += dt;
+        if (this.patrolTimer > 2) {
+            this.patrolTimer = 0;
+            const lim = GameManager.BOX_SIZE / 2 - 0.2;
+            for (const t of this.node.getComponentsInChildren(ItemTag)) {
+                if (t.picked || !t.node.isValid) continue;
+                const p = t.node.worldPosition;
+                // 横向越过内壁（含停在墙顶）或掉穿地板才算逃逸；倾倒中的高空物件不误伤
+                const escaped = Math.abs(p.x) > lim || Math.abs(p.z) > lim || p.y < -0.6;
+                if (escaped) {
+                    t.node.setWorldPosition((Math.random() - 0.5) * 2, 2.5, (Math.random() - 0.5) * 2);
+                    const rb = t.node.getComponent(RigidBody);
+                    try { rb?.clearState(); } catch { /* 忽略 */ }
+                }
+            }
+        }
         this.timeLeft -= dt;
         if (this.timeLeft <= 0) {
             this.timeLeft = 0;
