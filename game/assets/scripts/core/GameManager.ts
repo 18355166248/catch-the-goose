@@ -2,13 +2,13 @@ import {
     _decorator, Component, Node, Camera, Label, Prefab, resources, instantiate,
     RigidBody, BoxCollider, MeshRenderer, Material, primitives, utils,
     PhysicsSystem, input, Input, EventTouch, tween, Tween, v3, Vec3, Quat, Color, geometry,
-    assetManager, EffectAsset, Layers,
+    assetManager, EffectAsset, Layers, view, Texture2D, sys,
 } from 'cc';
 import { LEVELS, LevelDef } from './LevelConfig';
 import { SlotTray, TRAY_CAPACITY } from './SlotTray';
 import { ItemTag } from './ItemTag';
 import { MODEL_PREFAB_UUID } from './ModelManifest';
-import { HudUI } from './HudUI';
+import { HudUI, PropKind } from './HudUI';
 
 const { ccclass, property } = _decorator;
 
@@ -50,6 +50,9 @@ export class GameManager extends Component {
     }
 
     onLoad() {
+        // 低帧率环境下防物理隧穿（大 dt 单步积分会让物件穿墙）
+        PhysicsSystem.instance.maxSubSteps = 4;
+        PhysicsSystem.instance.fixedTimeStep = 1 / 60;
         this.buildBox();
         input.on(Input.EventType.TOUCH_START, this.onTouch, this);
     }
@@ -75,6 +78,7 @@ export class GameManager extends Component {
         this.timerLabel = this.hud.timerLabel;
         this.progressLabel = this.hud.progressLabel;
         this.msgLabel = this.hud.msgLabel;
+        this.loadProps();
         this.level = LEVELS[Math.min(this.levelIndex, LEVELS.length - 1)];
         this.timeLeft = this.level.timeSec;
         await this.loadPrefabs(this.level.items);
@@ -90,6 +94,7 @@ export class GameManager extends Component {
     }
 
     update(dt: number) {
+        this.hud?.sync();
         if (!this.playing) return;
         this.timeLeft -= dt;
         if (this.timeLeft <= 0) {
@@ -103,18 +108,23 @@ export class GameManager extends Component {
 
     private buildBox() {
         const S = GameManager.BOX_SIZE, H = GameManager.WALL_H, T = 0.3;
-        const wood = this.makeMat(new Color(120, 72, 48));
+        const wood = this.makeMat(new Color(235, 230, 225), 'wood_dark');
+        const woodFloor = this.makeMat(new Color(235, 230, 225), 'wood_floor');
         // 地板 + 四壁（静态刚体）。碰撞体比可见墙高一倍多，物件再蹦也翻不出去
         const wallColl = (w: number, l: number) => v3(w, H * 3, l);
         const wallCenter = v3(0, H, 0);
-        this.makeStaticBox('floor', v3(0, -T / 2, 0), v3(S + T * 2, T, S + T * 2), wood);
+        this.makeStaticBox('floor', v3(0, -T / 2, 0), v3(S + T * 2, T, S + T * 2), woodFloor);
         this.makeStaticBox('wallN', v3(0, H / 2, -S / 2 - T / 2), v3(S + T * 2, H, T), wood, wallColl(S + T * 2, T), wallCenter);
         this.makeStaticBox('wallS', v3(0, H / 2, S / 2 + T / 2), v3(S + T * 2, H, T), wood, wallColl(S + T * 2, T), wallCenter);
         this.makeStaticBox('wallW', v3(-S / 2 - T / 2, H / 2, 0), v3(T, H, S), wood, wallColl(T, S), wallCenter);
         this.makeStaticBox('wallE', v3(S / 2 + T / 2, H / 2, 0), v3(T, H, S), wood, wallColl(T, S), wallCenter);
 
+        // 大背景木板（铺满视野，替代纯色清屏底）
+        const bg = this.makeMat(new Color(120, 112, 105), 'wood_dark');
+        this.makeVisualBox('backdrop', v3(0, -0.6, 0), v3(40, 0.1, 40), bg);
+
         // 槽位垫片（纯视觉，无碰撞）
-        const pad = this.makeMat(new Color(210, 200, 180));
+        const pad = this.makeMat(new Color(240, 235, 225), 'pad_ivory');
         for (let i = 0; i < TRAY_CAPACITY; i++) {
             const p = this.slotPos(i);
             this.makeVisualBox(`slotPad${i}`, v3(p.x, 0.02, p.z), v3(0.72, 0.04, 0.72), pad);
@@ -131,7 +141,7 @@ export class GameManager extends Component {
         if (mat && mat.passes.length > 0) mr.material = mat;
     }
 
-    private makeMat(color: Color): Material | null {
+    private makeMat(color: Color, texture?: string): Material | null {
         // 不同版本 builtin effect 注册名有差异，逐个候选找可用的
         const candidates = ['builtin-unlit', 'unlit', 'builtin-standard', 'standard'];
         const effectName = candidates.find(n => EffectAsset.get(n));
@@ -140,9 +150,21 @@ export class GameManager extends Component {
             return null;
         }
         const mat = new Material();
-        mat.initialize({ effectName });
+        // 贴图需要在初始化时开宏，否则 setProperty 了也不参与着色
+        const defines = texture
+            ? (effectName.includes('unlit') ? { USE_TEXTURE: true } : { USE_ALBEDO_MAP: true })
+            : {};
+        mat.initialize({ effectName, defines });
         for (const prop of ['mainColor', 'albedo']) {
             try { mat.setProperty(prop, color); break; } catch { /* 换下一个属性名 */ }
+        }
+        if (texture) {
+            resources.load(`textures/${texture}/texture`, Texture2D, (err, tex) => {
+                if (err || !tex || mat.passes.length === 0) return;
+                for (const prop of ['mainTexture', 'albedoMap']) {
+                    try { mat.setProperty(prop, tex); break; } catch { /* 换下一个属性名 */ }
+                }
+            });
         }
         return mat;
     }
@@ -216,28 +238,32 @@ export class GameManager extends Component {
             if (!prefab) continue;
             const count = this.level.groupsPerItem * 3;
             for (let i = 0; i < count; i++) {
-                const n = instantiate(prefab);
-                n.setParent(this.node);
-                this.forceLayer(n);
-                // 盒子上方随机位置倾倒（高度压低减少弹跳出界）
-                n.setPosition(
-                    (Math.random() - 0.5) * (S - 1.8),
-                    1.5 + Math.random() * 2.5,
-                    (Math.random() - 0.5) * (S - 1.8),
-                );
-                const q = new Quat();
-                Quat.fromEuler(q, Math.random() * 360, Math.random() * 360, Math.random() * 360);
-                n.setRotation(q);
-                n.setScale(0.9, 0.9, 0.9);
-
-                const tag = n.addComponent(ItemTag);
-                tag.id = id;
-                const rb = n.addComponent(RigidBody);
-                rb.mass = 1;
-                rb.angularDamping = 0.3;
-                const col = n.addComponent(BoxCollider);
-                col.size = v3(0.7, 0.7, 0.7);
                 this.totalCount++;
+                // 分批倾倒：一次性全下会互相挤爆并隧穿薄墙
+                const delay = this.totalCount * 0.06;
+                this.scheduleOnce(() => {
+                    const n = instantiate(prefab);
+                    n.setParent(this.node);
+                    this.forceLayer(n);
+                    n.setPosition(
+                        (Math.random() - 0.5) * (S - 2.2),
+                        2 + Math.random() * 1.5,
+                        (Math.random() - 0.5) * (S - 2.2),
+                    );
+                    const q = new Quat();
+                    Quat.fromEuler(q, Math.random() * 360, Math.random() * 360, Math.random() * 360);
+                    n.setRotation(q);
+                    n.setScale(0.9, 0.9, 0.9);
+
+                    const tag = n.addComponent(ItemTag);
+                    tag.id = id;
+                    const rb = n.addComponent(RigidBody);
+                    rb.mass = 1;
+                    rb.angularDamping = 0.3;
+                    rb.linearDamping = 0.15;
+                    const col = n.addComponent(BoxCollider);
+                    col.size = v3(0.7, 0.7, 0.7);
+                }, delay);
             }
         }
         console.log(`[GameManager] 关卡 ${this.levelIndex + 1}：生成 ${this.totalCount} 个物件`);
@@ -248,7 +274,7 @@ export class GameManager extends Component {
     private onTouch(e: EventTouch) {
         if (!this.playing || !this.cam) return;
         const p = e.getLocation();
-        if (p.y < 130) return; // 底部道具按钮区，不穿透拾取
+        if (p.y < view.getCanvasSize().height * 0.12) return; // 底部道具按钮区，不穿透拾取
         const ray = new geometry.Ray();
         this.cam.screenPointToRay(p.x, p.y, ray);
         if (!PhysicsSystem.instance.raycastClosest(ray)) return;
@@ -295,17 +321,47 @@ export class GameManager extends Component {
 
     // ---------- 道具 ----------
 
-    useProp(kind: 'remove' | 'magnet' | 'shuffle') {
+    private static readonly PROP_STORE = 'goose_props_v1';
+    private propCounts: Record<PropKind, number> = { remove: 3, magnet: 3, shuffle: 3 };
+    private static readonly PROP_NAMES: Record<PropKind, string> = { remove: '移出', magnet: '凑齐', shuffle: '打乱' };
+
+    private loadProps() {
+        try {
+            const raw = sys.localStorage.getItem(GameManager.PROP_STORE);
+            if (raw) this.propCounts = { ...this.propCounts, ...JSON.parse(raw) };
+        } catch { /* 损坏则用默认 */ }
+        this.refreshPropHud();
+    }
+
+    private saveProps() {
+        try { sys.localStorage.setItem(GameManager.PROP_STORE, JSON.stringify(this.propCounts)); } catch { /* 存储不可用则仅内存 */ }
+        this.refreshPropHud();
+    }
+
+    private refreshPropHud() {
+        if (!this.hud) return;
+        for (const k of ['remove', 'magnet', 'shuffle'] as PropKind[]) {
+            this.hud.setPropCount(k, GameManager.PROP_NAMES[k], this.propCounts[k]);
+        }
+    }
+
+    useProp(kind: PropKind) {
         if (!this.playing) return;
-        if (kind === 'remove') this.propRemove();
-        else if (kind === 'magnet') this.propMagnet();
-        else this.propShuffle();
+        if (this.propCounts[kind] <= 0) return;
+        let used = false;
+        if (kind === 'remove') used = this.propRemove();
+        else if (kind === 'magnet') used = this.propMagnet();
+        else used = this.propShuffle();
+        if (used) {
+            this.propCounts[kind]--;
+            this.saveProps();
+        }
     }
 
     /** 移出：槽头 3 个物件放回盒子 */
-    private propRemove() {
+    private propRemove(): boolean {
         const back = this.tray.takeFront(3);
-        if (back.length === 0) return;
+        if (back.length === 0) return false;
         back.forEach((e, i) => {
             const tag = e.node.getComponent(ItemTag)!;
             Tween.stopAllByTarget(e.node);
@@ -317,10 +373,11 @@ export class GameManager extends Component {
             e.node.getComponent(BoxCollider)!.enabled = true;
         });
         this.reflowTray();
+        return true;
     }
 
     /** 凑齐：自动吸取盒中物件补全一组三消（优先补槽内已有的类别） */
-    private propMagnet() {
+    private propMagnet(): boolean {
         const counts = this.tray.countById();
         const boxItems = this.node.getComponentsInChildren(ItemTag).filter(t => !t.picked && t.node.isValid);
         const availOf = (id: string) => boxItems.filter(t => t.id === id).length;
@@ -339,19 +396,21 @@ export class GameManager extends Component {
         if (!target && this.tray.count + 3 <= TRAY_CAPACITY) {
             target = boxItems.find(t => availOf(t.id) >= 3)?.id ?? null;
         }
-        if (!target) return;
+        if (!target) return false;
 
         const need = 3 - (counts.get(target) ?? 0);
         const picks = boxItems.filter(t => t.id === target).slice(0, need);
         picks.forEach((t, i) => this.scheduleOnce(() => {
             if (this.playing && t.node.isValid && !t.picked) this.pick(t.node, t);
         }, i * 0.18));
+        return true;
     }
 
     /** 打乱：盒中剩余物件重新抛起洗一遍 */
-    private propShuffle() {
+    private propShuffle(): boolean {
         const S = GameManager.BOX_SIZE;
         const boxItems = this.node.getComponentsInChildren(ItemTag).filter(t => !t.picked && t.node.isValid);
+        if (boxItems.length === 0) return false;
         for (const t of boxItems) {
             t.node.setWorldPosition(
                 (Math.random() - 0.5) * (S - 1.5),
@@ -363,6 +422,7 @@ export class GameManager extends Component {
             const rb = t.node.getComponent(RigidBody)!;
             try { rb.clearState(); } catch { /* 部分版本无此方法，忽略 */ }
         }
+        return true;
     }
 
     /** 槽中所有物件按当前顺序补位（含飞入中的） */
@@ -387,6 +447,11 @@ export class GameManager extends Component {
         if (!this.playing) return;
         this.playing = false;
         const stars = this.progress >= 100 ? 3 : this.progress >= 70 ? 2 : this.progress >= 50 ? 1 : 0;
+        // 星级奖励：一星+移出、二星再+凑齐、三星再+打乱
+        if (stars >= 1) this.propCounts.remove++;
+        if (stars >= 2) this.propCounts.magnet++;
+        if (stars >= 3) this.propCounts.shuffle++;
+        if (stars > 0) this.saveProps();
         const msg = win
             ? `胜利！${'★'.repeat(Math.max(1, stars))} 完成度 ${this.progress}%`
             : `失败（${reason}）完成度 ${this.progress}%`;
@@ -395,7 +460,9 @@ export class GameManager extends Component {
         // 1 秒后允许点击任意处重开本关（原地重置，不重载场景——
         // loadScene 重载后自定义管线的主相机会停止渲染，规避之）
         this.scheduleOnce(() => {
-            if (this.hud) this.hud.subMsgLabel.string = '点击任意处重新挑战';
+            if (this.hud) {
+                this.hud.subMsgLabel.string = (stars > 0 ? `获得 ${stars} 件道具奖励，` : '') + '点击任意处重新挑战';
+            }
             input.once(Input.EventType.TOUCH_START, () => this.resetLevel());
         }, 1);
     }

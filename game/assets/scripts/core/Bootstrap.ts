@@ -1,4 +1,4 @@
-import { director, Director, Node, Camera, DirectionalLight, Color } from 'cc';
+import { director, Director, Node, Camera, DirectionalLight, Color, view, ResolutionPolicy, Layers } from 'cc';
 import { EDITOR } from 'cc/env';
 import { GameManager } from './GameManager';
 
@@ -18,7 +18,10 @@ if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
     // 防重复自举（双保险）：
     // 1) globalThis 按场景 uuid 加锁——脚本模块被评估两遍时两个副本共享同一把锁
     // 2) 节点名兜底
-    (globalThis as any).__bootVer = 5; // 自测用：确认页面加载的是本版脚本
+    (globalThis as any).__bootVer = 10; // 自测用：确认页面加载的是本版脚本
+
+    // 竖屏设计分辨率（微信小游戏目标形态），宽度固定、高度随屏幕
+    view.setDesignResolutionSize(720, 1280, ResolutionPolicy.FIXED_WIDTH);
     // 防重复自举：标记打在场景实例上（scene.uuid 是资源 uuid，重载后同值，不能当锁用）
     const inst = scene as any;
     if (inst.__gooseBooted) return;
@@ -40,34 +43,31 @@ if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
         console.warn('[Bootstrap] 禁用天空盒失败', e);
     }
 
-    // 清理模板自带的展示模型（保留相机、灯和 GameRoot）
+    // 清掉模板场景的全部子节点（含模板相机/灯——它们是 PrefabInstance，
+    // 预览的二次场景启动会把预制体节点回收导致黑屏；相机灯光全部自建普通节点）
     for (const child of [...scene.children]) {
-        if (child.name === 'GameRoot') continue;
-        const keep = child.getComponentInChildren(Camera) || child.getComponentInChildren(DirectionalLight);
-        if (!keep) child.destroy();
+        if (child.name === 'GameRoot' || child.name === 'HudCanvas') continue; // 已在上面清过
+        child.destroy();
     }
 
-    // 相机：无论手动还是自举，都强制摆到俯视机位
-    let cam = scene.getComponentInChildren(Camera);
-    if (!cam) {
-        const cn = new Node('Main Camera');
-        cn.setParent(scene);
-        cam = cn.addComponent(Camera);
-    }
-    cam.node.setParent(scene); // 脱离可能存在的父级变换
-    cam.node.setPosition(0, 9, 9);
-    cam.node.setRotationFromEuler(-45, 0, 0);
-    // 强制纯色清屏：模板相机默认用天空盒清屏，天空盒资源不完整会导致渲染中断（画面卡在闪屏）
+    // 自建主相机（竖屏取景：抬高视场角补偿窄横向视野）
+    const cn = new Node('MainCam');
+    cn.setParent(scene);
+    cn.layer = Layers.Enum.DEFAULT;
+    const cam = cn.addComponent(Camera);
+    cam.fov = 60;
+    cn.setPosition(0, 8.5, 7);
+    cn.setRotationFromEuler(-52, 0, 0);
     cam.clearFlags = Camera.ClearFlag.SOLID_COLOR;
     cam.clearColor = new Color(52, 46, 40, 255); // 深木色背景
-    console.log('[Bootstrap] 相机就位 world=', cam.node.worldPosition.toString(), 'clearFlags=', cam.clearFlags);
+    console.log('[Bootstrap] 自建相机就位 world=', cn.worldPosition.toString());
 
-    if (!scene.getComponentInChildren(DirectionalLight)) {
-        const ln = new Node('Main Light');
-        ln.setParent(scene);
-        ln.addComponent(DirectionalLight);
-        ln.setRotationFromEuler(-60, -30, 0);
-    }
+    // 自建平行光
+    const ln = new Node('MainLight');
+    ln.setParent(scene);
+    ln.layer = Layers.Enum.DEFAULT;
+    ln.addComponent(DirectionalLight);
+    ln.setRotationFromEuler(-60, -30, 0);
 
     const root = new Node('GameRoot');
     root.setParent(scene);
