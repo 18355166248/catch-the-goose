@@ -1,0 +1,239 @@
+{
+  "ver": "2.3.14",
+  "importer": "gltf",
+  "imported": true,
+  "uuid": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5",
+  "files": [],
+  "subMetas": {
+    "349e2": {
+      "importer": "gltf-mesh",
+      "uuid": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@349e2",
+      "displayName": "",
+      "id": "349e2",
+      "name": "meshes[0].mesh",
+      "userData": {
+        "gltfIndex": 0,
+        "triangleCount": 49997
+      },
+      "ver": "1.1.1",
+      "imported": true,
+      "files": [
+        ".bin",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "257de": {
+      "importer": "gltf-embeded-image",
+      "uuid": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@257de",
+      "displayName": "",
+      "id": "257de",
+      "name": "jade+cabbage+3d+model_normal.image",
+      "userData": {
+        "gltfIndex": 0,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".jpg",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "04f8e": {
+      "importer": "gltf-embeded-image",
+      "uuid": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@04f8e",
+      "displayName": "",
+      "id": "04f8e",
+      "name": "jade+cabbage+3d+model_basecolor.image",
+      "userData": {
+        "gltfIndex": 1,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".jpg",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "865fc": {
+      "importer": "gltf-embeded-image",
+      "uuid": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@865fc",
+      "displayName": "",
+      "id": "865fc",
+      "name": "jade+cabbage+3d+model_rm.image",
+      "userData": {
+        "gltfIndex": 2,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".jpg",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "3effa": {
+      "importer": "texture",
+      "uuid": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@3effa",
+      "displayName": "",
+      "id": "3effa",
+      "name": "UnnamedTexture-0.texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "linear",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@257de"
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "221a5": {
+      "importer": "texture",
+      "uuid": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@221a5",
+      "displayName": "",
+      "id": "221a5",
+      "name": "UnnamedTexture-1.texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "linear",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@04f8e"
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "0089c": {
+      "importer": "texture",
+      "uuid": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@0089c",
+      "displayName": "",
+      "id": "0089c",
+      "name": "UnnamedTexture-2.texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "linear",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@865fc"
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "758a5": {
+      "importer": "gltf-material",
+      "uuid": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@758a5",
+      "displayName": "",
+      "id": "758a5",
+      "name": "tripo_material_ecc737a4-6c8a-4eb1-9e82-3213425cce2e.material",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "d8820": {
+      "importer": "gltf-scene",
+      "uuid": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@d8820",
+      "displayName": "",
+      "id": "d8820",
+      "name": "baicai.prefab",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "imageMetas": [
+      {
+        "name": "jade+cabbage+3d+model_normal",
+        "uri": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@257de"
+      },
+      {
+        "name": "jade+cabbage+3d+model_basecolor",
+        "uri": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@04f8e"
+      },
+      {
+        "name": "jade+cabbage+3d+model_rm",
+        "uri": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@865fc"
+      }
+    ],
+    "lods": {
+      "enable": false,
+      "hasBuiltinLOD": false,
+      "options": [
+        {
+          "screenRatio": 0.25,
+          "faceCount": 1
+        },
+        {
+          "screenRatio": 0.125,
+          "faceCount": 0.25
+        },
+        {
+          "screenRatio": 0.01,
+          "faceCount": 0.1
+        }
+      ]
+    },
+    "assetFinder": {
+      "meshes": [
+        "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@349e2"
+      ],
+      "skeletons": [],
+      "textures": [
+        "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@3effa",
+        "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@221a5",
+        "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@0089c"
+      ],
+      "materials": [
+        "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@758a5"
+      ],
+      "scenes": [
+        "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@d8820"
+      ]
+    }
+  }
+}

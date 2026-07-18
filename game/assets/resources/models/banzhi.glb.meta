@@ -1,0 +1,110 @@
+{
+  "ver": "2.3.14",
+  "importer": "gltf",
+  "imported": true,
+  "uuid": "6a42c322-ea5c-48f7-9fd8-08e633b1d929",
+  "files": [],
+  "subMetas": {
+    "c244a": {
+      "importer": "gltf-mesh",
+      "uuid": "6a42c322-ea5c-48f7-9fd8-08e633b1d929@c244a",
+      "displayName": "",
+      "id": "c244a",
+      "name": "Cylinder.mesh",
+      "userData": {
+        "gltfIndex": 0,
+        "triangleCount": 1536
+      },
+      "ver": "1.1.1",
+      "imported": true,
+      "files": [
+        ".bin",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f0f66": {
+      "importer": "gltf-material",
+      "uuid": "6a42c322-ea5c-48f7-9fd8-08e633b1d929@f0f66",
+      "displayName": "",
+      "id": "f0f66",
+      "name": "JadeGreen.material",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "0be58": {
+      "importer": "gltf-material",
+      "uuid": "6a42c322-ea5c-48f7-9fd8-08e633b1d929@0be58",
+      "displayName": "",
+      "id": "0be58",
+      "name": "Gold.material",
+      "userData": {
+        "gltfIndex": 1
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "63c27": {
+      "importer": "gltf-scene",
+      "uuid": "6a42c322-ea5c-48f7-9fd8-08e633b1d929@63c27",
+      "displayName": "",
+      "id": "63c27",
+      "name": "banzhi.prefab",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "imageMetas": [],
+    "lods": {
+      "enable": false,
+      "hasBuiltinLOD": false,
+      "options": [
+        {
+          "screenRatio": 0.25,
+          "faceCount": 1
+        },
+        {
+          "screenRatio": 0.125,
+          "faceCount": 0.25
+        },
+        {
+          "screenRatio": 0.01,
+          "faceCount": 0.1
+        }
+      ]
+    },
+    "assetFinder": {
+      "meshes": [
+        "6a42c322-ea5c-48f7-9fd8-08e633b1d929@c244a"
+      ],
+      "skeletons": [],
+      "textures": [],
+      "materials": [
+        "6a42c322-ea5c-48f7-9fd8-08e633b1d929@f0f66",
+        "6a42c322-ea5c-48f7-9fd8-08e633b1d929@0be58"
+      ],
+      "scenes": [
+        "6a42c322-ea5c-48f7-9fd8-08e633b1d929@63c27"
+      ]
+    }
+  }
+}

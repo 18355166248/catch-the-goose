@@ -1,0 +1,239 @@
+{
+  "ver": "2.3.14",
+  "importer": "gltf",
+  "imported": true,
+  "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3",
+  "files": [],
+  "subMetas": {
+    "349e2": {
+      "importer": "gltf-mesh",
+      "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@349e2",
+      "displayName": "",
+      "id": "349e2",
+      "name": "meshes[0].mesh",
+      "userData": {
+        "gltfIndex": 0,
+        "triangleCount": 5000
+      },
+      "ver": "1.1.1",
+      "imported": true,
+      "files": [
+        ".bin",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "b5130": {
+      "importer": "gltf-embeded-image",
+      "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@b5130",
+      "displayName": "",
+      "id": "b5130",
+      "name": "pixiu+jade+statue+3d+model_normal.image",
+      "userData": {
+        "gltfIndex": 0,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".jpg",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "8586e": {
+      "importer": "gltf-embeded-image",
+      "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@8586e",
+      "displayName": "",
+      "id": "8586e",
+      "name": "pixiu+jade+statue+3d+model_basecolor.image",
+      "userData": {
+        "gltfIndex": 1,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".jpg",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "52c4e": {
+      "importer": "gltf-embeded-image",
+      "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@52c4e",
+      "displayName": "",
+      "id": "52c4e",
+      "name": "pixiu+jade+statue+3d+model_rm.image",
+      "userData": {
+        "gltfIndex": 2,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".jpg",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "3effa": {
+      "importer": "texture",
+      "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@3effa",
+      "displayName": "",
+      "id": "3effa",
+      "name": "UnnamedTexture-0.texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "linear",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@b5130"
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "221a5": {
+      "importer": "texture",
+      "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@221a5",
+      "displayName": "",
+      "id": "221a5",
+      "name": "UnnamedTexture-1.texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "linear",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@8586e"
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "0089c": {
+      "importer": "texture",
+      "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@0089c",
+      "displayName": "",
+      "id": "0089c",
+      "name": "UnnamedTexture-2.texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "linear",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@52c4e"
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "9ef86": {
+      "importer": "gltf-material",
+      "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@9ef86",
+      "displayName": "",
+      "id": "9ef86",
+      "name": "tripo_material_77b5ff30-81ff-4235-b625-61aedc5c3581.material",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "ccca3": {
+      "importer": "gltf-scene",
+      "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@ccca3",
+      "displayName": "",
+      "id": "ccca3",
+      "name": "pixiu.prefab",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "imageMetas": [
+      {
+        "name": "pixiu+jade+statue+3d+model_normal",
+        "uri": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@b5130"
+      },
+      {
+        "name": "pixiu+jade+statue+3d+model_basecolor",
+        "uri": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@8586e"
+      },
+      {
+        "name": "pixiu+jade+statue+3d+model_rm",
+        "uri": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@52c4e"
+      }
+    ],
+    "lods": {
+      "enable": false,
+      "hasBuiltinLOD": false,
+      "options": [
+        {
+          "screenRatio": 0.25,
+          "faceCount": 1
+        },
+        {
+          "screenRatio": 0.125,
+          "faceCount": 0.25
+        },
+        {
+          "screenRatio": 0.01,
+          "faceCount": 0.1
+        }
+      ]
+    },
+    "assetFinder": {
+      "meshes": [
+        "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@349e2"
+      ],
+      "skeletons": [],
+      "textures": [
+        "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@3effa",
+        "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@221a5",
+        "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@0089c"
+      ],
+      "materials": [
+        "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@9ef86"
+      ],
+      "scenes": [
+        "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@ccca3"
+      ]
+    }
+  }
+}

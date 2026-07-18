@@ -1,0 +1,18 @@
+node_modules
+dist
+build
+
+# Cocos Creator 编辑器生成目录
+game/library/
+game/temp/
+game/local/
+game/profiles/
+game/native/
+game/build/
+
+# Tripo 原始高模（15MB+，保留本地作源文件，不进仓库）
+assets-3d/*3d model.glb
+
+# 解压产物
+game-demo/ximalaya/
+game-demo/__MACOSX/
