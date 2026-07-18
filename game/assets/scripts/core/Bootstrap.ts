@@ -1,4 +1,5 @@
 import { director, Director, Node, Camera, DirectionalLight, Color } from 'cc';
+import { EDITOR } from 'cc/env';
 import { GameManager } from './GameManager';
 
 /**
@@ -8,9 +9,25 @@ import { GameManager } from './GameManager';
  * 1. 清掉模板场景里多余的展示节点（保留相机和平行光）
  * 2. 创建 GameRoot 并挂 GameManager，把场景相机塞给它
  */
-director.once(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
+// 用 on 而非 once：结算后 loadScene 重开时需要再次自举。
+// EDITOR 守卫：编辑器加载脚本时也会执行本模块并派发场景事件，
+// 不加守卫会在编辑器场景里反复堆积 GameRoot（并随"当前场景预览"带进游戏）。
+if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
     const scene = director.getScene();
     if (!scene) return;
+    // 防重复自举（双保险）：
+    // 1) globalThis 按场景 uuid 加锁——脚本模块被评估两遍时两个副本共享同一把锁
+    // 2) 节点名兜底
+    (globalThis as any).__bootVer = 5; // 自测用：确认页面加载的是本版脚本
+    // 防重复自举：标记打在场景实例上（scene.uuid 是资源 uuid，重载后同值，不能当锁用）
+    const inst = scene as any;
+    if (inst.__gooseBooted) return;
+    inst.__gooseBooted = true;
+
+    // 清掉场景里已有的 GameRoot / HudCanvas——编辑器"当前场景"预览可能带进脏节点
+    for (const c of [...scene.children]) {
+        if (c.name === 'GameRoot' || c.name === 'HudCanvas') c.destroy();
+    }
 
     // 关掉场景天空盒（模板拷贝过来的环境贴图引用可能不完整，会拖垮渲染管线）
     try {
@@ -52,12 +69,9 @@ director.once(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
         ln.setRotationFromEuler(-60, -30, 0);
     }
 
-    let gm = scene.getComponentInChildren(GameManager);
-    if (!gm) {
-        const root = new Node('GameRoot');
-        root.setParent(scene);
-        gm = root.addComponent(GameManager);
-    }
+    const root = new Node('GameRoot');
+    root.setParent(scene);
+    const gm = root.addComponent(GameManager);
     gm.cam = cam;
     console.log('[Bootstrap] 自举完成，游戏开始');
 });

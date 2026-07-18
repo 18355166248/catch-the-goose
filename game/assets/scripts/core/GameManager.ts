@@ -1,13 +1,14 @@
 import {
     _decorator, Component, Node, Camera, Label, Prefab, resources, instantiate,
     RigidBody, BoxCollider, MeshRenderer, Material, primitives, utils,
-    PhysicsSystem, input, Input, EventTouch, tween, v3, Vec3, Quat, Color, geometry,
+    PhysicsSystem, input, Input, EventTouch, tween, Tween, v3, Vec3, Quat, Color, geometry,
     assetManager, EffectAsset, Layers,
 } from 'cc';
 import { LEVELS, LevelDef } from './LevelConfig';
-import { SlotTray } from './SlotTray';
+import { SlotTray, TRAY_CAPACITY } from './SlotTray';
 import { ItemTag } from './ItemTag';
 import { MODEL_PREFAB_UUID } from './ModelManifest';
+import { HudUI } from './HudUI';
 
 const { ccclass, property } = _decorator;
 
@@ -37,6 +38,7 @@ export class GameManager extends Component {
     private removedCount = 0;
     private playing = false;
     private prefabs = new Map<string, Prefab>();
+    private hud: HudUI | null = null;
 
     // 盒子尺寸
     private static readonly BOX_SIZE = 5;
@@ -68,6 +70,11 @@ export class GameManager extends Component {
             console.log('[GameManager] 相机 visibility=', this.cam.visibility.toString(2));
         }
         this.forceLayer(this.node);
+        // HUD（纯代码占位版）
+        this.hud = new HudUI(this.node.scene, kind => this.useProp(kind));
+        this.timerLabel = this.hud.timerLabel;
+        this.progressLabel = this.hud.progressLabel;
+        this.msgLabel = this.hud.msgLabel;
         this.level = LEVELS[Math.min(this.levelIndex, LEVELS.length - 1)];
         this.timeLeft = this.level.timeSec;
         await this.loadPrefabs(this.level.items);
@@ -82,19 +89,7 @@ export class GameManager extends Component {
         for (const c of n.children) this.forceLayer(c);
     }
 
-    private debugTimer = 0;
-
     update(dt: number) {
-        // 诊断：每 2 秒报告一次物件状态（定位"看不见"问题，稳定后移除）
-        this.debugTimer += dt;
-        if (this.debugTimer > 2) {
-            this.debugTimer = 0;
-            const items = this.node.getComponentsInChildren(ItemTag);
-            const fallen = items.filter(t => t.node.worldPosition.y < -5).length;
-            const first = items[0];
-            console.log(`[诊断] 物件数=${items.length} 掉出世界=${fallen}`
-                + (first ? ` 首个:${first.id} pos=${first.node.worldPosition.toString()} layer=${first.node.layer}` : ''));
-        }
         if (!this.playing) return;
         this.timeLeft -= dt;
         if (this.timeLeft <= 0) {
@@ -109,12 +104,31 @@ export class GameManager extends Component {
     private buildBox() {
         const S = GameManager.BOX_SIZE, H = GameManager.WALL_H, T = 0.3;
         const wood = this.makeMat(new Color(120, 72, 48));
-        // 地板 + 四壁（静态刚体）
+        // 地板 + 四壁（静态刚体）。碰撞体比可见墙高一倍多，物件再蹦也翻不出去
+        const wallColl = (w: number, l: number) => v3(w, H * 3, l);
+        const wallCenter = v3(0, H, 0);
         this.makeStaticBox('floor', v3(0, -T / 2, 0), v3(S + T * 2, T, S + T * 2), wood);
-        this.makeStaticBox('wallN', v3(0, H / 2, -S / 2 - T / 2), v3(S + T * 2, H, T), wood);
-        this.makeStaticBox('wallS', v3(0, H / 2, S / 2 + T / 2), v3(S + T * 2, H, T), wood);
-        this.makeStaticBox('wallW', v3(-S / 2 - T / 2, H / 2, 0), v3(T, H, S), wood);
-        this.makeStaticBox('wallE', v3(S / 2 + T / 2, H / 2, 0), v3(T, H, S), wood);
+        this.makeStaticBox('wallN', v3(0, H / 2, -S / 2 - T / 2), v3(S + T * 2, H, T), wood, wallColl(S + T * 2, T), wallCenter);
+        this.makeStaticBox('wallS', v3(0, H / 2, S / 2 + T / 2), v3(S + T * 2, H, T), wood, wallColl(S + T * 2, T), wallCenter);
+        this.makeStaticBox('wallW', v3(-S / 2 - T / 2, H / 2, 0), v3(T, H, S), wood, wallColl(T, S), wallCenter);
+        this.makeStaticBox('wallE', v3(S / 2 + T / 2, H / 2, 0), v3(T, H, S), wood, wallColl(T, S), wallCenter);
+
+        // 槽位垫片（纯视觉，无碰撞）
+        const pad = this.makeMat(new Color(210, 200, 180));
+        for (let i = 0; i < TRAY_CAPACITY; i++) {
+            const p = this.slotPos(i);
+            this.makeVisualBox(`slotPad${i}`, v3(p.x, 0.02, p.z), v3(0.72, 0.04, 0.72), pad);
+        }
+    }
+
+    /** 只有外观没有物理的盒子（槽位垫片等） */
+    private makeVisualBox(name: string, pos: Vec3, size: Vec3, mat: Material | null) {
+        const n = new Node(name);
+        n.setParent(this.node);
+        n.setPosition(pos);
+        const mr = n.addComponent(MeshRenderer);
+        mr.mesh = utils.MeshUtils.createMesh(primitives.box({ width: size.x, height: size.y, length: size.z }));
+        if (mat && mat.passes.length > 0) mr.material = mat;
     }
 
     private makeMat(color: Color): Material | null {
@@ -133,7 +147,8 @@ export class GameManager extends Component {
         return mat;
     }
 
-    private makeStaticBox(name: string, pos: Vec3, size: Vec3, mat: Material | null) {
+    private makeStaticBox(name: string, pos: Vec3, size: Vec3, mat: Material | null,
+        collSize?: Vec3, collCenter?: Vec3) {
         const n = new Node(name);
         n.setParent(this.node);
         n.setPosition(pos);
@@ -143,7 +158,8 @@ export class GameManager extends Component {
         const rb = n.addComponent(RigidBody);
         rb.type = RigidBody.Type.STATIC;
         const col = n.addComponent(BoxCollider);
-        col.size = size;
+        col.size = collSize ?? size;
+        if (collCenter) col.center = collCenter;
     }
 
     // ---------- 物件加载与生成 ----------
@@ -203,11 +219,11 @@ export class GameManager extends Component {
                 const n = instantiate(prefab);
                 n.setParent(this.node);
                 this.forceLayer(n);
-                // 盒子上方随机位置倾倒
+                // 盒子上方随机位置倾倒（高度压低减少弹跳出界）
                 n.setPosition(
-                    (Math.random() - 0.5) * (S - 1.5),
-                    2.5 + Math.random() * 4,
-                    (Math.random() - 0.5) * (S - 1.5),
+                    (Math.random() - 0.5) * (S - 1.8),
+                    1.5 + Math.random() * 2.5,
+                    (Math.random() - 0.5) * (S - 1.8),
                 );
                 const q = new Quat();
                 Quat.fromEuler(q, Math.random() * 360, Math.random() * 360, Math.random() * 360);
@@ -232,6 +248,7 @@ export class GameManager extends Component {
     private onTouch(e: EventTouch) {
         if (!this.playing || !this.cam) return;
         const p = e.getLocation();
+        if (p.y < 130) return; // 底部道具按钮区，不穿透拾取
         const ray = new geometry.Ray();
         this.cam.screenPointToRay(p.x, p.y, ray);
         if (!PhysicsSystem.instance.raycastClosest(ray)) return;
@@ -247,17 +264,20 @@ export class GameManager extends Component {
         node.getComponent(RigidBody)!.enabled = false;
         node.getComponent(BoxCollider)!.enabled = false;
 
-        const { matched, full } = this.tray.add(tag.id, node);
+        const { matched, full, index } = this.tray.add(tag.id, node);
         this.reflowTray();
 
+        // 新拾取的物件飞向它的插入槽位（即使即将消除，也先飞到位再消，视觉才连贯）
         tween(node)
-            .to(0.3, { scale: v3(0.55, 0.55, 0.55) }, { easing: 'quadOut' })
+            .to(0.3, { worldPosition: this.slotPos(index), scale: v3(0.55, 0.55, 0.55) }, { easing: 'quadOut' })
             .start();
+        tween(node).to(0.3, { rotation: Quat.IDENTITY }).start();
 
         if (matched) {
             // 飞入动画结束后再消除
             this.scheduleOnce(() => {
                 for (const e of matched) {
+                    Tween.stopAllByTarget(e.node);
                     tween(e.node)
                         .to(0.2, { scale: v3(0.05, 0.05, 0.05) }, { easing: 'backIn' })
                         .call(() => e.node.destroy())
@@ -270,6 +290,78 @@ export class GameManager extends Component {
             }, 0.35);
         } else if (full) {
             this.scheduleOnce(() => this.gameOver(false, '槽位已满'), 0.4);
+        }
+    }
+
+    // ---------- 道具 ----------
+
+    useProp(kind: 'remove' | 'magnet' | 'shuffle') {
+        if (!this.playing) return;
+        if (kind === 'remove') this.propRemove();
+        else if (kind === 'magnet') this.propMagnet();
+        else this.propShuffle();
+    }
+
+    /** 移出：槽头 3 个物件放回盒子 */
+    private propRemove() {
+        const back = this.tray.takeFront(3);
+        if (back.length === 0) return;
+        back.forEach((e, i) => {
+            const tag = e.node.getComponent(ItemTag)!;
+            Tween.stopAllByTarget(e.node);
+            tag.picked = false;
+            e.node.setWorldPosition(
+                (Math.random() - 0.5) * 3, 3 + i * 0.8, (Math.random() - 0.5) * 3);
+            e.node.setScale(0.9, 0.9, 0.9);
+            e.node.getComponent(RigidBody)!.enabled = true;
+            e.node.getComponent(BoxCollider)!.enabled = true;
+        });
+        this.reflowTray();
+    }
+
+    /** 凑齐：自动吸取盒中物件补全一组三消（优先补槽内已有的类别） */
+    private propMagnet() {
+        const counts = this.tray.countById();
+        const boxItems = this.node.getComponentsInChildren(ItemTag).filter(t => !t.picked && t.node.isValid);
+        const availOf = (id: string) => boxItems.filter(t => t.id === id).length;
+
+        let target: string | null = null;
+        let bestHave = -1;
+        for (const [id, have] of counts) {
+            const need = 3 - have;
+            if (need <= 0) continue;
+            // 槽位余量必须装得下补齐所需数量（否则会触发爆满失败）
+            if (availOf(id) >= need && this.tray.count + need <= TRAY_CAPACITY && have > bestHave) {
+                bestHave = have;
+                target = id;
+            }
+        }
+        if (!target && this.tray.count + 3 <= TRAY_CAPACITY) {
+            target = boxItems.find(t => availOf(t.id) >= 3)?.id ?? null;
+        }
+        if (!target) return;
+
+        const need = 3 - (counts.get(target) ?? 0);
+        const picks = boxItems.filter(t => t.id === target).slice(0, need);
+        picks.forEach((t, i) => this.scheduleOnce(() => {
+            if (this.playing && t.node.isValid && !t.picked) this.pick(t.node, t);
+        }, i * 0.18));
+    }
+
+    /** 打乱：盒中剩余物件重新抛起洗一遍 */
+    private propShuffle() {
+        const S = GameManager.BOX_SIZE;
+        const boxItems = this.node.getComponentsInChildren(ItemTag).filter(t => !t.picked && t.node.isValid);
+        for (const t of boxItems) {
+            t.node.setWorldPosition(
+                (Math.random() - 0.5) * (S - 1.5),
+                2.5 + Math.random() * 3,
+                (Math.random() - 0.5) * (S - 1.5));
+            const q = new Quat();
+            Quat.fromEuler(q, Math.random() * 360, Math.random() * 360, Math.random() * 360);
+            t.node.setRotation(q);
+            const rb = t.node.getComponent(RigidBody)!;
+            try { rb.clearState(); } catch { /* 部分版本无此方法，忽略 */ }
         }
     }
 
@@ -296,10 +388,31 @@ export class GameManager extends Component {
         this.playing = false;
         const stars = this.progress >= 100 ? 3 : this.progress >= 70 ? 2 : this.progress >= 50 ? 1 : 0;
         const msg = win
-            ? `胜利！★${'★'.repeat(Math.max(0, stars - 1))} 完成度 ${this.progress}%`
+            ? `胜利！${'★'.repeat(Math.max(1, stars))} 完成度 ${this.progress}%`
             : `失败（${reason}）完成度 ${this.progress}%`;
         if (this.msgLabel) this.msgLabel.string = msg;
         console.log(`[GameManager] ${msg}`);
+        // 1 秒后允许点击任意处重开本关（原地重置，不重载场景——
+        // loadScene 重载后自定义管线的主相机会停止渲染，规避之）
+        this.scheduleOnce(() => {
+            if (this.hud) this.hud.subMsgLabel.string = '点击任意处重新挑战';
+            input.once(Input.EventType.TOUCH_START, () => this.resetLevel());
+        }, 1);
+    }
+
+    /** 原地重开本关 */
+    private resetLevel() {
+        for (const t of this.node.getComponentsInChildren(ItemTag)) {
+            if (t.node.isValid) t.node.destroy();
+        }
+        this.tray.clear();
+        this.removedCount = 0;
+        this.timeLeft = this.level.timeSec;
+        if (this.msgLabel) this.msgLabel.string = '';
+        if (this.hud) this.hud.subMsgLabel.string = '';
+        this.spawnItems();
+        this.playing = true;
+        this.updateHud();
     }
 
     private updateHud() {
