@@ -45,8 +45,9 @@ export class GameManager extends Component {
     private static readonly WALL_H = 1.6;
 
     // 槽位世界坐标（一排 7 个，位于盒子前方靠近相机处）
+    // y 要足够高：模型原点是质心（非几何中心），半高最大可达 0.35 左右，太低会插进托盘
     private slotPos(i: number): Vec3 {
-        return v3(-2.4 + i * 0.8, 0.4, 3.8);
+        return v3(-2.4 + i * 0.8, 0.62, 3.8);
     }
 
     onLoad() {
@@ -314,11 +315,18 @@ export class GameManager extends Component {
         if (p.y < view.getCanvasSize().height * 0.12) return; // 底部道具按钮区，不穿透拾取
         const ray = new geometry.Ray();
         this.cam.screenPointToRay(p.x, p.y, ray);
-        if (!PhysicsSystem.instance.raycastClosest(ray)) return;
-        const hit = PhysicsSystem.instance.raycastClosestResult.collider.node;
-        const tag = hit.getComponent(ItemTag);
-        if (!tag || tag.picked) return;
-        this.pick(hit, tag);
+        // 穿透式检测：墙体的隐形加高碰撞体会挡在物件前面，closest 会被墙吞掉
+        if (!PhysicsSystem.instance.raycast(ray)) return;
+        let bestTag: ItemTag | null = null;
+        let bestDist = Infinity;
+        for (const r of PhysicsSystem.instance.raycastResults) {
+            const tag = r.collider.node.getComponent(ItemTag);
+            if (tag && !tag.picked && r.distance < bestDist) {
+                bestDist = r.distance;
+                bestTag = tag;
+            }
+        }
+        if (bestTag) this.pick(bestTag.node, bestTag);
     }
 
     private pick(node: Node, tag: ItemTag) {
@@ -332,7 +340,7 @@ export class GameManager extends Component {
 
         // 新拾取的物件飞向它的插入槽位（即使即将消除，也先飞到位再消，视觉才连贯）
         tween(node)
-            .to(0.3, { worldPosition: this.slotPos(index), scale: v3(0.55, 0.55, 0.55) }, { easing: 'quadOut' })
+            .to(0.3, { worldPosition: this.slotPos(index), scale: v3(0.5, 0.5, 0.5) }, { easing: 'quadOut' })
             .start();
         tween(node).to(0.3, { rotation: Quat.IDENTITY }).start();
 
