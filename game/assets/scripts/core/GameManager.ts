@@ -138,15 +138,26 @@ export class GameManager extends Component {
         this.makeStaticBox('wallW', v3(-S / 2 - T / 2, H / 2, 0), v3(T, H, S), wood, wallColl(T, S), wallCenter);
         this.makeStaticBox('wallE', v3(S / 2 + T / 2, H / 2, 0), v3(T, H, S), wood, wallColl(T, S), wallCenter);
 
-        // 大背景木板（铺满视野，替代纯色清屏底）
-        const bg = this.makeMat(new Color(120, 112, 105), 'wood_dark');
-        this.makeVisualBox('backdrop', v3(0, -0.6, 0), v3(40, 0.1, 40), bg);
+        // 盒口沿条（浅色红木压边，勾出盒子轮廓）
+        const rim = this.makeMat(new Color(200, 150, 110), 'wood_floor');
+        const RT = T + 0.16, RH = 0.12;
+        this.makeVisualBox('rimN', v3(0, H + RH / 2, -S / 2 - T / 2), v3(S + T * 2 + 0.3, RH, RT), rim);
+        this.makeVisualBox('rimS', v3(0, H + RH / 2, S / 2 + T / 2), v3(S + T * 2 + 0.3, RH, RT), rim);
+        this.makeVisualBox('rimW', v3(-S / 2 - T / 2, H + RH / 2, 0), v3(RT, RH, S + 0.3), rim);
+        this.makeVisualBox('rimE', v3(S / 2 + T / 2, H + RH / 2, 0), v3(RT, RH, S + 0.3), rim);
 
-        // 槽位垫片（纯视觉，无碰撞）
+        // 大背景板（带暗角的暖棕渐变，unlit 不受光，和盒子拉开层次）
+        const bg = this.makeMat(new Color(255, 255, 255), 'backdrop', false);
+        this.makeVisualBox('backdrop', v3(0, -0.8, -2), v3(44, 0.1, 44), bg);
+
+        // 托盘：深色底座 + 内嵌象牙槽位
+        const trayBase = this.makeMat(new Color(70, 44, 28), 'wood_dark');
+        const zTray = this.slotPos(0).z;
+        this.makeVisualBox('trayBase', v3(0, -0.06, zTray), v3(5.7, 0.14, 1.02), trayBase);
         const pad = this.makeMat(new Color(240, 235, 225), 'pad_ivory');
         for (let i = 0; i < TRAY_CAPACITY; i++) {
             const p = this.slotPos(i);
-            this.makeVisualBox(`slotPad${i}`, v3(p.x, 0.02, p.z), v3(0.72, 0.04, 0.72), pad);
+            this.makeVisualBox(`slotPad${i}`, v3(p.x, 0.03, p.z), v3(0.66, 0.05, 0.72), pad);
         }
     }
 
@@ -160,29 +171,32 @@ export class GameManager extends Component {
         if (mat && mat.passes.length > 0) mr.material = mat;
     }
 
-    private makeMat(color: Color, texture?: string): Material | null {
-        // 不同版本 builtin effect 注册名有差异，逐个候选找可用的
-        const candidates = ['builtin-unlit', 'unlit', 'builtin-standard', 'standard'];
-        const effectName = candidates.find(n => EffectAsset.get(n));
+    /**
+     * 创建材质。lit=true 用 standard（受光照/能接收阴影层次），否则 unlit。
+     * 注意：unlit 与 standard 的颜色/贴图属性名不同，且 setProperty 传错名只警告不抛错，
+     * 必须按 effect 精确选择属性名。
+     */
+    private makeMat(color: Color, texture?: string, lit = true): Material | null {
+        const order = lit
+            ? ['builtin-standard', 'standard', 'builtin-unlit', 'unlit']
+            : ['builtin-unlit', 'unlit', 'builtin-standard', 'standard'];
+        const effectName = order.find(n => EffectAsset.get(n));
         if (!effectName) {
-            console.warn('[GameManager] 未找到可用 builtin effect，盒子将使用默认材质');
+            console.warn('[GameManager] 未找到可用 builtin effect');
             return null;
         }
+        const isUnlit = effectName.includes('unlit');
+        const defines = texture ? (isUnlit ? { USE_TEXTURE: true } : { USE_ALBEDO_MAP: true }) : {};
         const mat = new Material();
-        // 贴图需要在初始化时开宏，否则 setProperty 了也不参与着色
-        const defines = texture
-            ? (effectName.includes('unlit') ? { USE_TEXTURE: true } : { USE_ALBEDO_MAP: true })
-            : {};
         mat.initialize({ effectName, defines });
-        for (const prop of ['mainColor', 'albedo']) {
-            try { mat.setProperty(prop, color); break; } catch { /* 换下一个属性名 */ }
+        try { mat.setProperty(isUnlit ? 'mainColor' : 'albedo', color); } catch { /* 属性名不符则用默认色 */ }
+        if (!isUnlit) {
+            try { mat.setProperty('roughness', 0.85); } catch { /* 可选参数 */ }
         }
         if (texture) {
             resources.load(`textures/${texture}/texture`, Texture2D, (err, tex) => {
                 if (err || !tex || mat.passes.length === 0) return;
-                for (const prop of ['mainTexture', 'albedoMap']) {
-                    try { mat.setProperty(prop, tex); break; } catch { /* 换下一个属性名 */ }
-                }
+                try { mat.setProperty(isUnlit ? 'mainTexture' : 'albedoMap', tex); } catch { /* 忽略 */ }
             });
         }
         return mat;
@@ -282,6 +296,10 @@ export class GameManager extends Component {
                     rb.linearDamping = 0.15;
                     const col = n.addComponent(BoxCollider);
                     col.size = v3(0.7, 0.7, 0.7);
+                    // 物件投平面阴影
+                    for (const mr of n.getComponentsInChildren(MeshRenderer)) {
+                        mr.shadowCastingMode = MeshRenderer.ShadowCastingMode.ON;
+                    }
                 }, delay);
             }
         }
@@ -502,7 +520,8 @@ export class GameManager extends Component {
     }
 
     private updateHud() {
-        if (this.progressLabel) this.progressLabel.string = `完成度 ${this.progress}%`;
+        if (this.hud) this.hud.setProgress(this.progress);
+        else if (this.progressLabel) this.progressLabel.string = `完成度 ${this.progress}%`;
         if (this.timerLabel) {
             const m = Math.floor(this.timeLeft / 60);
             const s = Math.floor(this.timeLeft % 60);

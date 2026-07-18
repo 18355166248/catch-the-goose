@@ -18,7 +18,7 @@ if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
     // 防重复自举（双保险）：
     // 1) globalThis 按场景 uuid 加锁——脚本模块被评估两遍时两个副本共享同一把锁
     // 2) 节点名兜底
-    (globalThis as any).__bootVer = 11; // 自测用：确认页面加载的是本版脚本
+    (globalThis as any).__bootVer = 13; // 自测用：确认页面加载的是本版脚本
 
     // 竖屏设计分辨率（微信小游戏目标形态），宽度固定、高度随屏幕
     view.setDesignResolutionSize(720, 1280, ResolutionPolicy.FIXED_WIDTH);
@@ -62,12 +62,31 @@ if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
     cam.clearColor = new Color(52, 46, 40, 255); // 深木色背景
     console.log('[Bootstrap] 自建相机就位 world=', cn.worldPosition.toString());
 
-    // 自建平行光
+    // 自建平行光（暖色）
     const ln = new Node('MainLight');
     ln.setParent(scene);
     ln.layer = Layers.Enum.DEFAULT;
-    ln.addComponent(DirectionalLight);
-    ln.setRotationFromEuler(-60, -30, 0);
+    const light = ln.addComponent(DirectionalLight);
+    light.color = new Color(255, 246, 228, 255);
+    ln.setRotationFromEuler(-62, -24, 0);
+
+    // 暖环境光 + 平面阴影（物件投影到盒底，立体感的关键）
+    try {
+        const globals = (scene as any).globals ?? (scene as any)._globals;
+        if (globals?.ambient) {
+            globals.ambient.skyColor = new Color(214, 196, 176, 255);
+            globals.ambient.groundAlbedo = new Color(88, 72, 60, 255);
+        }
+        if (globals?.shadows) {
+            globals.shadows.enabled = true;
+            globals.shadows.type = 0; // Planar
+            globals.shadows.shadowColor = new Color(30, 18, 10, 110);
+            globals.shadows.distance = 0.02;
+            console.log('[Bootstrap] 平面阴影已启用');
+        }
+    } catch (e) {
+        console.warn('[Bootstrap] 光照全局设置失败', e);
+    }
 
     const root = new Node('GameRoot');
     root.setParent(scene);
