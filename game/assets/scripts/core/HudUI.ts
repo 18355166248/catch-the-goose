@@ -56,6 +56,7 @@ export class HudUI {
     private iconLabels: Label[] = [];
     private iconFont: Font | null = null;
     private levelLabel!: Label;
+    private dailyLabel!: Label;
     private resultRoot: Node | null = null;
     private capturedModels = new Map<Node, number>();
     private capturedIcons = new Map<Node, Node>();
@@ -112,6 +113,8 @@ export class HudUI {
         const levelPanel = this.makePanel(112, 52, 16, new Color(62, 36, 24, 232), { top: 28 }, 0,
             new Color(168, 108, 57), 3, { right: 23 });
         this.levelLabel = this.addLabel(levelPanel, '第 1 关', 24, cream, 0, 0, true);
+        // 关卡标牌下的每日剩余次数。
+        this.dailyLabel = this.addLabel(levelPanel, '今日 3/3', 16, new Color(233, 200, 156), 0, -42, true);
 
         const W = HudUI.PROGRESS_W;
         const progPanel = this.makePanel(W, 24, 12, new Color(45, 29, 21, 205), { top: 88 }, 0,
@@ -196,6 +199,114 @@ export class HudUI {
         this.levelLabel.string = `第 ${n} 关`;
     }
 
+    setDaily(left: number) {
+        this.dailyLabel.string = `今日 ${left}/3`;
+        this.dailyLabel.color = left > 0 ? new Color(233, 200, 156) : new Color(240, 120, 96);
+    }
+
+    /** 屏幕坐标(px) → HudContent 内容坐标。 */
+    private screenToContent(screenPos: Vec3): Vec3 {
+        const px = screen.windowSize;
+        return v3(
+            (screenPos.x - px.width / 2) / this.uiScale,
+            (screenPos.y - px.height / 2) / this.uiScale,
+            1,
+        );
+    }
+
+    /** 通用粒子爆点:count 个小圆从中心飞散渐隐 + 一个扩散圆环。 */
+    private burstAt(pos: Vec3, color: Color, count: number, radius: number, dotR: number) {
+        const root = new Node('burst');
+        root.layer = Layers.Enum.UI_2D;
+        root.setParent(this.contentRoot);
+        root.setPosition(pos);
+
+        const ring = new Node('ring');
+        ring.layer = Layers.Enum.UI_2D;
+        ring.setParent(root);
+        const rg = ring.addComponent(Graphics);
+        rg.lineWidth = 5;
+        rg.strokeColor = new Color(color.r, color.g, color.b, 210);
+        rg.circle(0, 0, radius * 0.4);
+        rg.stroke();
+        const ringOp = ring.addComponent(UIOpacity);
+        tween(ring).to(0.3, { scale: v3(2.4, 2.4, 1) }, { easing: 'quadOut' }).start();
+        tween(ringOp).to(0.3, { opacity: 0 }).start();
+
+        for (let i = 0; i < count; i++) {
+            const dot = new Node('dot');
+            dot.layer = Layers.Enum.UI_2D;
+            dot.setParent(root);
+            const g = dot.addComponent(Graphics);
+            g.fillColor = color;
+            g.circle(0, 0, dotR * (0.7 + Math.random() * 0.6));
+            g.fill();
+            const ang = (i / count) * Math.PI * 2 + Math.random() * 0.5;
+            const dist = radius * (0.75 + Math.random() * 0.5);
+            const op = dot.addComponent(UIOpacity);
+            tween(dot)
+                .to(0.32 + Math.random() * 0.12, {
+                    position: v3(Math.cos(ang) * dist, Math.sin(ang) * dist, 0),
+                    scale: v3(0.3, 0.3, 1),
+                }, { easing: 'quadOut' })
+                .start();
+            tween(op).delay(0.12).to(0.26, { opacity: 0 }).start();
+        }
+        // 粒子生命周期极短,统一 0.6s 后销毁根节点。
+        tween(root).delay(0.6).call(() => root.destroy()).start();
+    }
+
+    /** 拾取瞬间的轻量白色爆点(3D 世界屏幕坐标)。 */
+    pickBurst(screenPos: Vec3) {
+        this.burstAt(this.screenToContent(screenPos), new Color(255, 246, 200, 255), 6, 44, 5);
+    }
+
+    /** 三消时在对应槽位上的金色爆点。 */
+    matchBurst(node: Node) {
+        const icon = this.capturedIcons.get(node);
+        if (!icon?.isValid) return;
+        this.burstAt(icon.position.clone(), new Color(255, 205, 64, 255), 10, 64, 7);
+    }
+
+    /** 轻量通知弹窗(每日次数用尽等):标题 + 正文 + 单按钮。 */
+    showNotice(title: string, body: string, actionText: string, onAction: () => void) {
+        this.hideResult();
+        const root = new Node('resultRoot');
+        this.resultRoot = root;
+        root.layer = Layers.Enum.UI_2D;
+        root.setParent(this.contentRoot);
+
+        const mask = new Node('mask');
+        mask.layer = Layers.Enum.UI_2D;
+        mask.setParent(root);
+        mask.addComponent(UITransform).setContentSize(2400, 3200);
+        const mg = mask.addComponent(Graphics);
+        mg.fillColor = new Color(20, 12, 8, 165);
+        mg.rect(-1200, -1600, 2400, 3200);
+        mg.fill();
+        mask.on(NodeEventType.TOUCH_END, () => { /* 吞掉 */ });
+
+        this.makePanelChild(root, 520, 340, 34, new Color(52, 27, 15, 235), 0, -8);
+        const panel = this.makePanelChild(root, 508, 330, 30, new Color(255, 244, 214), 0, 0,
+            new Color(196, 130, 64), 6);
+        this.addLabel(panel, title, 40, new Color(240, 150, 26), 0, 96, true);
+        const bodyLabel = this.addLabel(panel, body, 24, new Color(102, 57, 28), 0, 10, true);
+        bodyLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+
+        const btnShadow = this.makePanelChild(panel, 264, 84, 22, new Color(104, 61, 25, 235), 0, -96);
+        btnShadow.setPosition(0, -100, 0);
+        const btn = this.makePanelChild(panel, 258, 80, 20, new Color(255, 207, 55), 0, -92,
+            new Color(171, 118, 29), 5);
+        this.addLabel(btn, actionText, 28, new Color(102, 57, 28), 0, 0, true);
+        btn.on(NodeEventType.TOUCH_END, () => onAction());
+
+        root.setScale(0.7, 0.7, 1);
+        const op = root.addComponent(UIOpacity);
+        op.opacity = 0;
+        tween(root).to(0.28, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
+        tween(op).to(0.2, { opacity: 255 }).start();
+    }
+
     /**
      * 结算弹窗:遮罩 + 面板 + 三星逐颗弹出 + 行动按钮。
      * 星星用 Font Awesome 实心星,未获得的显示为灰色底星。
@@ -203,6 +314,8 @@ export class HudUI {
     showResult(opts: {
         win: boolean; stars: number; progress: number;
         rewardCount: number; actionText: string; onAction: () => void;
+        bestText?: string; newRecord?: boolean;
+        rescueText?: string; onRescue?: () => void;
     }) {
         this.hideResult();
         const root = new Node('resultRoot');
@@ -249,21 +362,44 @@ export class HudUI {
 
         this.addLabel(panel, `完成度 ${opts.progress}%`, 30, new Color(102, 57, 28), 0, -14, true);
         if (opts.rewardCount > 0) {
-            this.addLabel(panel, `获得 ${opts.rewardCount} 件道具奖励`, 24, new Color(52, 148, 68), 0, -58, true);
+            this.addLabel(panel, `获得 ${opts.rewardCount} 件道具奖励`, 24, new Color(52, 148, 68), 0, -54, true);
+        }
+        if (opts.bestText) {
+            this.addLabel(panel, opts.bestText, 20, new Color(158, 122, 82), 0, -86, true);
+        }
+        if (opts.newRecord) {
+            // 斜贴在星星右上角的"新纪录"角标。
+            const badge = this.addLabel(panel, '新纪录!', 26, new Color(255, 82, 62), 168, 128, true);
+            badge.node.setRotationFromEuler(0, 0, -14);
+            badge.node.setScale(0, 0, 1);
+            tween(badge.node)
+                .delay(1.2)
+                .to(0.24, { scale: v3(1.2, 1.2, 1) }, { easing: 'backOut' })
+                .to(0.1, { scale: v3(1, 1, 1) })
+                .start();
         }
 
-        const btnShadow = this.makePanelChild(panel, 264, 84, 22, new Color(104, 61, 25, 235), 0, -142);
-        btnShadow.setPosition(0, -146, 0);
-        const btn = this.makePanelChild(panel, 258, 80, 20, new Color(255, 207, 55), 0, -138,
-            new Color(171, 118, 29), 5);
-        this.addLabel(btn, opts.actionText, 30, new Color(102, 57, 28), 0, 0, true);
-        btn.on(NodeEventType.TOUCH_START, () => {
-            tween(btn).to(0.07, { scale: v3(0.94, 0.94, 1) }).start();
-        });
-        btn.on(NodeEventType.TOUCH_END, () => {
-            tween(btn).to(0.08, { scale: v3(1, 1, 1) }).start();
-            opts.onAction();
-        });
+        const mkBtn = (text: string, fill: Color, x: number, w: number, cb: () => void) => {
+            const shadow = this.makePanelChild(panel, w + 6, 84, 22, new Color(104, 61, 25, 235), x, -142);
+            shadow.setPosition(x, -146, 0);
+            const b = this.makePanelChild(panel, w, 80, 20, fill, x, -138,
+                new Color(171, 118, 29), 5);
+            this.addLabel(b, text, 27, new Color(102, 57, 28), 0, 0, true);
+            b.on(NodeEventType.TOUCH_START, () => {
+                tween(b).to(0.07, { scale: v3(0.94, 0.94, 1) }).start();
+            });
+            b.on(NodeEventType.TOUCH_END, () => {
+                tween(b).to(0.08, { scale: v3(1, 1, 1) }).start();
+                cb();
+            });
+        };
+        if (opts.rescueText && opts.onRescue) {
+            // 救场是主行动(绿),重试退居右侧。
+            mkBtn(opts.rescueText, new Color(126, 217, 87), -128, 246, opts.onRescue);
+            mkBtn(opts.actionText, new Color(255, 207, 55), 128, 230, opts.onAction);
+        } else {
+            mkBtn(opts.actionText, new Color(255, 207, 55), 0, 258, opts.onAction);
+        }
 
         // 弹窗整体入场:从 0.7 缩放弹开。
         root.setScale(0.7, 0.7, 1);

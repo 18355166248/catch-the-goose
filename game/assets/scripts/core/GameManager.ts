@@ -44,6 +44,15 @@ export class GameManager extends Component {
     private audio: AudioMan | null = null;
     private pileMaterial!: PhysicsMaterial;
     private static readonly LEVEL_STORE = 'goose_level_v1';
+    private static readonly DAILY_STORE = 'goose_daily_v1';
+    private static readonly BEST_STORE = 'goose_best_v1';
+    private static readonly DAILY_FREE = 3;
+    /** 每关每轮只能救一次,防止无限续命。 */
+    private rescueUsed = false;
+    private loseReason: '槽位已满' | '时间到' | '' = '';
+    private dailyLeft = GameManager.DAILY_FREE;
+    /** 各关历史最佳:{ [levelIndex]: { stars, progress } } */
+    private best: Record<number, { stars: number; progress: number }> = {};
 
     /**
      * 手机屏幕内的真实物理盒边界。
@@ -108,10 +117,60 @@ export class GameManager extends Component {
         this.level = LEVELS[Math.min(this.levelIndex, LEVELS.length - 1)];
         this.timeLeft = this.level.timeSec;
         this.hud.setLevel(this.levelIndex + 1);
+        this.loadDaily();
+        this.loadBest();
+        this.consumeDaily();
         await this.loadPrefabs(this.level.items);
         this.spawnItems();
         this.playing = true;
         this.updateHud();
+    }
+
+    // ---------- 每日次数 / 最好成绩 ----------
+
+    private todayKey(): string {
+        const d = new Date();
+        return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    }
+
+    private loadDaily() {
+        try {
+            const raw = JSON.parse(sys.localStorage.getItem(GameManager.DAILY_STORE) ?? 'null');
+            this.dailyLeft = raw && raw.date === this.todayKey()
+                ? raw.left : GameManager.DAILY_FREE;
+        } catch { this.dailyLeft = GameManager.DAILY_FREE; }
+        this.hud?.setDaily(this.dailyLeft);
+    }
+
+    private saveDaily() {
+        try {
+            sys.localStorage.setItem(GameManager.DAILY_STORE,
+                JSON.stringify({ date: this.todayKey(), left: this.dailyLeft }));
+        } catch { /* 存储不可用则仅内存 */ }
+        this.hud?.setDaily(this.dailyLeft);
+    }
+
+    private consumeDaily() {
+        this.dailyLeft = Math.max(0, this.dailyLeft - 1);
+        this.saveDaily();
+    }
+
+    private loadBest() {
+        try {
+            this.best = JSON.parse(sys.localStorage.getItem(GameManager.BEST_STORE) ?? '{}') ?? {};
+        } catch { this.best = {}; }
+    }
+
+    /** 记录本关成绩,返回是否刷新纪录。 */
+    private recordBest(lvl: number, stars: number, progress: number): boolean {
+        const prev = this.best[lvl];
+        const better = !prev || progress > prev.progress
+            || (progress === prev.progress && stars > prev.stars);
+        if (better) {
+            this.best[lvl] = { stars, progress };
+            try { sys.localStorage.setItem(GameManager.BEST_STORE, JSON.stringify(this.best)); } catch { /* 忽略 */ }
+        }
+        return better && !!prev; // 首次成绩不算"刷新纪录"
     }
 
     /** 递归把节点树全部放进 DEFAULT 渲染层（代码创建的节点 layer 可能为 0 → 任何相机都不画） */
@@ -700,6 +759,7 @@ export class GameManager extends Component {
 
         const { matched, full, index } = this.tray.add(tag.id, node);
         this.audio?.play(tag.id === 'goose' ? 'honk' : 'pick');
+        this.hud?.pickBurst(screenPos);
         this.hud?.captureModel(node, screenPos, index);
         this.reflowTray();
         this.settleNearRemoved(removedPos);
@@ -711,6 +771,7 @@ export class GameManager extends Component {
                 this.audio?.play('match');
                 for (const e of matched) {
                     Tween.stopAllByTarget(e.node);
+                    this.hud?.matchBurst(e.node);
                     this.hud?.releaseModel(e.node);
                     tween(e.node)
                         .to(0.2, { scale: v3(0.05, 0.05, 0.05) }, { easing: 'backIn' })
@@ -771,6 +832,12 @@ export class GameManager extends Component {
     private propRemove(): boolean {
         const back = this.tray.takeFront(3);
         if (back.length === 0) return false;
+        this.returnItemsToPile(back);
+        return true;
+    }
+
+    /** 把若干槽内物件放回 3D 堆(道具"移出"与失败救场共用)。 */
+    private returnItemsToPile(back: { id: string; node: Node }[]) {
         back.forEach((e, i) => {
             const tag = e.node.getComponent(ItemTag)!;
             this.hud?.releaseModel(e.node);
@@ -793,7 +860,6 @@ export class GameManager extends Component {
         });
         this.reflowTray();
         this.schedulePileSettle(2.2);
-        return true;
     }
 
     /** 凑齐：自动吸取盒中物件补全一组三消（优先补槽内已有的类别） */
@@ -870,6 +936,7 @@ export class GameManager extends Component {
         this.playing = false;
         this.paused = false;
         this.hud?.setPaused(false);
+        this.loseReason = win ? '' : (reason === '槽位已满' ? '槽位已满' : '时间到');
         this.audio?.play(win ? 'win' : 'lose');
         const stars = this.progress >= 100 ? 3 : this.progress >= 70 ? 2 : this.progress >= 50 ? 1 : 0;
         // 星级奖励：一星+移出、二星再+凑齐、三星再+打乱
@@ -879,6 +946,10 @@ export class GameManager extends Component {
         if (stars > 0) this.saveProps();
         console.log(`[GameManager] ${win ? '胜利' : `失败（${reason}）`} 完成度 ${this.progress}%`);
 
+        const finishedLevel = this.levelIndex;
+        const newRecord = this.recordBest(finishedLevel, stars, this.progress);
+        const prevBest = this.best[finishedLevel];
+
         // 胜利推进关卡并持久化；最后一关通关后停在最后一关反复挑战。
         const wasLast = this.levelIndex >= LEVELS.length - 1;
         if (win && !wasLast) {
@@ -886,18 +957,58 @@ export class GameManager extends Component {
             try { sys.localStorage.setItem(GameManager.LEVEL_STORE, String(this.levelIndex)); } catch { /* 忽略 */ }
         }
         const actionText = win ? (wasLast ? '再来一局' : '下一关') : '再试一次';
+        // 失败且本轮未救过 → 提供一次救场：槽满退 3 件 / 超时加 60 秒。
+        const canRescue = !win && !this.rescueUsed
+            && (this.loseReason === '时间到' || this.tray.count >= 3);
         // 给消除动画/星星心理预期留 0.6 秒再弹结算。
         // 原地重置而不重载场景——loadScene 后自定义管线的主相机会停止渲染。
         this.scheduleOnce(() => {
             this.hud?.showResult({
                 win, stars, progress: this.progress, rewardCount: stars, actionText,
+                bestText: prevBest ? `历史最佳 ${'★'.repeat(prevBest.stars) || '—'} ${prevBest.progress}%` : '',
+                newRecord,
+                rescueText: canRescue
+                    ? (this.loseReason === '槽位已满' ? '救一下:退回 3 件' : '救一下:+60 秒') : '',
+                onRescue: canRescue ? () => this.rescue() : undefined,
                 onAction: () => this.resetLevel(),
             });
         }, 0.6);
     }
 
+    /**
+     * 失败救场(每轮一次)。MVP 直接生效;接入微信后此入口改为激励视频回调。
+     * 槽满:槽头 3 件退回堆里腾出空间;超时:加 60 秒。
+     */
+    private rescue() {
+        if (this.rescueUsed || this.playing) return;
+        this.rescueUsed = true;
+        this.hud?.hideResult();
+        this.audio?.play('prop');
+        if (this.loseReason === '槽位已满') {
+            const back = this.tray.takeFront(3);
+            this.returnItemsToPile(back);
+        } else {
+            this.timeLeft += 60;
+        }
+        this.playing = true;
+        this.updateHud();
+    }
+
     /** 原地开始 levelIndex 指向的关卡（重试当前关或进入下一关） */
     private async resetLevel() {
+        // 每日次数门:用完先弹补充入口(MVP 直接 +1;接微信后换激励视频回调)。
+        if (this.dailyLeft <= 0) {
+            this.hud?.showNotice('今日次数用完', '每天可免费挑战 3 次\n看段广告补充 1 次吧',
+                '看广告 +1', () => {
+                    this.dailyLeft++;
+                    this.saveDaily();
+                    this.resetLevel();
+                });
+            return;
+        }
+        this.consumeDaily();
+        this.rescueUsed = false;
+        this.loseReason = '';
         this.hud?.hideResult();
         for (const e of this.tray.entries) {
             if (e.node.isValid) e.node.destroy();
