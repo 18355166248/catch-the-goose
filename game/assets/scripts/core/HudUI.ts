@@ -54,6 +54,9 @@ export class HudUI {
     private propBadge: Record<PropKind, Label> = {} as Record<PropKind, Label>;
     private propOpacity: Record<PropKind, UIOpacity> = {} as Record<PropKind, UIOpacity>;
     private iconLabels: Label[] = [];
+    private iconFont: Font | null = null;
+    private levelLabel!: Label;
+    private resultRoot: Node | null = null;
     private capturedModels = new Map<Node, number>();
     private capturedIcons = new Map<Node, Node>();
 
@@ -104,6 +107,11 @@ export class HudUI {
         const timerPanel = this.makePanel(160, 54, 25, new Color(62, 36, 24, 232), { top: 22 }, 0,
             new Color(168, 108, 57), 3);
         this.timerLabel = this.addLabel(timerPanel, '0:00', 34, new Color(255, 220, 87), 0, 0, true);
+
+        // 右上关卡标牌,与左上暂停键对称。
+        const levelPanel = this.makePanel(112, 52, 16, new Color(62, 36, 24, 232), { top: 28 }, 0,
+            new Color(168, 108, 57), 3, { right: 23 });
+        this.levelLabel = this.addLabel(levelPanel, '第 1 关', 24, cream, 0, 0, true);
 
         const W = HudUI.PROGRESS_W;
         const progPanel = this.makePanel(W, 24, 12, new Color(45, 29, 21, 205), { top: 88 }, 0,
@@ -179,8 +187,95 @@ export class HudUI {
                 console.warn('[HudUI] Font Awesome 字体加载失败', err);
                 return;
             }
+            this.iconFont = font;
             for (const label of this.iconLabels) label.font = font;
         });
+    }
+
+    setLevel(n: number) {
+        this.levelLabel.string = `第 ${n} 关`;
+    }
+
+    /**
+     * 结算弹窗:遮罩 + 面板 + 三星逐颗弹出 + 行动按钮。
+     * 星星用 Font Awesome 实心星,未获得的显示为灰色底星。
+     */
+    showResult(opts: {
+        win: boolean; stars: number; progress: number;
+        rewardCount: number; actionText: string; onAction: () => void;
+    }) {
+        this.hideResult();
+        const root = new Node('resultRoot');
+        this.resultRoot = root;
+        root.layer = Layers.Enum.UI_2D;
+        root.setParent(this.contentRoot);
+
+        // 全屏遮罩:吞掉触摸,防止点到底下的 3D 区或道具按钮。
+        const mask = new Node('mask');
+        mask.layer = Layers.Enum.UI_2D;
+        mask.setParent(root);
+        mask.addComponent(UITransform).setContentSize(2400, 3200);
+        const mg = mask.addComponent(Graphics);
+        mg.fillColor = new Color(20, 12, 8, 165);
+        mg.rect(-1200, -1600, 2400, 3200);
+        mg.fill();
+        mask.on(NodeEventType.TOUCH_END, () => { /* 吞掉 */ });
+
+        const panelShadow = this.makePanelChild(root, 560, 470, 34, new Color(52, 27, 15, 235), 0, -10);
+        void panelShadow;
+        const panel = this.makePanelChild(root, 548, 460, 30, new Color(255, 244, 214), 0, 0,
+            new Color(196, 130, 64), 6);
+
+        const titleColor = opts.win ? new Color(240, 150, 26) : new Color(112, 120, 132);
+        this.addLabel(panel, opts.win ? '胜 利 !' : '差一点…', 52, titleColor, 0, 158, true);
+
+        // 三颗星:底星常驻,获得的金星延迟逐颗弹出。
+        for (let i = 0; i < 3; i++) {
+            const x = (i - 1) * 108;
+            const y = i === 1 ? 78 : 58;
+            const base = this.addIcon(panel, '', 66, new Color(205, 198, 182), x, y);
+            base.outlineColor = new Color(160, 152, 138, 200);
+            if (i < opts.stars) {
+                const star = this.addIcon(panel, '', 66, new Color(255, 201, 40), x, y);
+                star.outlineColor = new Color(196, 130, 30, 255);
+                star.node.setScale(0, 0, 1);
+                tween(star.node)
+                    .delay(0.35 + i * 0.28)
+                    .to(0.3, { scale: v3(1.25, 1.25, 1) }, { easing: 'backOut' })
+                    .to(0.12, { scale: v3(1, 1, 1) })
+                    .start();
+            }
+        }
+
+        this.addLabel(panel, `完成度 ${opts.progress}%`, 30, new Color(102, 57, 28), 0, -14, true);
+        if (opts.rewardCount > 0) {
+            this.addLabel(panel, `获得 ${opts.rewardCount} 件道具奖励`, 24, new Color(52, 148, 68), 0, -58, true);
+        }
+
+        const btnShadow = this.makePanelChild(panel, 264, 84, 22, new Color(104, 61, 25, 235), 0, -142);
+        btnShadow.setPosition(0, -146, 0);
+        const btn = this.makePanelChild(panel, 258, 80, 20, new Color(255, 207, 55), 0, -138,
+            new Color(171, 118, 29), 5);
+        this.addLabel(btn, opts.actionText, 30, new Color(102, 57, 28), 0, 0, true);
+        btn.on(NodeEventType.TOUCH_START, () => {
+            tween(btn).to(0.07, { scale: v3(0.94, 0.94, 1) }).start();
+        });
+        btn.on(NodeEventType.TOUCH_END, () => {
+            tween(btn).to(0.08, { scale: v3(1, 1, 1) }).start();
+            opts.onAction();
+        });
+
+        // 弹窗整体入场:从 0.7 缩放弹开。
+        root.setScale(0.7, 0.7, 1);
+        const op = root.addComponent(UIOpacity);
+        op.opacity = 0;
+        tween(root).to(0.28, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
+        tween(op).to(0.2, { opacity: 255 }).start();
+    }
+
+    hideResult() {
+        if (this.resultRoot?.isValid) this.resultRoot.destroy();
+        this.resultRoot = null;
     }
 
     sync() {
@@ -380,7 +475,8 @@ export class HudUI {
         const label = this.addLabel(parent, text, size, color, x, y, true);
         label.outlineColor = new Color(73, 51, 47, 230);
         label.outlineWidth = 3;
-        this.iconLabels.push(label);
+        if (this.iconFont) label.font = this.iconFont;
+        else this.iconLabels.push(label);
         return label;
     }
 

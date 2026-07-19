@@ -17,12 +17,13 @@ export const ALL_ITEMS = [
 ];
 
 export const LEVELS: LevelDef[] = [
-    // 首关直接展示完整的“灌入式堆叠”：11 种 × 2 组 × 3 个 = 66 个。
-    { items: ALL_ITEMS, groupsPerItem: 2, timeSec: 600 },
-    { items: ['goose', 'banzhi', 'tongqian', 'pingankou', 'yupai'], groupsPerItem: 2, timeSec: 330 },
+    // 第 1 关是上手关：4 种强对比配色 × 2 组 = 24 件，时间宽裕，先教会“找同类凑三”。
+    { items: ['goose', 'baicai', 'tongqian', 'bracelet'], groupsPerItem: 2, timeSec: 360 },
+    { items: ['goose', 'banzhi', 'tongqian', 'pingankou', 'hulu'], groupsPerItem: 2, timeSec: 330 },
     { items: ['goose', 'baicai', 'banzhi', 'tongqian', 'pingankou', 'yuzhuo'], groupsPerItem: 2, timeSec: 300 },
-    { items: ['goose', 'baicai', 'mile', 'banzhi', 'tongqian', 'yupai', 'yuzhuo'], groupsPerItem: 3, timeSec: 300 },
-    { items: ['goose', 'baicai', 'mile', 'pixiu', 'banzhi', 'bracelet', 'hulu', 'tongqian'], groupsPerItem: 3, timeSec: 300 },
+    { items: ['goose', 'baicai', 'mile', 'banzhi', 'hulu', 'tongqian', 'yupai', 'yuzhuo'], groupsPerItem: 2, timeSec: 300 },
+    // 终盘关：全 11 种 × 2 组 = 66 件，展示完整灌入式堆叠。
+    { items: ALL_ITEMS, groupsPerItem: 2, timeSec: 360 },
 ];
 
 /** 校验：每关物件总数必须是 3 的倍数（groupsPerItem 保证了这一点，这里防御性再查一遍） */

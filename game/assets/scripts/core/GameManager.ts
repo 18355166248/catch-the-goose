@@ -9,6 +9,7 @@ import { SlotTray, TRAY_CAPACITY } from './SlotTray';
 import { ItemTag } from './ItemTag';
 import { MODEL_PREFAB_UUID } from './ModelManifest';
 import { HudUI, PropKind } from './HudUI';
+import { AudioMan } from './AudioMan';
 
 const { ccclass, property } = _decorator;
 
@@ -40,7 +41,9 @@ export class GameManager extends Component {
     private paused = false;
     private prefabs = new Map<string, Prefab>();
     private hud: HudUI | null = null;
+    private audio: AudioMan | null = null;
     private pileMaterial!: PhysicsMaterial;
+    private static readonly LEVEL_STORE = 'goose_level_v1';
 
     /**
      * 手机屏幕内的真实物理盒边界。
@@ -56,6 +59,8 @@ export class GameManager extends Component {
     private static readonly VISIBLE_MIN_Z = -2.25;
     private static readonly VISIBLE_MAX_Z = 0.48;
     private settleToken = 0;
+    /** 本关物件基准缩放:少件关卡放大物件,保证盒子饱满、目标好点。 */
+    private itemScale = 0.46;
 
     onLoad() {
         this.pileMaterial = new PhysicsMaterial();
@@ -93,9 +98,16 @@ export class GameManager extends Component {
         this.timerLabel = this.hud.timerLabel;
         this.progressLabel = this.hud.progressLabel;
         this.msgLabel = this.hud.msgLabel;
+        this.audio = new AudioMan(this.node.scene);
         this.loadProps();
+        // 关卡进度本地存储:上次通到第几关,这次直接从那关开始。
+        try {
+            const saved = parseInt(sys.localStorage.getItem(GameManager.LEVEL_STORE) ?? '', 10);
+            if (!isNaN(saved)) this.levelIndex = Math.max(0, Math.min(saved, LEVELS.length - 1));
+        } catch { /* 存储不可用则从配置默认关开始 */ }
         this.level = LEVELS[Math.min(this.levelIndex, LEVELS.length - 1)];
         this.timeLeft = this.level.timeSec;
+        this.hud.setLevel(this.levelIndex + 1);
         await this.loadPrefabs(this.level.items);
         this.spawnItems();
         this.playing = true;
@@ -356,6 +368,8 @@ export class GameManager extends Component {
         }
         this.shuffleInPlace(queue);
         this.totalCount = queue.length;
+        // 66 件对应 0.46;件数减少按体积等比放大,上限 0.64 防止超出容器。
+        this.itemScale = Math.min(0.64, 0.46 * Math.cbrt(66 / Math.max(1, queue.length)));
 
         queue.forEach((id, index) => {
             const prefab = this.prefabs.get(id)!;
@@ -380,8 +394,8 @@ export class GameManager extends Component {
                         + Math.sin(angle) * radius * 0.72
                         + (Math.random() - 0.5) * 0.08,
                 );
-                // 参考录屏中单件约为篮宽的 1/6；缩小后 66 件可以形成紧凑但不过高的堆。
-                const scale = 0.46 + (idx % 4) * 0.012;
+                // 参考录屏中单件约为篮宽的 1/6；66 件时形成紧凑但不过高的堆。
+                const scale = this.itemScale + (idx % 4) * 0.012;
                 n.setScale(scale, scale, scale);
 
                 const tag = n.addComponent(ItemTag);
@@ -685,13 +699,16 @@ export class GameManager extends Component {
         node.getComponent(BoxCollider)!.enabled = false;
 
         const { matched, full, index } = this.tray.add(tag.id, node);
+        this.audio?.play(tag.id === 'goose' ? 'honk' : 'pick');
         this.hud?.captureModel(node, screenPos, index);
         this.reflowTray();
         this.settleNearRemoved(removedPos);
+        this.scheduleOnce(() => this.audio?.play('drop', 0.5), 0.3);
 
         if (matched) {
             // 飞入动画结束后再消除
             this.scheduleOnce(() => {
+                this.audio?.play('match');
                 for (const e of matched) {
                     Tween.stopAllByTarget(e.node);
                     this.hud?.releaseModel(e.node);
@@ -744,6 +761,7 @@ export class GameManager extends Component {
         else if (kind === 'magnet') used = this.propMagnet();
         else used = this.propShuffle();
         if (used) {
+            this.audio?.play(kind === 'shuffle' ? 'shuffle' : 'prop');
             this.propCounts[kind]--;
             this.saveProps();
         }
@@ -765,7 +783,7 @@ export class GameManager extends Component {
                 1.3 + i * 0.5,
                 GameManager.FENCE_CENTER_Z + (Math.random() - 0.5) * 1.1,
             );
-            e.node.setScale(0.48, 0.48, 0.48);
+            e.node.setScale(this.itemScale, this.itemScale, this.itemScale);
             this.setNaturalRotation(e.node, tag.id);
             const rb = e.node.getComponent(RigidBody)!;
             rb.type = RigidBody.Type.DYNAMIC;
@@ -852,29 +870,35 @@ export class GameManager extends Component {
         this.playing = false;
         this.paused = false;
         this.hud?.setPaused(false);
+        this.audio?.play(win ? 'win' : 'lose');
         const stars = this.progress >= 100 ? 3 : this.progress >= 70 ? 2 : this.progress >= 50 ? 1 : 0;
         // 星级奖励：一星+移出、二星再+凑齐、三星再+打乱
         if (stars >= 1) this.propCounts.remove++;
         if (stars >= 2) this.propCounts.magnet++;
         if (stars >= 3) this.propCounts.shuffle++;
         if (stars > 0) this.saveProps();
-        const msg = win
-            ? `胜利！${'★'.repeat(Math.max(1, stars))} 完成度 ${this.progress}%`
-            : `失败（${reason}）完成度 ${this.progress}%`;
-        if (this.msgLabel) this.msgLabel.string = msg;
-        console.log(`[GameManager] ${msg}`);
-        // 1 秒后允许点击任意处重开本关（原地重置，不重载场景——
-        // loadScene 重载后自定义管线的主相机会停止渲染，规避之）
+        console.log(`[GameManager] ${win ? '胜利' : `失败（${reason}）`} 完成度 ${this.progress}%`);
+
+        // 胜利推进关卡并持久化；最后一关通关后停在最后一关反复挑战。
+        const wasLast = this.levelIndex >= LEVELS.length - 1;
+        if (win && !wasLast) {
+            this.levelIndex++;
+            try { sys.localStorage.setItem(GameManager.LEVEL_STORE, String(this.levelIndex)); } catch { /* 忽略 */ }
+        }
+        const actionText = win ? (wasLast ? '再来一局' : '下一关') : '再试一次';
+        // 给消除动画/星星心理预期留 0.6 秒再弹结算。
+        // 原地重置而不重载场景——loadScene 后自定义管线的主相机会停止渲染。
         this.scheduleOnce(() => {
-            if (this.hud) {
-                this.hud.subMsgLabel.string = (stars > 0 ? `获得 ${stars} 件道具奖励，` : '') + '点击任意处重新挑战';
-            }
-            input.once(Input.EventType.TOUCH_START, () => this.resetLevel());
-        }, 1);
+            this.hud?.showResult({
+                win, stars, progress: this.progress, rewardCount: stars, actionText,
+                onAction: () => this.resetLevel(),
+            });
+        }, 0.6);
     }
 
-    /** 原地重开本关 */
-    private resetLevel() {
+    /** 原地开始 levelIndex 指向的关卡（重试当前关或进入下一关） */
+    private async resetLevel() {
+        this.hud?.hideResult();
         for (const e of this.tray.entries) {
             if (e.node.isValid) e.node.destroy();
         }
@@ -884,9 +908,13 @@ export class GameManager extends Component {
         this.tray.clear();
         this.hud?.clearCapturedModels();
         this.removedCount = 0;
+        this.level = LEVELS[Math.min(this.levelIndex, LEVELS.length - 1)];
         this.timeLeft = this.level.timeSec;
+        this.hud?.setLevel(this.levelIndex + 1);
         if (this.msgLabel) this.msgLabel.string = '';
         if (this.hud) this.hud.subMsgLabel.string = '';
+        // 进入新关卡时可能出现首次使用的物件种类,补加载对应 Prefab。
+        await this.loadPrefabs(this.level.items.filter(id => !this.prefabs.has(id)));
         this.spawnItems();
         this.paused = false;
         this.hud?.setPaused(false);
