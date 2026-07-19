@@ -99,20 +99,31 @@ export class GameManager extends Component {
     update(dt: number) {
         this.hud?.sync();
         if (!this.playing) return;
-        // 逃逸回收：物件被挤出盒外或停在墙顶时，抓回盒内重新掉落
+        // 逃逸回收 + 限速：0.8 秒一巡，越界/贴地以下立即抓回，爆弹速度钳制
         this.patrolTimer += dt;
-        if (this.patrolTimer > 2) {
+        if (this.patrolTimer > 0.8) {
             this.patrolTimer = 0;
             const lim = GameManager.BOX_SIZE / 2 - 0.2;
+            const vel = v3();
             for (const t of this.node.getComponentsInChildren(ItemTag)) {
                 if (t.picked || !t.node.isValid) continue;
                 const p = t.node.worldPosition;
-                // 横向越过内壁（含停在墙顶）或掉穿地板才算逃逸；倾倒中的高空物件不误伤
-                const escaped = Math.abs(p.x) > lim || Math.abs(p.z) > lim || p.y < -0.6;
+                const escaped = Math.abs(p.x) > lim || Math.abs(p.z) > lim || p.y < -0.05;
                 if (escaped) {
-                    t.node.setWorldPosition((Math.random() - 0.5) * 2, 2.5, (Math.random() - 0.5) * 2);
+                    t.node.setWorldPosition((Math.random() - 0.5) * 2, 1.8, (Math.random() - 0.5) * 2);
                     const rb = t.node.getComponent(RigidBody);
                     try { rb?.clearState(); } catch { /* 忽略 */ }
+                    continue;
+                }
+                // 限速：物理爆弹产生的极端速度是隧穿与飞出的源头
+                const rb = t.node.getComponent(RigidBody);
+                if (rb && rb.enabled) {
+                    rb.getLinearVelocity(vel);
+                    const sp = vel.length();
+                    if (sp > 9) {
+                        vel.multiplyScalar(9 / sp);
+                        rb.setLinearVelocity(vel);
+                    }
                 }
             }
         }
@@ -132,7 +143,9 @@ export class GameManager extends Component {
         const woodFloor = this.makeMat(new Color(235, 230, 225), 'wood_floor');
         const woodEdge = this.makeMat(new Color(190, 150, 115), 'wood_dark');
         // 台面（顶面 y=0）+ 更宽的深色底座（层叠出"突出"感）
-        this.makeStaticBox('floor', v3(0, -0.25, 0), v3(S + 1.0, 0.5, S + 1.0), woodFloor);
+        // 碰撞体做成 4.5 深的实心地基（顶面仍在 y=0）：无论多快都不可能隧穿到台下
+        this.makeStaticBox('floor', v3(0, -0.25, 0), v3(S + 1.0, 0.5, S + 1.0), woodFloor,
+            v3(S + 1.0, 4.5, S + 1.0), v3(0, -2.0, 0));
         this.makeVisualBox('base', v3(0, -0.62, 0), v3(S + 1.8, 0.32, S + 1.8), woodEdge);
 
         // 隐形围栏（只有碰撞体，无渲染）：厚 1.2、下探到台面以下，杜绝高速隧穿和底缝钻出
@@ -445,7 +458,7 @@ export class GameManager extends Component {
             Tween.stopAllByTarget(e.node);
             tag.picked = false;
             e.node.setWorldPosition(
-                (Math.random() - 0.5) * 3, 3 + i * 0.8, (Math.random() - 0.5) * 3);
+                (Math.random() - 0.5) * 3, 1.5 + i * 0.6, (Math.random() - 0.5) * 3);
             e.node.setScale(0.9, 0.9, 0.9);
             e.node.getComponent(RigidBody)!.enabled = true;
             e.node.getComponent(BoxCollider)!.enabled = true;
@@ -490,9 +503,10 @@ export class GameManager extends Component {
         const boxItems = this.node.getComponentsInChildren(ItemTag).filter(t => !t.picked && t.node.isValid);
         if (boxItems.length === 0) return false;
         for (const t of boxItems) {
+            // 低空重洗：高空跌落速度大，是穿透风险源
             t.node.setWorldPosition(
                 (Math.random() - 0.5) * (S - 1.5),
-                2.5 + Math.random() * 3,
+                1.4 + Math.random() * 1.2,
                 (Math.random() - 0.5) * (S - 1.5));
             const q = new Quat();
             Quat.fromEuler(q, Math.random() * 360, Math.random() * 360, Math.random() * 360);
