@@ -135,12 +135,13 @@ export class GameManager extends Component {
         this.makeStaticBox('floor', v3(0, -0.25, 0), v3(S + 1.0, 0.5, S + 1.0), woodFloor);
         this.makeVisualBox('base', v3(0, -0.62, 0), v3(S + 1.8, 0.32, S + 1.8), woodEdge);
 
-        // 隐形围栏（只有碰撞体，无渲染）：拦住物件不滚出台面
-        const WH = 5, WT = 0.25;
-        this.makeInvisibleWall('fenceN', v3(0, WH / 2, -S / 2 - WT / 2), v3(S + 1.0, WH, WT));
-        this.makeInvisibleWall('fenceS', v3(0, WH / 2, S / 2 + WT / 2), v3(S + 1.0, WH, WT));
-        this.makeInvisibleWall('fenceW', v3(-S / 2 - WT / 2, WH / 2, 0), v3(WT, WH, S));
-        this.makeInvisibleWall('fenceE', v3(S / 2 + WT / 2, WH / 2, 0), v3(WT, WH, S));
+        // 隐形围栏（只有碰撞体，无渲染）：厚 1.2、下探到台面以下，杜绝高速隧穿和底缝钻出
+        const WH = 7, WT = 1.2, WY = WH / 2 - 1; // 竖向覆盖 -1 ~ 6
+        const WC = S / 2 + WT / 2; // 内壁贴着台面边界
+        this.makeInvisibleWall('fenceN', v3(0, WY, -WC), v3(S + WT * 2, WH, WT));
+        this.makeInvisibleWall('fenceS', v3(0, WY, WC), v3(S + WT * 2, WH, WT));
+        this.makeInvisibleWall('fenceW', v3(-WC, WY, 0), v3(WT, WH, S));
+        this.makeInvisibleWall('fenceE', v3(WC, WY, 0), v3(WT, WH, S));
 
         // 大背景板（带暗角的暖棕渐变，unlit 不受光，和平台拉开层次）
         const bg = this.makeMat(new Color(255, 255, 255), 'backdrop', false);
@@ -279,16 +280,19 @@ export class GameManager extends Component {
             const count = this.level.groupsPerItem * 3;
             for (let i = 0; i < count; i++) {
                 this.totalCount++;
-                // 分批倾倒：一次性全下会互相挤爆并隧穿薄墙
-                const delay = this.totalCount * 0.06;
+                // 分批倾倒 + 网格错位落点：避免同点堆叠互相挤爆
+                const idx = this.totalCount;
+                const delay = idx * 0.08;
                 this.scheduleOnce(() => {
                     const n = instantiate(prefab);
                     n.setParent(this.node);
                     this.forceLayer(n);
+                    // 4x4 网格循环取格，格内小抖动；低空投放减少弹跳
+                    const gx = idx % 4, gz = Math.floor(idx / 4) % 4;
                     n.setPosition(
-                        (Math.random() - 0.5) * (S - 2.2),
-                        2 + Math.random() * 1.5,
-                        (Math.random() - 0.5) * (S - 2.2),
+                        -1.5 + gx * 1.0 + (Math.random() - 0.5) * 0.3,
+                        1.2 + (idx % 3) * 0.5,
+                        -1.5 + gz * 1.0 + (Math.random() - 0.5) * 0.3,
                     );
                     const q = new Quat();
                     Quat.fromEuler(q, Math.random() * 360, Math.random() * 360, Math.random() * 360);
@@ -299,10 +303,11 @@ export class GameManager extends Component {
                     tag.id = id;
                     const rb = n.addComponent(RigidBody);
                     rb.mass = 1;
-                    rb.angularDamping = 0.3;
-                    rb.linearDamping = 0.15;
+                    rb.angularDamping = 0.4;
+                    rb.linearDamping = 0.2;
+                    try { (rb as any).useCCD = true; } catch { /* 版本不支持则依赖 substeps */ }
                     const col = n.addComponent(BoxCollider);
-                    col.size = v3(0.7, 0.7, 0.7);
+                    col.size = v3(0.75, 0.75, 0.75);
                     // 物件投平面阴影
                     for (const mr of n.getComponentsInChildren(MeshRenderer)) {
                         mr.shadowCastingMode = MeshRenderer.ShadowCastingMode.ON;
@@ -319,20 +324,42 @@ export class GameManager extends Component {
         if (!this.playing || !this.cam) return;
         const p = e.getLocation();
         if (p.y < view.getCanvasSize().height * 0.12) return; // 底部道具按钮区，不穿透拾取
+        const tag = this.hitTestAt(p.x, p.y);
+        if (tag) this.pick(tag.node, tag);
+    }
+
+    /**
+     * 双通道命中检测（供 onTouch 与自动化测试共用）：
+     * 1) 穿透式物理射线，全命中里取最近的可拾取物件（隐形围栏不遮挡）
+     * 2) 射线漏检时按屏幕距离就近吸附（物理体和渲染体错位/物件极薄时的兜底）
+     */
+    hitTestAt(x: number, y: number): ItemTag | null {
+        if (!this.cam) return null;
         const ray = new geometry.Ray();
-        this.cam.screenPointToRay(p.x, p.y, ray);
-        // 穿透式检测：墙体的隐形加高碰撞体会挡在物件前面，closest 会被墙吞掉
-        if (!PhysicsSystem.instance.raycast(ray)) return;
+        this.cam.screenPointToRay(x, y, ray);
         let bestTag: ItemTag | null = null;
         let bestDist = Infinity;
-        for (const r of PhysicsSystem.instance.raycastResults) {
-            const tag = r.collider.node.getComponent(ItemTag);
-            if (tag && !tag.picked && r.distance < bestDist) {
-                bestDist = r.distance;
-                bestTag = tag;
+        if (PhysicsSystem.instance.raycast(ray)) {
+            for (const r of PhysicsSystem.instance.raycastResults) {
+                const tag = r.collider.node.getComponent(ItemTag);
+                if (tag && !tag.picked && r.distance < bestDist) {
+                    bestDist = r.distance;
+                    bestTag = tag;
+                }
             }
         }
-        if (bestTag) this.pick(bestTag.node, bestTag);
+        if (!bestTag) {
+            const thresh = view.getCanvasSize().width * 0.06;
+            let bestPx = thresh;
+            const sp = v3();
+            for (const t of this.node.getComponentsInChildren(ItemTag)) {
+                if (t.picked || !t.node.isValid) continue;
+                this.cam.worldToScreen(t.node.worldPosition, sp);
+                const d = Math.hypot(sp.x - x, sp.y - y);
+                if (d < bestPx) { bestPx = d; bestTag = t; }
+            }
+        }
+        return bestTag;
     }
 
     private pick(node: Node, tag: ItemTag) {
