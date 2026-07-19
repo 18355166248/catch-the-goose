@@ -17,7 +17,8 @@ export const ALL_ITEMS = [
 ];
 
 export const LEVELS: LevelDef[] = [
-    { items: ['goose', 'banzhi', 'tongqian', 'pingankou'], groupsPerItem: 2, timeSec: 360 },
+    // 首关直接展示完整的“灌入式堆叠”：11 种 × 2 组 × 3 个 = 66 个。
+    { items: ALL_ITEMS, groupsPerItem: 2, timeSec: 600 },
     { items: ['goose', 'banzhi', 'tongqian', 'pingankou', 'yupai'], groupsPerItem: 2, timeSec: 330 },
     { items: ['goose', 'baicai', 'banzhi', 'tongqian', 'pingankou', 'yuzhuo'], groupsPerItem: 2, timeSec: 300 },
     { items: ['goose', 'baicai', 'mile', 'banzhi', 'tongqian', 'yupai', 'yuzhuo'], groupsPerItem: 3, timeSec: 300 },

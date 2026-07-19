@@ -1,8 +1,8 @@
 import {
     _decorator, Component, Node, Camera, Label, Prefab, resources, instantiate,
     RigidBody, BoxCollider, MeshRenderer, Material, primitives, utils,
-    PhysicsSystem, input, Input, EventTouch, tween, Tween, v3, Vec3, Quat, Color, geometry,
-    assetManager, EffectAsset, Layers, view, Texture2D, sys,
+    PhysicsSystem, input, Input, EventTouch, tween, Tween, v3, Vec3, Quat, Mat4, Color, geometry, screen,
+    assetManager, EffectAsset, Layers, Texture2D, sys, PhysicsMaterial,
 } from 'cc';
 import { LEVELS, LevelDef } from './LevelConfig';
 import { SlotTray, TRAY_CAPACITY } from './SlotTray';
@@ -37,23 +37,37 @@ export class GameManager extends Component {
     private totalCount = 0;
     private removedCount = 0;
     private playing = false;
+    private paused = false;
     private prefabs = new Map<string, Prefab>();
     private hud: HudUI | null = null;
+    private pileMaterial!: PhysicsMaterial;
 
-    // 盒子尺寸
-    private static readonly BOX_SIZE = 5;
-    private static readonly WALL_H = 1.6;
-
-    // 槽位世界坐标（一排 7 个，位于盒子前方靠近相机处）
-    // y 要足够高：模型原点是质心（非几何中心），半高最大可达 0.35 左右，太低会插进托盘
-    private slotPos(i: number): Vec3 {
-        return v3(-2.4 + i * 0.8, 0.62, 3.8);
-    }
+    /**
+     * 手机屏幕内的真实物理盒边界。
+     * 正交相机在 390×844 下横向约可见 ±1.96；左右内壁为 ±1.35，
+     * 与可见木框内沿对齐，并给密集堆叠留出足够空间，避免刚体长期互相挤压。
+     * Z 方向与可见木盒的后沿(-2.38)和前沿(0.63)对齐。
+     */
+    private static readonly FENCE_HALF_X = 1.35;
+    private static readonly FENCE_CENTER_Z = -0.88;
+    private static readonly FENCE_HALF_Z = 1.42;
+    /** 模型外轮廓允许占用的最终可见范围（不是节点中心范围）。 */
+    private static readonly VISIBLE_HALF_X = 1.70;
+    private static readonly VISIBLE_MIN_Z = -2.25;
+    private static readonly VISIBLE_MAX_Z = 0.48;
+    private settleToken = 0;
 
     onLoad() {
-        // 低帧率环境下防物理隧穿（大 dt 单步积分会让物件穿墙）
-        PhysicsSystem.instance.maxSubSteps = 4;
-        PhysicsSystem.instance.fixedTimeStep = 1 / 60;
+        this.pileMaterial = new PhysicsMaterial();
+        // 高摩擦、低回弹：物件落下后互相咬住形成稳定堆，而不是像冰块一样摊成一层。
+        this.pileMaterial.setValues(1.25, 0.9, 0.9, 0.01);
+        // 模板场景可能保存过倾斜的物理重力；这里强制为世界竖直方向，
+        // 否则物件落地后会持续滑向篮子后侧，看起来像堆叠算法失效。
+        PhysicsSystem.instance.gravity = v3(0, -12, 0);
+        // 小物件 + 薄片需要更密的物理步进；CCD 负责线性高速运动，子步负责接触堆叠和旋转。
+        PhysicsSystem.instance.maxSubSteps = 6;
+        PhysicsSystem.instance.fixedTimeStep = 1 / 90;
+        PhysicsSystem.instance.sleepThreshold = 0.15;
         this.buildBox();
         input.on(Input.EventType.TOUCH_START, this.onTouch, this);
     }
@@ -75,7 +89,7 @@ export class GameManager extends Component {
         }
         this.forceLayer(this.node);
         // HUD（纯代码占位版）
-        this.hud = new HudUI(this.node.scene, kind => this.useProp(kind));
+        this.hud = new HudUI(this.node.scene, kind => this.useProp(kind), () => this.togglePause());
         this.timerLabel = this.hud.timerLabel;
         this.progressLabel = this.hud.progressLabel;
         this.msgLabel = this.hud.msgLabel;
@@ -98,36 +112,63 @@ export class GameManager extends Component {
 
     update(dt: number) {
         this.hud?.sync();
-        if (!this.playing) return;
-        // 逃逸回收 + 限速：0.8 秒一巡，越界/贴地以下立即抓回，爆弹速度钳制
-        this.patrolTimer += dt;
-        if (this.patrolTimer > 0.8) {
+        if (!this.playing || this.paused) return;
+        // 手机切后台/浏览器标签页恢复时可能一次传入数百秒 dt；游戏计时应近似暂停，
+        // 不能因为系统挂起而瞬间耗尽。物理仍由 fixedTimeStep + maxSubSteps 独立求解。
+        const frameDt = Math.min(dt, 0.1);
+        // 逃逸回收 + 限速：物理墙是第一层保护，短周期巡检是高速/低帧率下的兜底。
+        this.patrolTimer += frameDt;
+        if (this.patrolTimer > 0.15) {
             this.patrolTimer = 0;
-            const lim = GameManager.BOX_SIZE / 2 - 0.2;
+            // 中心点巡检只处理真正穿墙；可见外轮廓由 constrainVisualInside 单独保护。
+            // 不再在墙内反复“拉回”，否则密集刚体会被持续重新唤醒并产生抖动。
+            const limX = GameManager.FENCE_HALF_X + 0.15;
+            const minZ = GameManager.FENCE_CENTER_Z - GameManager.FENCE_HALF_Z - 0.15;
+            const maxZ = GameManager.FENCE_CENTER_Z + GameManager.FENCE_HALF_Z + 0.15;
             const vel = v3();
             for (const t of this.node.getComponentsInChildren(ItemTag)) {
                 if (t.picked || !t.node.isValid) continue;
+                const body = t.node.getComponent(RigidBody);
+                // 已锁定的运动学物件不会越界，也不再做位置/速度修正，确保绝对静止。
+                if (body?.type === RigidBody.Type.KINEMATIC) continue;
+                // GLB 的根节点、视觉网格和碰撞体不一定同中心；直接约束真实网格外轮廓，
+                // 避免“节点没越界、模型已经露出屏幕”的情况。
+                const visualCorrected = this.constrainVisualInside(t.node);
                 const p = t.node.worldPosition;
-                const escaped = Math.abs(p.x) > lim || Math.abs(p.z) > lim || p.y < -0.05;
+                const escaped = Math.abs(p.x) > limX || p.z < minZ || p.z > maxZ || p.y < -0.05;
                 if (escaped) {
-                    t.node.setWorldPosition((Math.random() - 0.5) * 2, 1.8, (Math.random() - 0.5) * 2);
+                    t.node.setWorldPosition(
+                        (Math.random() - 0.5) * 1.4,
+                        1.8,
+                        GameManager.FENCE_CENTER_Z + (Math.random() - 0.5) * 1.2,
+                    );
                     const rb = t.node.getComponent(RigidBody);
                     try { rb?.clearState(); } catch { /* 忽略 */ }
+                    rb?.setLinearVelocity(v3(0, -0.2, 0));
+                    rb?.setAngularVelocity(v3());
                     continue;
+                }
+                if (visualCorrected) {
+                    const rb = t.node.getComponent(RigidBody);
+                    if (rb?.enabled) {
+                        rb.getLinearVelocity(vel);
+                        rb.setLinearVelocity(v3(0, Math.min(vel.y, 0), 0));
+                        rb.setAngularVelocity(v3());
+                    }
                 }
                 // 限速：物理爆弹产生的极端速度是隧穿与飞出的源头
                 const rb = t.node.getComponent(RigidBody);
                 if (rb && rb.enabled) {
                     rb.getLinearVelocity(vel);
                     const sp = vel.length();
-                    if (sp > 9) {
-                        vel.multiplyScalar(9 / sp);
+                    if (sp > 4.5) {
+                        vel.multiplyScalar(4.5 / sp);
                         rb.setLinearVelocity(vel);
                     }
                 }
             }
         }
-        this.timeLeft -= dt;
+        this.timeLeft -= frameDt;
         if (this.timeLeft <= 0) {
             this.timeLeft = 0;
             this.gameOver(false, '时间到');
@@ -138,37 +179,57 @@ export class GameManager extends Component {
     // ---------- 场景搭建 ----------
 
     private buildBox() {
-        const S = GameManager.BOX_SIZE;
-        // 突出的平台（舞台式）：物件全程无遮挡，围栏只留物理不留视觉
-        const woodFloor = this.makeMat(new Color(235, 230, 225), 'wood_floor');
-        const woodEdge = this.makeMat(new Color(190, 150, 115), 'wood_dark');
-        // 台面（顶面 y=0）+ 更宽的深色底座（层叠出"突出"感）
-        // 碰撞体做成 4.5 深的实心地基（顶面仍在 y=0）：无论多快都不可能隧穿到台下
-        this.makeStaticBox('floor', v3(0, -0.25, 0), v3(S + 1.0, 0.5, S + 1.0), woodFloor,
-            v3(S + 1.0, 4.5, S + 1.0), v3(0, -2.0, 0));
-        this.makeVisualBox('base', v3(0, -0.62, 0), v3(S + 1.8, 0.32, S + 1.8), woodEdge);
+        // 深红木展示篮：底板、厚框、内沿和格栅都是真 3D，接近参考图的动态容器感。
+        const floorMat = this.makeMat(new Color(93, 45, 33), 'wood_floor');
+        const frameMat = this.makeMat(new Color(72, 28, 22), 'wood_dark');
+        const rimMat = this.makeMat(new Color(137, 72, 48), 'wood_floor');
+        const goldMat = this.makeMat(new Color(205, 151, 62));
+        const shadowMat = this.makeMat(new Color(39, 18, 17));
+
+        // 碰撞地基顶面保持 y=0，厚地基继续防止高速物件穿底。
+        // 视觉底板可以按容器造型裁短，但物理底板必须始终居中覆盖整个围栏；
+        // 两者拆开，避免换容器外观时意外把碰撞地面一起平移。
+        this.makeInvisibleWall('basketFloorCollider', v3(0, -2.25, -0.88), v3(4.1, 4.5, 4.15));
+        this.makeVisualBox('basketFloor', v3(0, -0.25, -0.92), v3(3.48, 0.5, 3.35), floorMat);
+        this.makeVisualBox('basketShadow', v3(0, -0.64, -0.86), v3(3.94, 0.34, 4.0), shadowMat);
+        this.makeVisualBox('basketBase', v3(0, -0.48, -0.88), v3(4.08, 0.26, 3.78), frameMat);
+
+        // 可见围框：后框更高、前框更低，既有容器深度又不遮挡点击。
+        this.makeVisualBox('rimBackOuter', v3(0, 0.46, -2.62), v3(4.04, 1.1, 0.36), frameMat);
+        this.makeVisualBox('rimBackInner', v3(0, 0.42, -2.38), v3(3.52, 0.72, 0.18), rimMat);
+        this.makeVisualBox('rimLeftOuter', v3(-1.88, 0.38, -0.92), v3(0.36, 0.94, 3.55), frameMat);
+        this.makeVisualBox('rimRightOuter', v3(1.88, 0.38, -0.92), v3(0.36, 0.94, 3.55), frameMat);
+        this.makeVisualBox('rimLeftInner', v3(-1.62, 0.28, -0.92), v3(0.16, 0.58, 3.25), rimMat);
+        this.makeVisualBox('rimRightInner', v3(1.62, 0.28, -0.92), v3(0.16, 0.58, 3.25), rimMat);
+        this.makeVisualBox('rimFrontOuter', v3(0, 0.08, 0.82), v3(4.04, 0.34, 0.36), frameMat);
+        this.makeVisualBox('rimFrontHighlight', v3(0, 0.22, 0.63), v3(3.52, 0.1, 0.12), rimMat);
+
+        // 底部纵向木格栅提供与参考菜篮相同的空间层次，但保留完整碰撞底板。
+        for (let i = -2; i <= 2; i++) {
+            this.makeVisualBox(`floorSlat${i}`, v3(i * 0.58, 0.018, -0.92), v3(0.13, 0.05, 3.05), rimMat);
+        }
+        // 金色铰链/角件让容器更像独立可动的展示盒。
+        this.makeVisualBox('hingeLeft', v3(-1.89, 0.42, -1.15), v3(0.08, 0.62, 0.22), goldMat);
+        this.makeVisualBox('hingeRight', v3(1.89, 0.42, -1.15), v3(0.08, 0.62, 0.22), goldMat);
 
         // 隐形围栏（只有碰撞体，无渲染）：厚 1.2、下探到台面以下，杜绝高速隧穿和底缝钻出
+        // 矩形内壁严格贴合手机画面中的可见木盒，前后不再留出“看不见但能滚入”的区域。
         const WH = 7, WT = 1.2, WY = WH / 2 - 1; // 竖向覆盖 -1 ~ 6
-        const WC = S / 2 + WT / 2; // 内壁贴着台面边界
-        this.makeInvisibleWall('fenceN', v3(0, WY, -WC), v3(S + WT * 2, WH, WT));
-        this.makeInvisibleWall('fenceS', v3(0, WY, WC), v3(S + WT * 2, WH, WT));
-        this.makeInvisibleWall('fenceW', v3(-WC, WY, 0), v3(WT, WH, S));
-        this.makeInvisibleWall('fenceE', v3(WC, WY, 0), v3(WT, WH, S));
+        const FX = GameManager.FENCE_HALF_X;
+        const FZ = GameManager.FENCE_HALF_Z;
+        const CZ = GameManager.FENCE_CENTER_Z;
+        this.makeInvisibleWall('fenceN', v3(0, WY, CZ - FZ - WT / 2), v3(FX * 2 + WT * 2, WH, WT));
+        this.makeInvisibleWall('fenceS', v3(0, WY, CZ + FZ + WT / 2), v3(FX * 2 + WT * 2, WH, WT));
+        this.makeInvisibleWall('fenceW', v3(-FX - WT / 2, WY, CZ), v3(WT, WH, FZ * 2));
+        this.makeInvisibleWall('fenceE', v3(FX + WT / 2, WY, CZ), v3(WT, WH, FZ * 2));
 
-        // 大背景板（带暗角的暖棕渐变，unlit 不受光，和平台拉开层次）
+        // 大背景板 + 外框，模拟参考图中玻璃柜/木柜环境。
         const bg = this.makeMat(new Color(255, 255, 255), 'backdrop', false);
-        this.makeVisualBox('backdrop', v3(0, -0.9, -2), v3(44, 0.1, 44), bg);
+        this.makeVisualBox('backdrop', v3(0, -0.92, -2), v3(44, 0.1, 44), bg);
+        this.makeVisualBox('cabinetLeft', v3(-3.25, -0.46, -0.2), v3(0.34, 0.32, 12), frameMat);
+        this.makeVisualBox('cabinetRight', v3(3.25, -0.46, -0.2), v3(0.34, 0.32, 12), frameMat);
 
-        // 托盘：深色底座 + 内嵌象牙槽位
-        const trayBase = this.makeMat(new Color(70, 44, 28), 'wood_dark');
-        const zTray = this.slotPos(0).z;
-        this.makeVisualBox('trayBase', v3(0, -0.06, zTray), v3(5.7, 0.14, 1.02), trayBase);
-        const pad = this.makeMat(new Color(240, 235, 225), 'pad_ivory');
-        for (let i = 0; i < TRAY_CAPACITY; i++) {
-            const p = this.slotPos(i);
-            this.makeVisualBox(`slotPad${i}`, v3(p.x, 0.03, p.z), v3(0.66, 0.05, 0.72), pad);
-        }
+        // 七格收集区属于屏幕 HUD，由 HudUI 负责；世界空间只保留可替换的 3D 容器。
     }
 
     /** 只有物理没有外观的围栏 */
@@ -180,6 +241,7 @@ export class GameManager extends Component {
         rb.type = RigidBody.Type.STATIC;
         const col = n.addComponent(BoxCollider);
         col.size = size;
+        col.sharedMaterial = this.pileMaterial;
     }
 
     /** 只有外观没有物理的盒子（槽位垫片等） */
@@ -285,58 +347,296 @@ export class GameManager extends Component {
     }
 
     private spawnItems() {
-        const S = GameManager.BOX_SIZE;
-        this.totalCount = 0;
+        const queue: string[] = [];
         for (const id of this.level.items) {
             const prefab = this.prefabs.get(id);
             if (!prefab) continue;
             const count = this.level.groupsPerItem * 3;
-            for (let i = 0; i < count; i++) {
-                this.totalCount++;
-                // 分批倾倒 + 网格错位落点：避免同点堆叠互相挤爆
-                const idx = this.totalCount;
-                const delay = idx * 0.08;
-                this.scheduleOnce(() => {
-                    const n = instantiate(prefab);
-                    n.setParent(this.node);
-                    this.forceLayer(n);
-                    // 4x4 网格循环取格，格内小抖动；低空投放减少弹跳
-                    const gx = idx % 4, gz = Math.floor(idx / 4) % 4;
-                    n.setPosition(
-                        -1.5 + gx * 1.0 + (Math.random() - 0.5) * 0.3,
-                        1.2 + (idx % 3) * 0.5,
-                        -1.5 + gz * 1.0 + (Math.random() - 0.5) * 0.3,
-                    );
-                    const q = new Quat();
-                    Quat.fromEuler(q, Math.random() * 360, Math.random() * 360, Math.random() * 360);
-                    n.setRotation(q);
-                    n.setScale(0.9, 0.9, 0.9);
+            for (let i = 0; i < count; i++) queue.push(id);
+        }
+        this.shuffleInPlace(queue);
+        this.totalCount = queue.length;
 
-                    const tag = n.addComponent(ItemTag);
-                    tag.id = id;
-                    const rb = n.addComponent(RigidBody);
-                    rb.mass = 1;
-                    rb.angularDamping = 0.4;
-                    rb.linearDamping = 0.2;
-                    try { (rb as any).useCCD = true; } catch { /* 版本不支持则依赖 substeps */ }
-                    const col = n.addComponent(BoxCollider);
-                    col.size = v3(0.75, 0.75, 0.75);
-                    // 物件投平面阴影
-                    for (const mr of n.getComponentsInChildren(MeshRenderer)) {
-                        mr.shadowCastingMode = MeshRenderer.ShadowCastingMode.ON;
-                    }
-                }, delay);
+        queue.forEach((id, index) => {
+            const prefab = this.prefabs.get(id)!;
+            const idx = index + 1;
+            // 参考录屏约 2.5~3 秒灌满容器；逐件投放保留真实碰撞过程，
+            // 同时避免同一帧生成几十个刚体导致求解器爆开。
+            const delay = idx * 0.048;
+            this.scheduleOnce(() => {
+                const n = instantiate(prefab);
+                n.setParent(this.node);
+                this.forceLayer(n);
+                // 从篮筐中央上方连续落下：先堆中心，再由真实碰撞向四周摊开。
+                // 低差异圆盘采样避免完全同轴，也不会像黄金螺旋预铺那样显得人工整齐。
+                const angle = idx * 2.399963 + (Math.random() - 0.5) * 0.3;
+                // 半径随投放进度连续扩大：视觉上仍是从中心长出一堆，
+                // 但后续物件会自然填满篮底，不会永远压在后半区。
+                const radius = 0.1 + Math.sqrt(index / Math.max(1, queue.length - 1)) * 0.58;
+                n.setPosition(
+                    Math.cos(angle) * radius + (Math.random() - 0.5) * 0.12,
+                    1.55 + (idx % 5) * 0.1,
+                    GameManager.FENCE_CENTER_Z + 0.1
+                        + Math.sin(angle) * radius * 0.72
+                        + (Math.random() - 0.5) * 0.08,
+                );
+                // 参考录屏中单件约为篮宽的 1/6；缩小后 66 件可以形成紧凑但不过高的堆。
+                const scale = 0.46 + (idx % 4) * 0.012;
+                n.setScale(scale, scale, scale);
+
+                const tag = n.addComponent(ItemTag);
+                tag.id = id;
+                const rb = n.addComponent(RigidBody);
+                rb.mass = 0.85 + (idx % 3) * 0.1;
+                rb.angularDamping = 0.97;
+                rb.linearDamping = 0.92;
+                rb.sleepThreshold = 0.15;
+                rb.useCCD = true;
+                const col = n.addComponent(BoxCollider);
+                col.sharedMaterial = this.pileMaterial;
+                this.centerVisualAndFitCollider(n, col);
+                this.setNaturalRotation(n, id);
+                rb.setLinearVelocity(v3(
+                    (Math.random() - 0.5) * 0.12,
+                    -0.25,
+                    (Math.random() - 0.5) * 0.12,
+                ));
+                rb.setAngularVelocity(v3(
+                    (Math.random() - 0.5) * 0.35,
+                    (Math.random() - 0.5) * 0.35,
+                    (Math.random() - 0.5) * 0.35,
+                ));
+                // 物件投平面阴影
+                for (const mr of n.getComponentsInChildren(MeshRenderer)) {
+                    mr.shadowCastingMode = MeshRenderer.ShadowCastingMode.ON;
+                }
+            }, delay);
+        });
+        // 最后一件落下后再给物理约 0.9 秒自然沉降，然后锁定整堆。
+        // 这既保留初始化滚动过程，也杜绝接触求解误差造成的无限微抖。
+        this.schedulePileSettle(queue.length * 0.048 + 0.9);
+        console.log(`[GameManager] 关卡 ${this.levelIndex + 1}：生成 ${this.totalCount} 个物件`);
+    }
+
+    /**
+     * GLB 场景根节点经常保留 DCC 中的平移（部分模型偏移超过 2 个世界单位）。
+     * 旧实现把碰撞盒固定放在 Prefab 根节点，视觉模型却在旁边，物理上没有真正包住模型。
+     * 这里读取所有 Mesh 的局部包围盒，统一把视觉内容移回根节点中心，再按真实尺寸生成碰撞盒。
+     */
+    private centerVisualAndFitCollider(root: Node, collider: BoxCollider) {
+        // 刚实例化并 setPosition/setScale 的节点，worldMatrix 可能仍是上一帧缓存。
+        // 若直接求 bounds，会把“生成落点”误算进模型自身偏移，再次平移视觉子树，
+        // 结果就是碰撞体分散在篮底、所有可见模型却挤到同一侧，看起来严重穿模。
+        root.updateWorldTransform();
+        const renderers = root.getComponentsInChildren(MeshRenderer);
+        const min = v3(Infinity, Infinity, Infinity);
+        const max = v3(-Infinity, -Infinity, -Infinity);
+        const invRoot = new Mat4();
+        const meshToRoot = new Mat4();
+        const corner = v3();
+        const point = v3();
+
+        Mat4.invert(invRoot, root.worldMatrix);
+        let hasBounds = false;
+        for (const renderer of renderers) {
+            const meshMin = renderer.mesh?.struct.minPosition;
+            const meshMax = renderer.mesh?.struct.maxPosition;
+            if (!meshMin || !meshMax) continue;
+            Mat4.multiply(meshToRoot, invRoot, renderer.node.worldMatrix);
+            for (let mask = 0; mask < 8; mask++) {
+                corner.set(
+                    mask & 1 ? meshMax.x : meshMin.x,
+                    mask & 2 ? meshMax.y : meshMin.y,
+                    mask & 4 ? meshMax.z : meshMin.z,
+                );
+                Vec3.transformMat4(point, corner, meshToRoot);
+                Vec3.min(min, min, point);
+                Vec3.max(max, max, point);
+                hasBounds = true;
             }
         }
-        console.log(`[GameManager] 关卡 ${this.levelIndex + 1}：生成 ${this.totalCount} 个物件`);
+
+        if (!hasBounds) {
+            // 资源尚未提供 bounds 时使用保守盒，仍比原先 0.75³ 更不容易露出模型。
+            collider.size = v3(1.05, 1.05, 1.05);
+            collider.center = v3();
+            return;
+        }
+
+        const center = v3(
+            (min.x + max.x) * 0.5,
+            (min.y + max.y) * 0.5,
+            (min.z + max.z) * 0.5,
+        );
+        // GLB prefab 的根通常只是容器，整体平移其一级子树即可保留模型内部结构。
+        for (const child of root.children) {
+            child.setPosition(
+                child.position.x - center.x,
+                child.position.y - center.y,
+                child.position.z - center.z,
+            );
+        }
+        root.updateWorldTransform();
+
+        // 4% 安全余量防视觉表面相交；比旧版 12% 更贴合，避免高密度时出现明显悬空。
+        // 薄片仍至少 0.20，配合 CCD 避免单步跨越。
+        collider.size = v3(
+            Math.max(0.20, (max.x - min.x) * 1.04),
+            Math.max(0.20, (max.y - min.y) * 1.04),
+            Math.max(0.20, (max.z - min.z) * 1.04),
+        );
+        collider.center = v3();
+    }
+
+    /**
+     * 用所有 Mesh 的实时世界包围盒约束可见外轮廓，而不是只检查 Prefab 根节点。
+     * 返回 true 表示本帧做过位置修正，调用方会同步清除横向速度，防止下一物理步再次冲出。
+     */
+    private constrainVisualInside(root: Node): boolean {
+        root.updateWorldTransform();
+        const min = v3(Infinity, Infinity, Infinity);
+        const max = v3(-Infinity, -Infinity, -Infinity);
+        const corner = v3();
+        const point = v3();
+        let hasBounds = false;
+
+        for (const renderer of root.getComponentsInChildren(MeshRenderer)) {
+            const meshMin = renderer.mesh?.struct.minPosition;
+            const meshMax = renderer.mesh?.struct.maxPosition;
+            if (!meshMin || !meshMax) continue;
+            for (let mask = 0; mask < 8; mask++) {
+                corner.set(
+                    mask & 1 ? meshMax.x : meshMin.x,
+                    mask & 2 ? meshMax.y : meshMin.y,
+                    mask & 4 ? meshMax.z : meshMin.z,
+                );
+                Vec3.transformMat4(point, corner, renderer.node.worldMatrix);
+                Vec3.min(min, min, point);
+                Vec3.max(max, max, point);
+                hasBounds = true;
+            }
+        }
+        if (!hasBounds) return false;
+
+        let dx = 0;
+        let dz = 0;
+        if (min.x < -GameManager.VISIBLE_HALF_X) dx = -GameManager.VISIBLE_HALF_X - min.x;
+        if (max.x + dx > GameManager.VISIBLE_HALF_X) dx += GameManager.VISIBLE_HALF_X - (max.x + dx);
+        if (min.z < GameManager.VISIBLE_MIN_Z) dz = GameManager.VISIBLE_MIN_Z - min.z;
+        if (max.z + dz > GameManager.VISIBLE_MAX_Z) dz += GameManager.VISIBLE_MAX_Z - (max.z + dz);
+        // 2cm 以下的误差不修正，避免边界附近因浮点噪声来回移动。
+        if (Math.abs(dx) < 0.02 && Math.abs(dz) < 0.02) return false;
+
+        const p = root.worldPosition;
+        root.setWorldPosition(p.x + dx, p.y, p.z + dz);
+        root.updateWorldTransform();
+        return true;
+    }
+
+    /** 延迟冻结当前堆；token 防止重开、连续拾取时旧定时器误冻新一轮运动。 */
+    private schedulePileSettle(delay: number) {
+        const token = ++this.settleToken;
+        this.scheduleOnce(() => {
+            if (token !== this.settleToken || !this.playing || this.paused) return;
+            for (const t of this.node.getComponentsInChildren(ItemTag)) {
+                if (t.picked || !t.node.isValid) continue;
+                this.constrainVisualInside(t.node);
+                const rb = t.node.getComponent(RigidBody);
+                if (!rb?.enabled) continue;
+                rb.clearState();
+                // Bullet 中相互重叠的动态刚体即使 sleep 也可能被接触求解重新唤醒。
+                // 切为运动学刚体后仍保留 Collider/射线拾取，但不会再被重力或邻居推动。
+                rb.type = RigidBody.Type.KINEMATIC;
+            }
+        }, delay);
+    }
+
+    /**
+     * 只让被拿走物件正上方、确实可能失去支撑的 1~2 件做一次微小沉降。
+     * 这里不用重新启用动态物理：密集堆中一个动态刚体会把接触链逐层唤醒，表现为整堆抖动。
+     * 三段式位移模拟“下落 → 轻微接触回弹 → 停稳”，既保留重量感，也保证远处物件绝对静止。
+     */
+    private settleNearRemoved(center: Vec3) {
+        const candidates = this.node.getComponentsInChildren(ItemTag)
+            .filter(t => !t.picked && t.node.isValid)
+            .map(t => {
+                const p = t.node.worldPosition;
+                const dx = p.x - center.x;
+                const dy = p.y - center.y;
+                const dz = p.z - center.z;
+                const horizontal2 = dx * dx + dz * dz;
+                return { t, dy, horizontal2, score: horizontal2 + dy * dy * 0.18 };
+            })
+            // 只处理移除点上方的支撑关系；同层和下层物件不应跟着晃。
+            .filter(v => v.dy > 0.035 && v.dy < 0.9 && v.horizontal2 < 0.62 * 0.62)
+            .sort((a, b) => a.score - b.score)
+            .slice(0, 2);
+
+        for (const [index, candidate] of candidates.entries()) {
+            const n = candidate.t.node;
+            const rb = n.getComponent(RigidBody);
+            if (!rb?.enabled) continue;
+            Tween.stopAllByTarget(n);
+            rb.clearState();
+            rb.type = RigidBody.Type.KINEMATIC;
+
+            const start = n.position.clone();
+            // 离支撑中心越近，沉降稍明显；最大 6.5cm，第二件再减弱 20%。
+            const proximity = 1 - Math.min(1, Math.sqrt(candidate.horizontal2) / 0.62);
+            const fall = (0.035 + proximity * 0.03) * (index === 0 ? 1 : 0.8);
+            const landed = start.clone();
+            landed.y -= fall;
+            const rebound = landed.clone();
+            rebound.y += Math.min(0.012, fall * 0.22);
+
+            // 很小的确定性倾斜让接触不显机械，又不会每次点击产生随机抽搐。
+            const sign = (n.uuid.charCodeAt(n.uuid.length - 1) & 1) ? 1 : -1;
+            const delta = new Quat();
+            const settledRotation = new Quat();
+            Quat.fromEuler(delta, sign * (0.7 + proximity * 0.7), 0, -sign * 0.55);
+            Quat.multiply(settledRotation, n.rotation, delta);
+
+            tween(n)
+                .to(0.15, { position: landed, rotation: settledRotation }, { easing: 'quadIn' })
+                .to(0.09, { position: rebound }, { easing: 'quadOut' })
+                .to(0.12, { position: landed }, { easing: 'sineOut' })
+                .call(() => {
+                    if (!n.isValid || candidate.t.picked) return;
+                    this.constrainVisualInside(n);
+                    rb.clearState();
+                })
+                .start();
+        }
+    }
+
+    /** 限制初始倾斜，避免钱币/玉环直立后高速翻滚造成旋转穿透。 */
+    private setNaturalRotation(node: Node, id: string) {
+        const flat = id === 'banzhi' || id === 'bracelet' || id === 'pingankou'
+            || id === 'tongqian' || id === 'yupai' || id === 'yuzhuo';
+        const tilt = flat ? 20 : 32;
+        const q = new Quat();
+        Quat.fromEuler(
+            q,
+            (Math.random() - 0.5) * tilt * 2,
+            Math.random() * 360,
+            (Math.random() - 0.5) * tilt * 2,
+        );
+        node.setRotation(q);
+    }
+
+    private shuffleInPlace<T>(items: T[]) {
+        for (let i = items.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [items[i], items[j]] = [items[j], items[i]];
+        }
     }
 
     // ---------- 拾取与三消 ----------
 
     private onTouch(e: EventTouch) {
-        if (!this.playing || !this.cam) return;
+        if (!this.playing || this.paused || !this.cam) return;
         const p = e.getLocation();
-        if (p.y < view.getCanvasSize().height * 0.12) return; // 底部道具按钮区，不穿透拾取
+        if (p.y < screen.windowSize.height * 0.2) return; // 2D 收集区 + 道具栏，不穿透拾取
         const tag = this.hitTestAt(p.x, p.y);
         if (tag) this.pick(tag.node, tag);
     }
@@ -362,7 +662,7 @@ export class GameManager extends Component {
             }
         }
         if (!bestTag) {
-            const thresh = view.getCanvasSize().width * 0.06;
+            const thresh = screen.windowSize.width * 0.06;
             let bestPx = thresh;
             const sp = v3();
             for (const t of this.node.getComponentsInChildren(ItemTag)) {
@@ -377,24 +677,24 @@ export class GameManager extends Component {
 
     private pick(node: Node, tag: ItemTag) {
         tag.picked = true;
+        const removedPos = node.worldPosition.clone();
+        const screenPos = v3();
+        this.cam.worldToScreen(node.worldPosition, screenPos);
         // 物理组件失效，交给 Tween 接管
         node.getComponent(RigidBody)!.enabled = false;
         node.getComponent(BoxCollider)!.enabled = false;
 
         const { matched, full, index } = this.tray.add(tag.id, node);
+        this.hud?.captureModel(node, screenPos, index);
         this.reflowTray();
-
-        // 新拾取的物件飞向它的插入槽位（即使即将消除，也先飞到位再消，视觉才连贯）
-        tween(node)
-            .to(0.3, { worldPosition: this.slotPos(index), scale: v3(0.5, 0.5, 0.5) }, { easing: 'quadOut' })
-            .start();
-        tween(node).to(0.3, { rotation: Quat.IDENTITY }).start();
+        this.settleNearRemoved(removedPos);
 
         if (matched) {
             // 飞入动画结束后再消除
             this.scheduleOnce(() => {
                 for (const e of matched) {
                     Tween.stopAllByTarget(e.node);
+                    this.hud?.releaseModel(e.node);
                     tween(e.node)
                         .to(0.2, { scale: v3(0.05, 0.05, 0.05) }, { easing: 'backIn' })
                         .call(() => e.node.destroy())
@@ -437,7 +737,7 @@ export class GameManager extends Component {
     }
 
     useProp(kind: PropKind) {
-        if (!this.playing) return;
+        if (!this.playing || this.paused) return;
         if (this.propCounts[kind] <= 0) return;
         let used = false;
         if (kind === 'remove') used = this.propRemove();
@@ -455,15 +755,26 @@ export class GameManager extends Component {
         if (back.length === 0) return false;
         back.forEach((e, i) => {
             const tag = e.node.getComponent(ItemTag)!;
-            Tween.stopAllByTarget(e.node);
+            this.hud?.releaseModel(e.node);
+            e.node.setParent(this.node);
+            this.forceLayer(e.node);
+            e.node.active = true;
             tag.picked = false;
             e.node.setWorldPosition(
-                (Math.random() - 0.5) * 3, 1.5 + i * 0.6, (Math.random() - 0.5) * 3);
-            e.node.setScale(0.9, 0.9, 0.9);
-            e.node.getComponent(RigidBody)!.enabled = true;
+                (Math.random() - 0.5) * 1.2,
+                1.3 + i * 0.5,
+                GameManager.FENCE_CENTER_Z + (Math.random() - 0.5) * 1.1,
+            );
+            e.node.setScale(0.48, 0.48, 0.48);
+            this.setNaturalRotation(e.node, tag.id);
+            const rb = e.node.getComponent(RigidBody)!;
+            rb.type = RigidBody.Type.DYNAMIC;
+            rb.enabled = true;
+            rb.wakeUp();
             e.node.getComponent(BoxCollider)!.enabled = true;
         });
         this.reflowTray();
+        this.schedulePileSettle(2.2);
         return true;
     }
 
@@ -499,33 +810,34 @@ export class GameManager extends Component {
 
     /** 打乱：盒中剩余物件重新抛起洗一遍 */
     private propShuffle(): boolean {
-        const S = GameManager.BOX_SIZE;
         const boxItems = this.node.getComponentsInChildren(ItemTag).filter(t => !t.picked && t.node.isValid);
         if (boxItems.length === 0) return false;
-        for (const t of boxItems) {
-            // 低空重洗：高空跌落速度大，是穿透风险源
+        this.shuffleInPlace(boxItems);
+        for (const [i, t] of boxItems.entries()) {
+            // 重洗也沿用中央灌入，保证容器变化后仍自然向边缘摊开。
+            const angle = (i + 1) * 2.399963;
+            const radius = 0.1 + Math.sqrt(i / Math.max(1, boxItems.length - 1)) * 0.58;
             t.node.setWorldPosition(
-                (Math.random() - 0.5) * (S - 1.5),
-                1.4 + Math.random() * 1.2,
-                (Math.random() - 0.5) * (S - 1.5));
-            const q = new Quat();
-            Quat.fromEuler(q, Math.random() * 360, Math.random() * 360, Math.random() * 360);
-            t.node.setRotation(q);
+                Math.cos(angle) * radius + (Math.random() - 0.5) * 0.1,
+                1.55 + (i % 6) * 0.1,
+                GameManager.FENCE_CENTER_Z + 0.1
+                    + Math.sin(angle) * radius * 0.72
+                    + (Math.random() - 0.5) * 0.06);
+            this.setNaturalRotation(t.node, t.id);
             const rb = t.node.getComponent(RigidBody)!;
+            rb.type = RigidBody.Type.DYNAMIC;
             try { rb.clearState(); } catch { /* 部分版本无此方法，忽略 */ }
+            rb.wakeUp();
+            rb.setLinearVelocity(v3((Math.random() - 0.5) * 0.4, -0.2, (Math.random() - 0.5) * 0.4));
         }
+        this.schedulePileSettle(2.8);
         return true;
     }
 
     /** 槽中所有物件按当前顺序补位（含飞入中的） */
     private reflowTray() {
         this.tray.entries.forEach((e, i) => {
-            tween(e.node)
-                .to(0.3, { worldPosition: this.slotPos(i) }, { easing: 'quadOut' })
-                .start();
-            tween(e.node)
-                .to(0.3, { rotation: Quat.IDENTITY })
-                .start();
+            this.hud?.moveModelToSlot(e.node, i);
         });
     }
 
@@ -538,6 +850,8 @@ export class GameManager extends Component {
     private gameOver(win: boolean, reason: string) {
         if (!this.playing) return;
         this.playing = false;
+        this.paused = false;
+        this.hud?.setPaused(false);
         const stars = this.progress >= 100 ? 3 : this.progress >= 70 ? 2 : this.progress >= 50 ? 1 : 0;
         // 星级奖励：一星+移出、二星再+凑齐、三星再+打乱
         if (stars >= 1) this.propCounts.remove++;
@@ -561,17 +875,31 @@ export class GameManager extends Component {
 
     /** 原地重开本关 */
     private resetLevel() {
+        for (const e of this.tray.entries) {
+            if (e.node.isValid) e.node.destroy();
+        }
         for (const t of this.node.getComponentsInChildren(ItemTag)) {
             if (t.node.isValid) t.node.destroy();
         }
         this.tray.clear();
+        this.hud?.clearCapturedModels();
         this.removedCount = 0;
         this.timeLeft = this.level.timeSec;
         if (this.msgLabel) this.msgLabel.string = '';
         if (this.hud) this.hud.subMsgLabel.string = '';
         this.spawnItems();
+        this.paused = false;
+        this.hud?.setPaused(false);
         this.playing = true;
         this.updateHud();
+    }
+
+    private togglePause() {
+        if (!this.playing) return;
+        this.paused = !this.paused;
+        this.hud?.setPaused(this.paused);
+        if (this.msgLabel) this.msgLabel.string = this.paused ? '暂停' : '';
+        if (this.hud) this.hud.subMsgLabel.string = this.paused ? '点击左上角继续' : '';
     }
 
     private updateHud() {

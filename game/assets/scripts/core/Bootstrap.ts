@@ -18,10 +18,10 @@ if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
     // 防重复自举（双保险）：
     // 1) globalThis 按场景 uuid 加锁——脚本模块被评估两遍时两个副本共享同一把锁
     // 2) 节点名兜底
-    (globalThis as any).__bootVer = 17; // 自测用：确认页面加载的是本版脚本
+    (globalThis as any).__bootVer = 19; // 自测用：确认页面加载的是本版脚本
 
     // 竖屏设计分辨率（微信小游戏目标形态），宽度固定、高度随屏幕
-    view.setDesignResolutionSize(720, 1280, ResolutionPolicy.FIXED_WIDTH);
+    view.setDesignResolutionSize(390, 844, ResolutionPolicy.FIXED_WIDTH);
     // 防重复自举：标记打在场景实例上（scene.uuid 是资源 uuid，重载后同值，不能当锁用）
     const inst = scene as any;
     if (inst.__gooseBooted) return;
@@ -50,16 +50,21 @@ if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
         child.destroy();
     }
 
-    // 自建主相机（竖屏取景：抬高视场角补偿窄横向视野）
+    // 自建主相机：参考录屏是近俯视视角，能看清整个篮底和物件分布，
+    // 同时保留一点后壁高度来表达容器深度。
     const cn = new Node('MainCam');
     cn.setParent(scene);
     cn.layer = Layers.Enum.DEFAULT;
     const cam = cn.addComponent(Camera);
-    cam.fov = 60;
-    cn.setPosition(0, 8.5, 7);
-    cn.setRotationFromEuler(-52, 0, 0);
+    // 手机窄屏下透视相机会让高处物件被放大到画面外。近俯视玩法改用正交相机，
+    // 让盒子在任意堆叠高度都保持同一可视宽度，物理边界也能与屏幕边缘稳定对齐。
+    cam.projection = Camera.ProjectionType.ORTHO;
+    cam.orthoHeight = 4.25;
+    // 盒子中心在 z=-0.88；相机略向后移，让可见容器落在顶部状态栏与底部 HUD 的视觉中心。
+    cn.setPosition(0, 8.2, -0.35);
+    cn.setRotationFromEuler(-87.3, 0, 0);
     cam.clearFlags = Camera.ClearFlag.SOLID_COLOR;
-    cam.clearColor = new Color(52, 46, 40, 255); // 深木色背景
+    cam.clearColor = new Color(39, 27, 23, 255); // 深木色背景
     console.log('[Bootstrap] 自建相机就位 world=', cn.worldPosition.toString());
 
     // 自建平行光（暖色）
