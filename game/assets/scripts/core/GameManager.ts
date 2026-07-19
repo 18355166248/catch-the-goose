@@ -73,8 +73,8 @@ export class GameManager extends Component {
 
     onLoad() {
         this.pileMaterial = new PhysicsMaterial();
-        // 高摩擦、低回弹：物件落下后互相咬住形成稳定堆，而不是像冰块一样摊成一层。
-        this.pileMaterial.setValues(1.25, 0.9, 0.9, 0.01);
+        // 高摩擦 + 少量回弹：落地有一下轻微弹跳的"实感"，又不会弹得到处乱滚。
+        this.pileMaterial.setValues(1.25, 0.9, 0.9, 0.08);
         // 模板场景可能保存过倾斜的物理重力；这里强制为世界竖直方向，
         // 否则物件落地后会持续滑向篮子后侧，看起来像堆叠算法失效。
         PhysicsSystem.instance.gravity = v3(0, -12, 0);
@@ -199,43 +199,56 @@ export class GameManager extends Component {
             const vel = v3();
             for (const t of this.node.getComponentsInChildren(ItemTag)) {
                 if (t.picked || !t.node.isValid) continue;
-                const body = t.node.getComponent(RigidBody);
+                const rb = t.node.getComponent(RigidBody);
                 // 已锁定的运动学物件不会越界，也不再做位置/速度修正，确保绝对静止。
-                if (body?.type === RigidBody.Type.KINEMATIC) continue;
-                // GLB 的根节点、视觉网格和碰撞体不一定同中心；直接约束真实网格外轮廓，
-                // 避免“节点没越界、模型已经露出屏幕”的情况。
-                const visualCorrected = this.constrainVisualInside(t.node);
+                if (!rb?.enabled || rb.type === RigidBody.Type.KINEMATIC) continue;
+                rb.getLinearVelocity(vel);
+                const speed = vel.length();
+
                 const p = t.node.worldPosition;
                 const escaped = Math.abs(p.x) > limX || p.z < minZ || p.z > maxZ || p.y < -0.05;
                 if (escaped) {
                     t.node.setWorldPosition(
                         (Math.random() - 0.5) * 1.4,
-                        1.8,
+                        2.2,
                         GameManager.FENCE_CENTER_Z + (Math.random() - 0.5) * 1.2,
                     );
-                    const rb = t.node.getComponent(RigidBody);
-                    try { rb?.clearState(); } catch { /* 忽略 */ }
-                    rb?.setLinearVelocity(v3(0, -0.2, 0));
-                    rb?.setAngularVelocity(v3());
+                    try { rb.clearState(); } catch { /* 忽略 */ }
+                    rb.setLinearVelocity(v3(0, -0.5, 0));
+                    rb.setAngularVelocity(v3());
+                    t.slowTicks = 0;
                     continue;
                 }
-                if (visualCorrected) {
-                    const rb = t.node.getComponent(RigidBody);
-                    if (rb?.enabled) {
+
+                // 逐件冻结：连续两个巡逻周期(≈0.3s)近乎静止就切运动学锁死。
+                // 这比"整堆等沉降再统一冻结"提前得多，密集堆内的接触蠕动
+                // (Bullet 对相互穿插刚体的持续位置修正)在视觉上就是"频繁抖动"。
+                if (speed < 0.07) {
+                    if (++t.slowTicks >= 2) {
+                        this.constrainVisualInside(t.node);
+                        try { rb.clearState(); } catch { /* 忽略 */ }
+                        rb.type = RigidBody.Type.KINEMATIC;
+                        continue;
+                    }
+                } else {
+                    t.slowTicks = 0;
+                }
+
+                // 高速下落阶段不做视觉外轮廓硬修正——半空中横向"吸附"正是抖动来源之一；
+                // 围栏负责物理包含，视觉修正只在低速滚动/停靠阶段兜底。
+                if (speed < 2.0) {
+                    const visualCorrected = this.constrainVisualInside(t.node);
+                    if (visualCorrected) {
                         rb.getLinearVelocity(vel);
                         rb.setLinearVelocity(v3(0, Math.min(vel.y, 0), 0));
                         rb.setAngularVelocity(v3());
                     }
                 }
-                // 限速：物理爆弹产生的极端速度是隧穿与飞出的源头
-                const rb = t.node.getComponent(RigidBody);
-                if (rb && rb.enabled) {
-                    rb.getLinearVelocity(vel);
-                    const sp = vel.length();
-                    if (sp > 4.5) {
-                        vel.multiplyScalar(4.5 / sp);
-                        rb.setLinearVelocity(vel);
-                    }
+                // 限速只拦截物理爆弹级的极端速度；阈值必须高于自由落体末速，
+                // 否则每 0.15s 掐一次下落速度，摔落节奏会明显失真。
+                if (speed > 12) {
+                    vel.multiplyScalar(12 / speed);
+                    rb.setLinearVelocity(vel);
                 }
             }
         }
@@ -435,7 +448,7 @@ export class GameManager extends Component {
             const idx = index + 1;
             // 参考录屏约 2.5~3 秒灌满容器；逐件投放保留真实碰撞过程，
             // 同时避免同一帧生成几十个刚体导致求解器爆开。
-            const delay = idx * 0.048;
+            const delay = idx * 0.04;
             this.scheduleOnce(() => {
                 const n = instantiate(prefab);
                 n.setParent(this.node);
@@ -446,9 +459,10 @@ export class GameManager extends Component {
                 // 半径随投放进度连续扩大：视觉上仍是从中心长出一堆，
                 // 但后续物件会自然填满篮底，不会永远压在后半区。
                 const radius = 0.1 + Math.sqrt(index / Math.max(1, queue.length - 1)) * 0.58;
+                // 生成点抬到可视区外的高处：物件是"倒进来"的，而不是在画面里凭空出现。
                 n.setPosition(
                     Math.cos(angle) * radius + (Math.random() - 0.5) * 0.12,
-                    1.55 + (idx % 5) * 0.1,
+                    4.2 + (idx % 5) * 0.22,
                     GameManager.FENCE_CENTER_Z + 0.1
                         + Math.sin(angle) * radius * 0.72
                         + (Math.random() - 0.5) * 0.08,
@@ -461,8 +475,10 @@ export class GameManager extends Component {
                 tag.id = id;
                 const rb = n.addComponent(RigidBody);
                 rb.mass = 0.85 + (idx % 3) * 0.1;
-                rb.angularDamping = 0.97;
-                rb.linearDamping = 0.92;
+                // 低阻尼 = 真实自由落体。旧值 0.92/0.97 像掉进糖浆，
+                // 下落绵软且落地后长时间蠕动，是"摔落不真实"的直接原因。
+                rb.angularDamping = 0.3;
+                rb.linearDamping = 0.06;
                 rb.sleepThreshold = 0.15;
                 rb.useCCD = true;
                 const col = n.addComponent(BoxCollider);
@@ -470,14 +486,14 @@ export class GameManager extends Component {
                 this.centerVisualAndFitCollider(n, col);
                 this.setNaturalRotation(n, id);
                 rb.setLinearVelocity(v3(
-                    (Math.random() - 0.5) * 0.12,
-                    -0.25,
-                    (Math.random() - 0.5) * 0.12,
+                    (Math.random() - 0.5) * 0.2,
+                    -2.6,
+                    (Math.random() - 0.5) * 0.2,
                 ));
                 rb.setAngularVelocity(v3(
-                    (Math.random() - 0.5) * 0.35,
-                    (Math.random() - 0.5) * 0.35,
-                    (Math.random() - 0.5) * 0.35,
+                    (Math.random() - 0.5) * 1.2,
+                    (Math.random() - 0.5) * 1.2,
+                    (Math.random() - 0.5) * 1.2,
                 ));
                 // 物件投平面阴影
                 for (const mr of n.getComponentsInChildren(MeshRenderer)) {
@@ -485,9 +501,9 @@ export class GameManager extends Component {
                 }
             }, delay);
         });
-        // 最后一件落下后再给物理约 0.9 秒自然沉降，然后锁定整堆。
-        // 这既保留初始化滚动过程，也杜绝接触求解误差造成的无限微抖。
-        this.schedulePileSettle(queue.length * 0.048 + 0.9);
+        // 最后一件落下(高处下落约 0.6s)后再给物理约 1 秒自然沉降,然后锁定整堆。
+        // 巡逻里的逐件冻结通常早已把大部分物件锁死,这里只是兜底。
+        this.schedulePileSettle(queue.length * 0.04 + 1.6);
         console.log(`[GameManager] 关卡 ${this.levelIndex + 1}：生成 ${this.totalCount} 个物件`);
     }
 
@@ -845,6 +861,7 @@ export class GameManager extends Component {
             this.forceLayer(e.node);
             e.node.active = true;
             tag.picked = false;
+            tag.slowTicks = 0;
             e.node.setWorldPosition(
                 (Math.random() - 0.5) * 1.2,
                 1.3 + i * 0.5,
@@ -908,11 +925,12 @@ export class GameManager extends Component {
                     + Math.sin(angle) * radius * 0.72
                     + (Math.random() - 0.5) * 0.06);
             this.setNaturalRotation(t.node, t.id);
+            t.slowTicks = 0;
             const rb = t.node.getComponent(RigidBody)!;
             rb.type = RigidBody.Type.DYNAMIC;
             try { rb.clearState(); } catch { /* 部分版本无此方法，忽略 */ }
             rb.wakeUp();
-            rb.setLinearVelocity(v3((Math.random() - 0.5) * 0.4, -0.2, (Math.random() - 0.5) * 0.4));
+            rb.setLinearVelocity(v3((Math.random() - 0.5) * 0.4, -1.2, (Math.random() - 0.5) * 0.4));
         }
         this.schedulePileSettle(2.8);
         return true;
