@@ -9,6 +9,11 @@ game/local/
 game/profiles/
 game/native/
 game/build/
+game/.creator/
+
+# Codex / 浏览器视觉回归产生的本地截图
+.codex/
+assets-3d/*.png
 
 # Tripo 原始高模（15MB+，保留本地作源文件，不进仓库）
 assets-3d/*3d model.glb

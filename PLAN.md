@@ -116,7 +116,7 @@
 
 ```
 catch-the-goose/
-├── assets-3d/            # Blender 脚本生成的 glb + 预览图（已产出 7 件套）
+├── assets-3d/            # Blender 脚本生成的 glb 源模型（临时预览图不入库）
 ├── assets-demo/          # 竞品参考（保留）
 ├── game-demo/            # 赵云与阿斗源码参考（保留）
 ├── game/                 # Cocos Creator 工程

@@ -5,15 +5,8 @@
 - Reference screenshot: `C:\Users\Administrator\.codex\attachments\85100bee-3171-42d4-ae6f-d7024e43e035\image-1.png`
 - Reference recording: `C:\Users\Administrator\Desktop\5b7dd94bc3d5e82eecc72251352b4241.mp4`
 - Implementation URL: `http://localhost:7456/`
-- Final implementation capture: `.codex/design-qa/mobile-390x845-filled.png`
 - Tested game viewport: 390 x 845 CSS px (iPhone 14 Pro preset; the raw browser capture includes a 50 px Cocos preview toolbar)
 - Tested state: active gameplay after one manual model pick
-
-## Comparison evidence
-
-- Full viewport: `.codex/design-qa/reference-vs-mobile.png`
-- Collection tray and prop controls: `.codex/design-qa/reference-vs-tray.png`
-- Earlier stacking captures: `.codex/video-analysis/stacking-contact-sheet.jpg` and `.codex/video-analysis/stacking-burst.jpg`
 
 ## Required fidelity surfaces
 
