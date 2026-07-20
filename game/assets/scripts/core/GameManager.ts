@@ -79,8 +79,11 @@ export class GameManager extends Component {
         // 否则物件落地后会持续滑向篮子后侧，看起来像堆叠算法失效。
         PhysicsSystem.instance.gravity = v3(0, -12, 0);
         // 小物件 + 薄片需要更密的物理步进；CCD 负责线性高速运动，子步负责接触堆叠和旋转。
-        PhysicsSystem.instance.maxSubSteps = 6;
-        PhysicsSystem.instance.fixedTimeStep = 1 / 90;
+        // 步长必须是 60Hz 渲染帧的整数分之一：1/90 会让每帧交替推进 1/2 个物理步，
+        // 引擎不做状态插值，运动中的物件屏幕位移逐帧交替 1 倍/2 倍，
+        // 表现为堆叠沉降阶段全体物件毫米级高频颤动。1/120 = 每帧恰好 2 步。
+        PhysicsSystem.instance.maxSubSteps = 8;
+        PhysicsSystem.instance.fixedTimeStep = 1 / 120;
         PhysicsSystem.instance.sleepThreshold = 0.15;
         this.buildBox();
         input.on(Input.EventType.TOUCH_START, this.onTouch, this);
@@ -724,10 +727,16 @@ export class GameManager extends Component {
             if (token !== this.settleToken || !this.playing || this.paused) return;
             for (const t of this.node.getComponentsInChildren(ItemTag)) {
                 if (t.picked || !t.node.isValid) continue;
-                this.constrainVisualInside(t.node);
+                // 单步限幅矫正:与逐件 freeze 一致,避免此刻大幅瞬移读作"最后一跳"。
+                this.constrainVisualInside(t.node, 0.03);
                 const rb = t.node.getComponent(RigidBody);
                 if (!rb?.enabled) continue;
+                // 必须显式归零线/角速度再切 KINEMATIC:clearState() 只清力与冲量累积,
+                // 不清当前速度。带残余速度的物件被一次性锁死,最后一物理步与锁死帧
+                // 之间会有位置突变——这正是电脑端"整堆最后啪地颤一下"的来源。
                 rb.clearState();
+                rb.setLinearVelocity(v3());
+                rb.setAngularVelocity(v3());
                 // Bullet 中相互重叠的动态刚体即使 sleep 也可能被接触求解重新唤醒。
                 // 切为运动学刚体后仍保留 Collider/射线拾取，但不会再被重力或邻居推动。
                 rb.type = RigidBody.Type.KINEMATIC;
