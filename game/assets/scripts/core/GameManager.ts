@@ -5,6 +5,7 @@ import {
     assetManager, EffectAsset, Layers, Texture2D, sys, PhysicsMaterial,
 } from 'cc';
 import { LEVELS, LevelDef } from './LevelConfig';
+import { SceneSkin, getSkin, DEFAULT_SKIN_ID } from './SceneSkin';
 import { SlotTray, TRAY_CAPACITY } from './SlotTray';
 import { ItemTag } from './ItemTag';
 import { MODEL_PREFAB_UUID } from './ModelManifest';
@@ -39,6 +40,8 @@ export class GameManager extends Component {
     private removedCount = 0;
     private playing = false;
     private paused = false;
+    /** 选皮面板打开前的暂停状态，关闭时原样恢复（不覆盖玩家的手动暂停）。 */
+    private overlayPrevPaused = false;
     private prefabs = new Map<string, Prefab>();
     private hud: HudUI | null = null;
     private audio: AudioMan | null = null;
@@ -46,7 +49,12 @@ export class GameManager extends Component {
     private static readonly LEVEL_STORE = 'goose_level_v1';
     private static readonly DAILY_STORE = 'goose_daily_v1';
     private static readonly BEST_STORE = 'goose_best_v1';
+    private static readonly SKIN_STORE = 'goose_skin_v1';
     private static readonly DAILY_FREE = 3;
+    /** 当前场景皮肤 id。所有 3D 容器/背景视觉从此皮肤取色。 */
+    private skinId = DEFAULT_SKIN_ID;
+    /** 场景视觉 + 隐形围栏的容器节点，换肤时整体销毁重建（物件在 this.node 上，不受影响）。 */
+    private sceneRoot: Node | null = null;
     /** 每关每轮只能救一次,防止无限续命。 */
     private rescueUsed = false;
     private loseReason: '槽位已满' | '时间到' | '' = '';
@@ -89,6 +97,8 @@ export class GameManager extends Component {
         PhysicsSystem.instance.maxSubSteps = 8;
         PhysicsSystem.instance.fixedTimeStep = 1 / 120;
         PhysicsSystem.instance.sleepThreshold = 0.15;
+        // 皮肤要在建盒之前定好：getSkin 对未知/损坏 id 回落默认皮肤。
+        try { this.skinId = getSkin(sys.localStorage.getItem(GameManager.SKIN_STORE)).id; } catch { /* 存储不可用则用默认皮肤 */ }
         this.buildBox();
         input.on(Input.EventType.TOUCH_START, this.onTouch, this);
     }
@@ -110,7 +120,8 @@ export class GameManager extends Component {
         }
         this.forceLayer(this.node);
         // HUD（纯代码占位版）
-        this.hud = new HudUI(this.node.scene, kind => this.useProp(kind), () => this.togglePause());
+        this.hud = new HudUI(this.node.scene, kind => this.useProp(kind), () => this.togglePause(),
+            id => this.applySkin(id), () => this.skinId, open => this.setOverlayPause(open));
         this.timerLabel = this.hud.timerLabel;
         this.progressLabel = this.hud.progressLabel;
         this.msgLabel = this.hud.msgLabel;
@@ -377,13 +388,38 @@ export class GameManager extends Component {
 
     // ---------- 场景搭建 ----------
 
+    /** 当前皮肤配置。 */
+    private currentSkin(): SceneSkin {
+        return getSkin(this.skinId);
+    }
+
+    /**
+     * 换肤：持久化选择并原地重建场景视觉 + 围栏。物件在 this.node 上、与 sceneRoot 平级，
+     * 不受重建影响；围栏几何各皮肤一致，重建后物件贴靠关系不变。
+     */
+    applySkin(id: string) {
+        if (id === this.skinId && this.sceneRoot?.isValid) return;
+        this.skinId = getSkin(id).id;
+        try { sys.localStorage.setItem(GameManager.SKIN_STORE, this.skinId); } catch { /* 存储不可用则仅本局生效 */ }
+        if (this.sceneRoot?.isValid) this.sceneRoot.destroy();
+        this.sceneRoot = null;
+        this.buildBox();
+        this.audio?.play('prop');
+    }
+
     private buildBox() {
-        // 深红木展示篮：底板、厚框、内沿和格栅都是真 3D，接近参考图的动态容器感。
-        const floorMat = this.makeMat(new Color(93, 45, 33), 'wood_floor');
-        const frameMat = this.makeMat(new Color(72, 28, 22), 'wood_dark');
-        const rimMat = this.makeMat(new Color(137, 72, 48), 'wood_floor');
-        const goldMat = this.makeMat(new Color(205, 151, 62));
-        const shadowMat = this.makeMat(new Color(39, 18, 17));
+        // 容器视觉与围栏统一挂在可重建的 SceneRoot 下，换肤时整体替换。
+        const root = new Node('SceneRoot');
+        root.setParent(this.node);
+        this.sceneRoot = root;
+
+        // 调色板来自当前皮肤：底板、厚框、内沿、格栅、金件、阴影、背景全部换色，玩法不变。
+        const skin = this.currentSkin();
+        const floorMat = this.makeMat(skin.floor.color, skin.floor.tex, true, skin.gloss);
+        const frameMat = this.makeMat(skin.frame.color, skin.frame.tex, true, skin.gloss);
+        const rimMat = this.makeMat(skin.rim.color, skin.rim.tex, true, skin.gloss);
+        const goldMat = this.makeMat(skin.accent);
+        const shadowMat = this.makeMat(skin.shadow);
 
         // 碰撞地基顶面保持 y=0，厚地基继续防止高速物件穿底。
         // 视觉底板可以按容器造型裁短，但物理底板必须始终居中覆盖整个围栏；
@@ -423,10 +459,14 @@ export class GameManager extends Component {
         this.makeInvisibleWall('fenceE', v3(FX + WT / 2, WY, CZ), v3(WT, WH, FZ * 2));
 
         // 大背景板 + 外框，模拟参考图中玻璃柜/木柜环境。
-        const bg = this.makeMat(new Color(255, 255, 255), 'backdrop', false);
+        const bg = this.makeMat(skin.backdrop, skin.backdropTex ?? 'backdrop', false);
         this.makeVisualBox('backdrop', v3(0, -0.92, -2), v3(44, 0.1, 44), bg);
         this.makeVisualBox('cabinetLeft', v3(-3.25, -0.46, -0.2), v3(0.34, 0.32, 12), frameMat);
         this.makeVisualBox('cabinetRight', v3(3.25, -0.46, -0.2), v3(0.34, 0.32, 12), frameMat);
+
+        // 代码新建的节点 layer 可能为 0（任何相机都不画）；运行时换肤走这里，
+        // start() 的整树 forceLayer 不会再触发，必须自己把新场景放进 DEFAULT 渲染层。
+        this.forceLayer(root);
 
         // 七格收集区属于屏幕 HUD，由 HudUI 负责；世界空间只保留可替换的 3D 容器。
     }
@@ -434,7 +474,7 @@ export class GameManager extends Component {
     /** 只有物理没有外观的围栏 */
     private makeInvisibleWall(name: string, pos: Vec3, size: Vec3) {
         const n = new Node(name);
-        n.setParent(this.node);
+        n.setParent(this.sceneRoot ?? this.node);
         n.setPosition(pos);
         const rb = n.addComponent(RigidBody);
         rb.type = RigidBody.Type.STATIC;
@@ -446,7 +486,7 @@ export class GameManager extends Component {
     /** 只有外观没有物理的盒子（槽位垫片等） */
     private makeVisualBox(name: string, pos: Vec3, size: Vec3, mat: Material | null) {
         const n = new Node(name);
-        n.setParent(this.node);
+        n.setParent(this.sceneRoot ?? this.node);
         n.setPosition(pos);
         const mr = n.addComponent(MeshRenderer);
         mr.mesh = utils.MeshUtils.createMesh(primitives.box({ width: size.x, height: size.y, length: size.z }));
@@ -458,7 +498,7 @@ export class GameManager extends Component {
      * 注意：unlit 与 standard 的颜色/贴图属性名不同，且 setProperty 传错名只警告不抛错，
      * 必须按 effect 精确选择属性名。
      */
-    private makeMat(color: Color, texture?: string, lit = true): Material | null {
+    private makeMat(color: Color, texture?: string, lit = true, roughness = 0.85): Material | null {
         const order = lit
             ? ['builtin-standard', 'standard', 'builtin-unlit', 'unlit']
             : ['builtin-unlit', 'unlit', 'builtin-standard', 'standard'];
@@ -473,7 +513,7 @@ export class GameManager extends Component {
         mat.initialize({ effectName, defines });
         try { mat.setProperty(isUnlit ? 'mainColor' : 'albedo', color); } catch { /* 属性名不符则用默认色 */ }
         if (!isUnlit) {
-            try { mat.setProperty('roughness', 0.85); } catch { /* 可选参数 */ }
+            try { mat.setProperty('roughness', roughness); } catch { /* 可选参数 */ }
         }
         if (texture) {
             resources.load(`textures/${texture}/texture`, Texture2D, (err, tex) => {
@@ -1215,6 +1255,20 @@ export class GameManager extends Component {
         this.hud?.setPaused(this.paused);
         if (this.msgLabel) this.msgLabel.string = this.paused ? '暂停' : '';
         if (this.hud) this.hud.subMsgLabel.string = this.paused ? '点击左上角继续' : '';
+    }
+
+    /**
+     * 选皮面板期间挂起计时与物理巡检，关闭后恢复到打开前的状态。
+     * 不动 HUD 暂停键图标/文案：面板有全屏遮罩，期间它们本就被盖住。
+     */
+    private setOverlayPause(open: boolean) {
+        if (!this.playing) return;
+        if (open) {
+            this.overlayPrevPaused = this.paused;
+            this.paused = true;
+        } else {
+            this.paused = this.overlayPrevPaused;
+        }
     }
 
     private updateHud() {

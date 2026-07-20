@@ -3,6 +3,7 @@ import {
     NodeEventType, Widget, view, screen, Graphics, UIOpacity, Font, resources,
     tween, v3, Vec3, Tween,
 } from 'cc';
+import { SKINS } from './SceneSkin';
 
 export type PropKind = 'remove' | 'magnet' | 'shuffle';
 
@@ -62,8 +63,17 @@ export class HudUI {
     private resultRoot: Node | null = null;
     private capturedModels = new Map<Node, number>();
     private capturedIcons = new Map<Node, Node>();
+    private skinRoot: Node | null = null;
+    private onSelectSkin?: (id: string) => void;
+    private getSkinId?: () => string;
+    private onSkinPanelToggle?: (open: boolean) => void;
 
-    constructor(scene: Scene, onProp: (kind: PropKind) => void, onPause?: () => void) {
+    constructor(scene: Scene, onProp: (kind: PropKind) => void, onPause?: () => void,
+        onSelectSkin?: (id: string) => void, getSkinId?: () => string,
+        onSkinPanelToggle?: (open: boolean) => void) {
+        this.onSelectSkin = onSelectSkin;
+        this.getSkinId = getSkinId;
+        this.onSkinPanelToggle = onSkinPanelToggle;
         const canvasNode = new Node('HudCanvas');
         this.canvasNode = canvasNode;
         canvasNode.layer = Layers.Enum.UI_2D;
@@ -103,6 +113,22 @@ export class HudUI {
             new Color(124, 75, 42), 4, { left: 26 });
         this.pauseIcon = this.addIcon(pauseBtn, '\uf04c', 31, cream, 0, 0);
         pauseBtn.on(NodeEventType.TOUCH_END, () => onPause?.());
+
+        // \u6362\u80a4\u952e\uff1a\u6682\u505c\u952e\u6b63\u4e0b\u65b9\uff0c\u540c\u6b3e\u68d5\u8272\u8f6f\u7cd6\u8d28\u611f\uff0c\u8c03\u8272\u76d8\u56fe\u6807\u3002
+        if (this.onSelectSkin) {
+            this.makePanel(70, 70, 20, new Color(92, 52, 31, 210), { top: 105 }, 0,
+                undefined, 0, { left: 23 });
+            const skinBtn = this.makePanel(64, 64, 18, new Color(215, 158, 105), { top: 100 }, 0,
+                new Color(124, 75, 42), 4, { left: 26 });
+            this.addIcon(skinBtn, '\uf53f', 28, cream, 0, 0);
+            skinBtn.on(NodeEventType.TOUCH_START, () => {
+                tween(skinBtn).stop();
+                tween(skinBtn).to(0.07, { scale: v3(0.95, 0.95, 1) }).start();
+            });
+            const releaseSkin = () => tween(skinBtn).to(0.09, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
+            skinBtn.on(NodeEventType.TOUCH_END, () => { releaseSkin(); this.toggleSkinPanel(); });
+            skinBtn.on(NodeEventType.TOUCH_CANCEL, releaseSkin);
+        }
 
         // 计时牌和细进度条，缩小存在感，把视觉主舞台让给 3D 容器。
         const timerShadow = this.makePanel(166, 58, 27, new Color(32, 20, 16, 180), { top: 25 }, 0);
@@ -421,6 +447,100 @@ export class HudUI {
     hideResult() {
         if (this.resultRoot?.isValid) this.resultRoot.destroy();
         this.resultRoot = null;
+    }
+
+    // ---------- 选皮面板 ----------
+
+    private toggleSkinPanel() {
+        if (this.skinRoot?.isValid) { this.closeSkinPanel(); return; }
+        this.onSkinPanelToggle?.(true);
+        this.renderSkinPanel();
+    }
+
+    private closeSkinPanel() {
+        const wasOpen = !!this.skinRoot?.isValid;
+        if (this.skinRoot?.isValid) this.skinRoot.destroy();
+        this.skinRoot = null;
+        if (wasOpen) this.onSkinPanelToggle?.(false);
+    }
+
+    /**
+     * 皮肤选择弹窗：遮罩 + 2×3 皮肤卡片网格 + 完成键。点卡片即时换肤并刷新高亮。
+     * 只重建视觉、不改变“打开”状态，因此切皮刷新时不会误触发暂停开关。
+     */
+    private renderSkinPanel() {
+        if (this.skinRoot?.isValid) this.skinRoot.destroy();
+        const current = this.getSkinId?.() ?? SKINS[0].id;
+        const root = new Node('skinRoot');
+        this.skinRoot = root;
+        root.layer = Layers.Enum.UI_2D;
+        root.setParent(this.contentRoot);
+
+        // 全屏遮罩：点空白处关闭，同时吞掉触摸不穿透到 3D 拾取区。
+        const mask = new Node('mask');
+        mask.layer = Layers.Enum.UI_2D;
+        mask.setParent(root);
+        mask.addComponent(UITransform).setContentSize(2400, 3200);
+        const mg = mask.addComponent(Graphics);
+        mg.fillColor = new Color(20, 12, 8, 165);
+        mg.rect(-1200, -1600, 2400, 3200);
+        mg.fill();
+        mask.on(NodeEventType.TOUCH_END, () => this.closeSkinPanel());
+
+        const panelW = 548;
+        const panelH = 560;
+        this.makePanelChild(root, panelW + 12, panelH + 12, 34, new Color(52, 27, 15, 235), 0, -8);
+        const panel = this.makePanelChild(root, panelW, panelH, 30, new Color(255, 244, 214), 0, 0,
+            new Color(196, 130, 64), 6);
+        this.addLabel(panel, '选择皮肤', 38, new Color(240, 150, 26), 0, panelH / 2 - 44, true);
+
+        const cellW = 232, cellH = 118, stepX = 252, stepY = 136, firstRowY = 138;
+        SKINS.forEach((skin, i) => {
+            const col = i % 2;
+            const row = Math.floor(i / 2);
+            const x = (col - 0.5) * stepX;
+            const y = firstRowY - row * stepY;
+            const selected = skin.id === current;
+
+            // 卡片：选中态描金加粗。
+            const card = this.makePanelChild(panel, cellW, cellH, 18, new Color(250, 238, 210), x, y,
+                selected ? new Color(240, 150, 26) : new Color(198, 168, 120), selected ? 6 : 3);
+            // 左侧两条皮肤主色预览。
+            this.makePanelChild(card, 54, 84, 12, skin.swatch[0], -71, 0, new Color(255, 255, 255, 120), 2);
+            this.makePanelChild(card, 26, 84, 8, skin.swatch[1], -31, 0);
+            // 名称 + 状态。
+            this.addLabel(card, skin.name, 25, new Color(102, 57, 28), 34, 20, true);
+            this.addLabel(card, selected ? '使用中' : '点击切换', 16,
+                selected ? new Color(52, 148, 68) : new Color(158, 122, 82), 34, -22, true);
+
+            card.on(NodeEventType.TOUCH_START, () => {
+                tween(card).stop();
+                tween(card).to(0.06, { scale: v3(0.96, 0.96, 1) }).start();
+            });
+            const releaseCard = () => tween(card).to(0.08, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
+            card.on(NodeEventType.TOUCH_END, () => {
+                releaseCard();
+                if (skin.id === current) return;
+                this.onSelectSkin?.(skin.id);
+                // 只刷新视觉高亮，保持面板打开与暂停状态。
+                this.renderSkinPanel();
+            });
+            card.on(NodeEventType.TOUCH_CANCEL, releaseCard);
+        });
+
+        // 完成键。
+        const closeShadow = this.makePanelChild(panel, 200, 66, 20, new Color(104, 61, 25, 235), 0, -panelH / 2 + 30);
+        closeShadow.setPosition(0, -panelH / 2 + 26, 0);
+        const closeBtn = this.makePanelChild(panel, 194, 62, 18, new Color(255, 207, 55), 0, -panelH / 2 + 34,
+            new Color(171, 118, 29), 5);
+        this.addLabel(closeBtn, '完成', 26, new Color(102, 57, 28), 0, 0, true);
+        closeBtn.on(NodeEventType.TOUCH_END, () => this.closeSkinPanel());
+
+        root.setScale(0.7, 0.7, 1);
+        const op = root.addComponent(UIOpacity);
+        op.opacity = 0;
+        tween(root).to(0.24, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
+        tween(op).to(0.18, { opacity: 255 }).start();
     }
 
     sync() {
