@@ -51,6 +51,8 @@ export class GameManager extends Component {
     private rescueUsed = false;
     private loseReason: '槽位已满' | '时间到' | '' = '';
     private dailyLeft = GameManager.DAILY_FREE;
+    /** 判负缓冲和自动吸取期间锁住手动输入，保证槽位状态原子化。 */
+    private interactionLocked = false;
     /** 各关历史最佳:{ [levelIndex]: { stars, progress } } */
     private best: Record<number, { stars: number; progress: number }> = {};
 
@@ -122,6 +124,22 @@ export class GameManager extends Component {
         this.hud.setLevel(this.levelIndex + 1);
         this.loadDaily();
         this.loadBest();
+        // 次数耗尽时不能靠刷新页面免费开新局；MVP 用立即成功的广告占位补一次。
+        if (this.dailyLeft <= 0) {
+            this.hud.showNotice('今日次数用完', '每天可免费挑战 3 次\n看段广告补充 1 次吧',
+                '看广告 +1', () => {
+                    this.dailyLeft++;
+                    this.saveDaily();
+                    this.hud?.hideResult();
+                    void this.startInitialRound();
+                });
+            return;
+        }
+        await this.startInitialRound();
+    }
+
+    /** 首次进入关卡的统一入口：确认有次数后再扣减、加载和生成。 */
+    private async startInitialRound() {
         this.consumeDaily();
         await this.loadPrefabs(this.level.items);
         this.spawnItems();
@@ -827,7 +845,7 @@ export class GameManager extends Component {
     // ---------- 拾取与三消 ----------
 
     private onTouch(e: EventTouch) {
-        if (!this.playing || this.paused || !this.cam) return;
+        if (!this.playing || this.paused || this.interactionLocked || !this.cam) return;
         const p = e.getLocation();
         if (p.y < screen.windowSize.height * 0.2) return; // 2D 收集区 + 道具栏，不穿透拾取
         const tag = this.hitTestAt(p.x, p.y);
@@ -904,6 +922,8 @@ export class GameManager extends Component {
                 if (this.removedCount >= this.totalCount) this.gameOver(true, '全部消除！');
             }, 0.35);
         } else if (full) {
+            // 数据层已经满 7 格，立即锁住输入；否则 0.4s 动画窗口内的连点会塞入第 8 格。
+            this.interactionLocked = true;
             this.scheduleOnce(() => this.gameOver(false, '槽位已满'), 0.4);
         }
     }
@@ -935,7 +955,7 @@ export class GameManager extends Component {
     }
 
     useProp(kind: PropKind) {
-        if (!this.playing || this.paused) return;
+        if (!this.playing || this.paused || this.interactionLocked) return;
         if (this.propCounts[kind] <= 0) return;
         let used = false;
         if (kind === 'remove') used = this.propRemove();
@@ -1014,9 +1034,12 @@ export class GameManager extends Component {
 
         const need = 3 - (counts.get(target) ?? 0);
         const picks = boxItems.filter(t => t.id === target).slice(0, need);
+        // 自动吸取是一个完整事务，期间禁止手点或再次使用道具改变已校验过的槽位余量。
+        this.interactionLocked = true;
         picks.forEach((t, i) => this.scheduleOnce(() => {
             if (this.playing && t.node.isValid && !t.picked) this.pick(t.node, t);
         }, i * 0.18));
+        this.scheduleOnce(() => { this.interactionLocked = false; }, picks.length * 0.18 + 0.4);
         return true;
     }
 
@@ -1069,6 +1092,7 @@ export class GameManager extends Component {
     private gameOver(win: boolean, reason: string) {
         if (!this.playing) return;
         this.playing = false;
+        this.interactionLocked = false;
         this.paused = false;
         this.hud?.setPaused(false);
         this.loseReason = win ? '' : (reason === '槽位已满' ? '槽位已满' : '时间到');
@@ -1117,6 +1141,7 @@ export class GameManager extends Component {
     private rescue() {
         if (this.rescueUsed || this.playing) return;
         this.rescueUsed = true;
+        this.interactionLocked = false;
         this.hud?.hideResult();
         this.audio?.play('prop');
         if (this.loseReason === '槽位已满') {
@@ -1144,6 +1169,7 @@ export class GameManager extends Component {
         this.consumeDaily();
         this.rescueUsed = false;
         this.loseReason = '';
+        this.interactionLocked = false;
         this.hud?.hideResult();
         for (const e of this.tray.entries) {
             if (e.node.isValid) e.node.destroy();

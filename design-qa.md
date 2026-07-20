@@ -31,6 +31,9 @@
 - Final local-settle interaction pass: tested center and upper-pile picks in the iPhone 14 Pro preview; distant items stayed fixed, no collision-chain shake occurred, and browser console errors remained at zero.
 - Collection tray centering regression: measured the non-transparent bounds of all 11 rendered model icons, corrected each asset's canvas offset at render time, and uniformly fitted visible content into a 62×52 safe area. Filled all seven slots in the iPhone 14 Pro preview with mixed round, tall, wide, and irregular items; every visible model was centered horizontally and vertically with no slot-edge overflow.
 - Collection icon completeness regression: fixed the Blender parent-scale centering order and fitted the orthographic camera from the final camera-space bounds with 18% padding, then regenerated all 11 icons from their source GLBs. Alpha-bound checks confirmed no icon touches any 192×192 image edge; a seven-slot phone-preview pass showed complete rings, plaques, bangles, figures, and irregular models with zero console errors.
+- Landscape gameplay regression: verified the 1280 x 720 web viewport with the HUD fitted to a centered 720 x 1280 safe artboard. The full wooden container remains visible, while the tray and all three props stay grouped below it instead of covering the pile or drifting to the screen edges.
+- Atomic prop regression: triggered the magnet prop and immediately clicked a pile item during its scheduled picks. The manual click was ignored until the transaction completed; exactly three matching items cleared, progress advanced to 13%, the tray returned to empty, and the prop count decremented once.
+- Daily-attempt gate regression: exhausted the local daily count, reloaded, and confirmed that no pile spawned before the refill action. The MVP ad action granted one attempt and started exactly one round, with no browser warnings or errors.
 
 ## Findings and iteration history
 

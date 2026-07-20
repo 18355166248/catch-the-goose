@@ -417,7 +417,9 @@ export class HudUI {
     sync() {
         const s = view.getVisibleSize();
         if (s.width <= 0 || s.height <= 0) return;
-        const nextScale = Math.min(1, s.width / 720);
+        // HUD 使用 720x1280 安全画布。竖屏仍按宽度适配；横屏额外受高度约束，
+        // 避免收集槽和道具栏占满半屏、遮住需要观察和点击的 3D 物件堆。
+        const nextScale = Math.min(1, s.width / 720, s.height / 1280);
         let resized = false;
         if (Math.abs(this.canvasUT.height - s.height) > 0.5 || Math.abs(this.canvasUT.width - s.width) > 0.5) {
             this.canvasUT.setContentSize(s.width, s.height);
@@ -431,7 +433,9 @@ export class HudUI {
             this.contentRoot.setScale(nextScale, nextScale, 1);
             resized = true;
         }
-        const contentW = s.width / this.uiScale;
+        // 横屏只缩放并居中完整的竖版操作带，不把左右 Widget 推到屏幕边缘。
+        // 侧边空间保留为背景，核心信息、槽位和道具始终围绕 3D 木盒分布。
+        const contentW = 720;
         const contentH = s.height / this.uiScale;
         if (Math.abs(this.contentUT.width - contentW) > 0.5 || Math.abs(this.contentUT.height - contentH) > 0.5) {
             this.contentUT.setContentSize(contentW, contentH);
