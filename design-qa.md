@@ -37,6 +37,7 @@
 - Difficulty-curve regression: rebuilt level 1 with a 240-second limit and verified the timer starts at 4:00. The five configured levels now increase total time with item count while decreasing seconds per item monotonically.
 - Seeded-initial-condition regression: reloaded level 1 twice with seed 104729 and confirmed the same configured item stream and spawn parameters. Final Bullet settling is intentionally not treated as pixel-deterministic because frame timing can amplify contact-order differences.
 - Tray-danger regression: filled the tray with five non-matching items and confirmed a thin orange-red edge appears without covering icons; the edge strengthened at six items, and browser warnings/errors remained at zero.
+- Result-dialog spacing regression: forced a seven-slot loss with the dual rescue/retry actions visible and verified an 18-art-pixel gap between the history-best line and button faces, plus 24 pixels below the button shadows. Text, borders, and shadows no longer touch or clip.
 
 ## Findings and iteration history
 

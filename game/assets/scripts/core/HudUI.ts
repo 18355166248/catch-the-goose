@@ -387,9 +387,11 @@ export class HudUI {
         }
 
         const mkBtn = (text: string, fill: Color, x: number, w: number, cb: () => void) => {
-            const shadow = this.makePanelChild(panel, w + 6, 84, 22, new Color(104, 61, 25, 235), x, -142);
-            shadow.setPosition(x, -146, 0);
-            const b = this.makePanelChild(panel, w, 80, 20, fill, x, -138,
+            // 成绩文字最低可到 y=-98；按钮顶边从 -116 开始，保留 18px 呼吸区，
+            // 同时阴影底边仍距弹窗底部 24px，不会被面板裁切。
+            const shadow = this.makePanelChild(panel, w + 6, 84, 22, new Color(104, 61, 25, 235), x, -160);
+            shadow.setPosition(x, -164, 0);
+            const b = this.makePanelChild(panel, w, 80, 20, fill, x, -156,
                 new Color(171, 118, 29), 5);
             this.addLabel(b, text, 27, new Color(102, 57, 28), 0, 0, true);
             b.on(NodeEventType.TOUCH_START, () => {
