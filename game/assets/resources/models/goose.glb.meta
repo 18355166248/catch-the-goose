@@ -20,8 +20,8 @@
       "ver": "1.0.3",
       "imported": true,
       "files": [
-        ".json",
-        ".png"
+        ".jpg",
+        ".json"
       ],
       "subMetas": {}
     },
@@ -58,8 +58,8 @@
       "ver": "1.0.3",
       "imported": true,
       "files": [
-        ".json",
-        ".png"
+        ".jpg",
+        ".json"
       ],
       "subMetas": {}
     },
@@ -78,8 +78,8 @@
       "ver": "1.0.3",
       "imported": true,
       "files": [
-        ".json",
-        ".png"
+        ".jpg",
+        ".json"
       ],
       "subMetas": {}
     },
@@ -97,7 +97,7 @@
         "mipfilter": "linear",
         "anisotropy": 0,
         "isUuid": true,
-        "imageUuidOrDatabaseUri": "7c43be91-cccc-4976-b9ee-4422807168ec@43079"
+        "imageUuidOrDatabaseUri": "7c43be91-cccc-4976-b9ee-4422807168ec@f3a88"
       },
       "ver": "1.0.22",
       "imported": true,
@@ -120,7 +120,7 @@
         "mipfilter": "linear",
         "anisotropy": 0,
         "isUuid": true,
-        "imageUuidOrDatabaseUri": "7c43be91-cccc-4976-b9ee-4422807168ec@f3a88"
+        "imageUuidOrDatabaseUri": "7c43be91-cccc-4976-b9ee-4422807168ec@43079"
       },
       "ver": "1.0.22",
       "imported": true,

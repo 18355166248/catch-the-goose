@@ -38,8 +38,8 @@
       "ver": "1.0.3",
       "imported": true,
       "files": [
-        ".json",
-        ".png"
+        ".jpg",
+        ".json"
       ],
       "subMetas": {}
     },
@@ -58,8 +58,8 @@
       "ver": "1.0.3",
       "imported": true,
       "files": [
-        ".json",
-        ".png"
+        ".jpg",
+        ".json"
       ],
       "subMetas": {}
     },
@@ -78,8 +78,8 @@
       "ver": "1.0.3",
       "imported": true,
       "files": [
-        ".json",
-        ".png"
+        ".jpg",
+        ".json"
       ],
       "subMetas": {}
     },
@@ -97,7 +97,7 @@
         "mipfilter": "linear",
         "anisotropy": 0,
         "isUuid": true,
-        "imageUuidOrDatabaseUri": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@257de"
+        "imageUuidOrDatabaseUri": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@04f8e"
       },
       "ver": "1.0.22",
       "imported": true,
@@ -120,7 +120,7 @@
         "mipfilter": "linear",
         "anisotropy": 0,
         "isUuid": true,
-        "imageUuidOrDatabaseUri": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@04f8e"
+        "imageUuidOrDatabaseUri": "3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@257de"
       },
       "ver": "1.0.22",
       "imported": true,

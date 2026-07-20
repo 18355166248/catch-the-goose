@@ -20,8 +20,8 @@
       "ver": "1.0.3",
       "imported": true,
       "files": [
-        ".json",
-        ".png"
+        ".jpg",
+        ".json"
       ],
       "subMetas": {}
     },
@@ -58,8 +58,8 @@
       "ver": "1.0.3",
       "imported": true,
       "files": [
-        ".json",
-        ".png"
+        ".jpg",
+        ".json"
       ],
       "subMetas": {}
     },
@@ -78,8 +78,8 @@
       "ver": "1.0.3",
       "imported": true,
       "files": [
-        ".json",
-        ".png"
+        ".jpg",
+        ".json"
       ],
       "subMetas": {}
     },
@@ -97,7 +97,7 @@
         "mipfilter": "linear",
         "anisotropy": 0,
         "isUuid": true,
-        "imageUuidOrDatabaseUri": "f1ceb582-e409-4952-b02a-62aefe13804e@223ae"
+        "imageUuidOrDatabaseUri": "f1ceb582-e409-4952-b02a-62aefe13804e@67131"
       },
       "ver": "1.0.22",
       "imported": true,
@@ -120,7 +120,7 @@
         "mipfilter": "linear",
         "anisotropy": 0,
         "isUuid": true,
-        "imageUuidOrDatabaseUri": "f1ceb582-e409-4952-b02a-62aefe13804e@67131"
+        "imageUuidOrDatabaseUri": "f1ceb582-e409-4952-b02a-62aefe13804e@223ae"
       },
       "ver": "1.0.22",
       "imported": true,

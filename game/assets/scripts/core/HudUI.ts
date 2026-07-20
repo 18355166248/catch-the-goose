@@ -438,13 +438,14 @@ export class HudUI {
             resized = true;
         }
         if (resized) {
-            for (const [node, index] of [...this.capturedModels]) {
+            // Cocos Web 的降级编译不会正确展开 Map spread，使用 forEach 避免被转成 [].concat(map)。
+            this.capturedModels.forEach((index, node) => {
                 if (!node.isValid) this.capturedModels.delete(node);
                 else {
                     const icon = this.capturedIcons.get(node);
                     if (icon?.isValid) icon.setPosition(this.slotIconPosition(index));
                 }
-            }
+            });
         }
     }
 
