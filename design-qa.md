@@ -34,6 +34,9 @@
 - Landscape gameplay regression: verified the 1280 x 720 web viewport with the HUD fitted to a centered 720 x 1280 safe artboard. The full wooden container remains visible, while the tray and all three props stay grouped below it instead of covering the pile or drifting to the screen edges.
 - Atomic prop regression: triggered the magnet prop and immediately clicked a pile item during its scheduled picks. The manual click was ignored until the transaction completed; exactly three matching items cleared, progress advanced to 13%, the tray returned to empty, and the prop count decremented once.
 - Daily-attempt gate regression: exhausted the local daily count, reloaded, and confirmed that no pile spawned before the refill action. The MVP ad action granted one attempt and started exactly one round, with no browser warnings or errors.
+- Difficulty-curve regression: rebuilt level 1 with a 240-second limit and verified the timer starts at 4:00. The five configured levels now increase total time with item count while decreasing seconds per item monotonically.
+- Seeded-initial-condition regression: reloaded level 1 twice with seed 104729 and confirmed the same configured item stream and spawn parameters. Final Bullet settling is intentionally not treated as pixel-deterministic because frame timing can amplify contact-order differences.
+- Tray-danger regression: filled the tray with five non-matching items and confirmed a thin orange-red edge appears without covering icons; the edge strengthened at six items, and browser warnings/errors remained at zero.
 
 ## Findings and iteration history
 

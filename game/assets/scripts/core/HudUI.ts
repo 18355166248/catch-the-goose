@@ -46,6 +46,8 @@ export class HudUI {
     private contentUT!: UITransform;
     private uiScale = 1;
     private progressFill!: UITransform;
+    private trayDangerGlow!: Node;
+    private trayDangerOpacity!: UIOpacity;
     private pauseIcon!: Label;
     private static readonly PROGRESS_W = 252;
     private static readonly TRAY_BOTTOM = 126;
@@ -138,6 +140,11 @@ export class HudUI {
 
         // 收集区是固定屏幕坐标的 2D HUD，不再跟随 3D 相机产生透视变形。
         // 模型稍后放入独立 UI_2D 三维层，仍保留真实 Mesh 和旋转，而不是截图/图标替代。
+        // 5 格起显示的危险边缘放在槽位底层，不覆盖模型图标，也不增加额外文案干扰。
+        this.trayDangerGlow = this.makePanel(682, 102, 24, new Color(244, 91, 48, 235),
+            { bottom: HudUI.TRAY_BOTTOM - 11 }, 0);
+        this.trayDangerOpacity = this.trayDangerGlow.addComponent(UIOpacity);
+        this.trayDangerOpacity.opacity = 0;
         this.makePanel(670, 90, 20, new Color(77, 70, 66, 220), { bottom: HudUI.TRAY_BOTTOM - 5 }, 0);
         const trayPanel = this.makePanel(654, 82, 18, new Color(244, 242, 235),
             { bottom: HudUI.TRAY_BOTTOM }, 0, new Color(151, 146, 140), 4);
@@ -534,6 +541,20 @@ export class HudUI {
     setProgress(pct: number) {
         this.progressLabel.string = `${pct}%`;
         this.progressFill.node.setScale(Math.max(0, Math.min(1, pct / 100)), 1);
+    }
+
+    /** 5/6/7 格逐级增强橙红边缘，并在每次进入危险状态时轻微脉冲一次。 */
+    setTrayCount(count: number) {
+        const danger = Math.max(0, Math.min(3, count - 4));
+        this.trayDangerOpacity.opacity = [0, 95, 175, 235][danger];
+        Tween.stopAllByTarget(this.trayDangerGlow);
+        this.trayDangerGlow.setScale(1, 1, 1);
+        if (danger > 0) {
+            tween(this.trayDangerGlow)
+                .to(0.11, { scale: v3(1.025, 1.08, 1) }, { easing: 'quadOut' })
+                .to(0.18, { scale: v3(1, 1, 1) }, { easing: 'sineOut' })
+                .start();
+        }
     }
 
     setPropCount(kind: PropKind, _text: string, count: number) {

@@ -72,6 +72,8 @@ export class GameManager extends Component {
     private settleToken = 0;
     /** 本关物件基准缩放:少件关卡放大物件,保证盒子饱满、目标好点。 */
     private itemScale = 0.46;
+    /** 只服务于初始堆叠的确定性随机流，不受巡逻、道具等运行时随机行为干扰。 */
+    private levelRandomState = 1;
 
     onLoad() {
         this.pileMaterial = new PhysicsMaterial();
@@ -544,6 +546,7 @@ export class GameManager extends Component {
     }
 
     private spawnItems() {
+        this.levelRandomState = this.level.seed >>> 0 || 1;
         const queue: string[] = [];
         for (const id of this.level.items) {
             const prefab = this.prefabs.get(id);
@@ -551,7 +554,7 @@ export class GameManager extends Component {
             const count = this.level.groupsPerItem * 3;
             for (let i = 0; i < count; i++) queue.push(id);
         }
-        this.shuffleInPlace(queue);
+        this.shuffleInPlace(queue, () => this.levelRandom());
         this.totalCount = queue.length;
         // 66 件对应 0.46;件数减少按体积等比放大,上限 0.64 防止超出容器。
         this.itemScale = Math.min(0.64, 0.46 * Math.cbrt(66 / Math.max(1, queue.length)));
@@ -568,17 +571,17 @@ export class GameManager extends Component {
                 this.forceLayer(n);
                 // 从篮筐中央上方连续落下：先堆中心，再由真实碰撞向四周摊开。
                 // 低差异圆盘采样避免完全同轴，也不会像黄金螺旋预铺那样显得人工整齐。
-                const angle = idx * 2.399963 + (Math.random() - 0.5) * 0.3;
+                const angle = idx * 2.399963 + (this.levelRandom() - 0.5) * 0.3;
                 // 半径随投放进度连续扩大：视觉上仍是从中心长出一堆，
                 // 但后续物件会自然填满篮底，不会永远压在后半区。
                 const radius = 0.1 + Math.sqrt(index / Math.max(1, queue.length - 1)) * 0.58;
                 // 生成点抬到可视区外的高处：物件是"倒进来"的，而不是在画面里凭空出现。
                 n.setPosition(
-                    Math.cos(angle) * radius + (Math.random() - 0.5) * 0.12,
+                    Math.cos(angle) * radius + (this.levelRandom() - 0.5) * 0.12,
                     4.2 + (idx % 5) * 0.22,
                     GameManager.FENCE_CENTER_Z + 0.1
                         + Math.sin(angle) * radius * 0.72
-                        + (Math.random() - 0.5) * 0.08,
+                        + (this.levelRandom() - 0.5) * 0.08,
                 );
                 // 参考录屏中单件约为篮宽的 1/6；66 件时形成紧凑但不过高的堆。
                 const scale = this.itemScale + (idx % 4) * 0.012;
@@ -597,16 +600,16 @@ export class GameManager extends Component {
                 const col = n.addComponent(BoxCollider);
                 col.sharedMaterial = this.pileMaterial;
                 this.centerVisualAndFitCollider(n, col);
-                this.setNaturalRotation(n, id);
+                this.setNaturalRotation(n, id, () => this.levelRandom());
                 rb.setLinearVelocity(v3(
-                    (Math.random() - 0.5) * 0.2,
+                    (this.levelRandom() - 0.5) * 0.2,
                     -2.6,
-                    (Math.random() - 0.5) * 0.2,
+                    (this.levelRandom() - 0.5) * 0.2,
                 ));
                 rb.setAngularVelocity(v3(
-                    (Math.random() - 0.5) * 1.2,
-                    (Math.random() - 0.5) * 1.2,
-                    (Math.random() - 0.5) * 1.2,
+                    (this.levelRandom() - 0.5) * 1.2,
+                    (this.levelRandom() - 0.5) * 1.2,
+                    (this.levelRandom() - 0.5) * 1.2,
                 ));
                 // 物件投平面阴影
                 for (const mr of n.getComponentsInChildren(MeshRenderer)) {
@@ -617,7 +620,7 @@ export class GameManager extends Component {
         // 最后一件落下(高处下落约 0.6s)后再给物理约 1 秒自然沉降,然后锁定整堆。
         // 巡逻里的逐件冻结通常早已把大部分物件锁死,这里只是兜底。
         this.schedulePileSettle(queue.length * 0.04 + 1.6);
-        console.log(`[GameManager] 关卡 ${this.levelIndex + 1}：生成 ${this.totalCount} 个物件`);
+        console.log(`[GameManager] 关卡 ${this.levelIndex + 1}：生成 ${this.totalCount} 个物件，seed=${this.level.seed}`);
     }
 
     /**
@@ -821,23 +824,33 @@ export class GameManager extends Component {
     }
 
     /** 限制初始倾斜，避免钱币/玉环直立后高速翻滚造成旋转穿透。 */
-    private setNaturalRotation(node: Node, id: string) {
+    private setNaturalRotation(node: Node, id: string, random: () => number = Math.random) {
         const flat = id === 'banzhi' || id === 'bracelet' || id === 'pingankou'
             || id === 'tongqian' || id === 'yupai' || id === 'yuzhuo';
         const tilt = flat ? 20 : 32;
         const q = new Quat();
         Quat.fromEuler(
             q,
-            (Math.random() - 0.5) * tilt * 2,
-            Math.random() * 360,
-            (Math.random() - 0.5) * tilt * 2,
+            (random() - 0.5) * tilt * 2,
+            random() * 360,
+            (random() - 0.5) * tilt * 2,
         );
         node.setRotation(q);
     }
 
-    private shuffleInPlace<T>(items: T[]) {
+    /** xorshift32：轻量、跨平台一致，足够生成可复现的关卡初始布局。 */
+    private levelRandom(): number {
+        let x = this.levelRandomState | 0;
+        x ^= x << 13;
+        x ^= x >>> 17;
+        x ^= x << 5;
+        this.levelRandomState = x >>> 0;
+        return this.levelRandomState / 0x100000000;
+    }
+
+    private shuffleInPlace<T>(items: T[], random: () => number = Math.random) {
         for (let i = items.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(random() * (i + 1));
             [items[i], items[j]] = [items[j], items[i]];
         }
     }
@@ -1081,6 +1094,7 @@ export class GameManager extends Component {
         this.tray.entries.forEach((e, i) => {
             this.hud?.moveModelToSlot(e.node, i);
         });
+        this.hud?.setTrayCount(this.tray.count);
     }
 
     // ---------- 结算与 HUD ----------
@@ -1178,6 +1192,7 @@ export class GameManager extends Component {
             if (t.node.isValid) t.node.destroy();
         }
         this.tray.clear();
+        this.hud?.setTrayCount(0);
         this.hud?.clearCapturedModels();
         this.removedCount = 0;
         this.level = LEVELS[Math.min(this.levelIndex, LEVELS.length - 1)];
