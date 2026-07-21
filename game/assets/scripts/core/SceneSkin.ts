@@ -1,4 +1,5 @@
 import { Color } from 'cc';
+import { BoundaryDef } from './ContainerBoundary';
 
 /**
  * 场景皮肤（换肤只换外观，不改玩法与物理边界）。
@@ -35,6 +36,12 @@ export interface SceneSkin {
     backdropTex?: string;
     /** 木盒三大部件粗糙度：塑料/瓷器更小更亮，木头留空用默认 0.85。 */
     gloss?: number;
+    /**
+     * 承载物边界（换成圆锅/圆碗/圆筐等造型时声明）。留空 = 沿用默认矩形边界。
+     * 声明后物理围栏、逃逸判定、视觉兜底、投放种子全部按该形状生效，物品不会离开容器。
+     * 注意：非矩形场景还需在 GameManager.buildBox 里替换对应的可见容器几何。
+     */
+    boundary?: BoundaryDef;
 }
 
 /**

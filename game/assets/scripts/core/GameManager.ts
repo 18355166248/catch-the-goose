@@ -6,6 +6,7 @@ import {
 } from 'cc';
 import { LEVELS, LevelDef } from './LevelConfig';
 import { SceneSkin, getSkin, DEFAULT_SKIN_ID } from './SceneSkin';
+import { ContainerBoundary, BoundaryDef } from './ContainerBoundary';
 import { SlotTray, TRAY_CAPACITY } from './SlotTray';
 import { ItemTag } from './ItemTag';
 import { MODEL_PREFAB_UUID } from './ModelManifest';
@@ -77,6 +78,11 @@ export class GameManager extends Component {
     private static readonly VISIBLE_HALF_X = 1.70;
     private static readonly VISIBLE_MIN_Z = -2.25;
     private static readonly VISIBLE_MAX_Z = 0.48;
+    /**
+     * 当前容器边界。buildBox 时按皮肤重建：矩形容器用默认边界（与上面常量一字不差），
+     * 圆锅/圆碗等在皮肤里声明 boundary 即整体切换。围栏、逃逸、视觉兜底、投放全走它。
+     */
+    private boundary: ContainerBoundary = GameManager.makeBoundary(undefined);
     private settleToken = 0;
     /** 本关物件基准缩放:少件关卡放大物件,保证盒子饱满、目标好点。 */
     private itemScale = 0.46;
@@ -227,9 +233,7 @@ export class GameManager extends Component {
             this.patrolTimer = 0;
             // 中心点巡检只处理真正穿墙；可见外轮廓由 constrainVisualInside 单独保护。
             // 不再在墙内反复“拉回”，否则密集刚体会被持续重新唤醒并产生抖动。
-            const limX = GameManager.FENCE_HALF_X + 0.15;
-            const minZ = GameManager.FENCE_CENTER_Z - GameManager.FENCE_HALF_Z - 0.15;
-            const maxZ = GameManager.FENCE_CENTER_Z + GameManager.FENCE_HALF_Z + 0.15;
+            // 逃逸判定交给当前边界（矩形/圆形通用），巡检本身不再假设容器是矩形。
             const vel = v3();
             const ang = v3();
             // 第一遍：收集所有仍为动态的物件及其运动强度，供邻域安静判断。
@@ -263,13 +267,9 @@ export class GameManager extends Component {
                     rb.angularDamping = 0.94;
                 }
                 const p = t.node.worldPosition;
-                const escaped = Math.abs(p.x) > limX || p.z < minZ || p.z > maxZ || p.y < -0.05;
-                if (escaped) {
-                    t.node.setWorldPosition(
-                        (Math.random() - 0.5) * 1.4,
-                        2.2,
-                        GameManager.FENCE_CENTER_Z + (Math.random() - 0.5) * 1.2,
-                    );
+                if (this.boundary.isEscaped(p.x, p.z, p.y)) {
+                    const rp = this.boundary.respawn(Math.random);
+                    t.node.setWorldPosition(rp.x, 2.2, rp.z);
                     try { rb.clearState(); } catch { /* 忽略 */ }
                     rb.linearDamping = 0.06;
                     rb.angularDamping = 0.3;
@@ -407,6 +407,28 @@ export class GameManager extends Component {
         this.audio?.play('prop');
     }
 
+    /**
+     * 由皮肤的边界声明构造容器边界；未声明则回落到默认矩形（与本类常量一字不差，
+     * 保证现有 6 套矩形皮肤的围栏 / 逃逸 / 视觉兜底行为完全不变）。
+     */
+    private static makeBoundary(def: BoundaryDef | undefined): ContainerBoundary {
+        if (def) return new ContainerBoundary(def);
+        return new ContainerBoundary({
+            wall: {
+                kind: 'rect', cx: 0,
+                cz: GameManager.FENCE_CENTER_Z,
+                halfX: GameManager.FENCE_HALF_X,
+                halfZ: GameManager.FENCE_HALF_Z,
+            },
+            clamp: {
+                kind: 'rect', cx: 0,
+                cz: (GameManager.VISIBLE_MIN_Z + GameManager.VISIBLE_MAX_Z) / 2,
+                halfX: GameManager.VISIBLE_HALF_X,
+                halfZ: (GameManager.VISIBLE_MAX_Z - GameManager.VISIBLE_MIN_Z) / 2,
+            },
+        });
+    }
+
     private buildBox() {
         // 容器视觉与围栏统一挂在可重建的 SceneRoot 下，换肤时整体替换。
         const root = new Node('SceneRoot');
@@ -415,6 +437,9 @@ export class GameManager extends Component {
 
         // 调色板来自当前皮肤：底板、厚框、内沿、格栅、金件、阴影、背景全部换色，玩法不变。
         const skin = this.currentSkin();
+        // 边界随皮肤重建：矩形皮肤得到与常量一字不差的默认边界；圆锅/圆碗皮肤声明
+        // boundary 后，围栏 / 逃逸 / 视觉兜底 / 投放种子全部按该形状生效，物品不出界。
+        this.boundary = GameManager.makeBoundary(skin.boundary);
         const floorMat = this.makeMat(skin.floor.color, skin.floor.tex, true, skin.gloss);
         const frameMat = this.makeMat(skin.frame.color, skin.frame.tex, true, skin.gloss);
         const rimMat = this.makeMat(skin.rim.color, skin.rim.tex, true, skin.gloss);
@@ -447,16 +472,12 @@ export class GameManager extends Component {
         this.makeVisualBox('hingeLeft', v3(-1.89, 0.42, -1.15), v3(0.08, 0.62, 0.22), goldMat);
         this.makeVisualBox('hingeRight', v3(1.89, 0.42, -1.15), v3(0.08, 0.62, 0.22), goldMat);
 
-        // 隐形围栏（只有碰撞体，无渲染）：厚 1.2、下探到台面以下，杜绝高速隧穿和底缝钻出
-        // 矩形内壁严格贴合手机画面中的可见木盒，前后不再留出“看不见但能滚入”的区域。
+        // 隐形围栏（只有碰撞体，无渲染）：厚 1.2、下探到台面以下，杜绝高速隧穿和底缝钻出。
+        // 墙段由当前边界生成——矩形出 4 面厚墙（与旧硬编码等价），圆形出一圈切向环段。
         const WH = 7, WT = 1.2, WY = WH / 2 - 1; // 竖向覆盖 -1 ~ 6
-        const FX = GameManager.FENCE_HALF_X;
-        const FZ = GameManager.FENCE_HALF_Z;
-        const CZ = GameManager.FENCE_CENTER_Z;
-        this.makeInvisibleWall('fenceN', v3(0, WY, CZ - FZ - WT / 2), v3(FX * 2 + WT * 2, WH, WT));
-        this.makeInvisibleWall('fenceS', v3(0, WY, CZ + FZ + WT / 2), v3(FX * 2 + WT * 2, WH, WT));
-        this.makeInvisibleWall('fenceW', v3(-FX - WT / 2, WY, CZ), v3(WT, WH, FZ * 2));
-        this.makeInvisibleWall('fenceE', v3(FX + WT / 2, WY, CZ), v3(WT, WH, FZ * 2));
+        for (const w of this.boundary.buildWallSpecs(WH, WY, WT)) {
+            this.makeInvisibleWall(w.name, w.pos, w.size, w.yawDeg);
+        }
 
         // 大背景板 + 外框，模拟参考图中玻璃柜/木柜环境。
         const bg = this.makeMat(skin.backdrop, skin.backdropTex ?? 'backdrop', false);
@@ -471,11 +492,12 @@ export class GameManager extends Component {
         // 七格收集区属于屏幕 HUD，由 HudUI 负责；世界空间只保留可替换的 3D 容器。
     }
 
-    /** 只有物理没有外观的围栏 */
-    private makeInvisibleWall(name: string, pos: Vec3, size: Vec3) {
+    /** 只有物理没有外观的围栏；yawDeg 用于圆容器的切向环段（矩形墙传 0）。 */
+    private makeInvisibleWall(name: string, pos: Vec3, size: Vec3, yawDeg = 0) {
         const n = new Node(name);
         n.setParent(this.sceneRoot ?? this.node);
         n.setPosition(pos);
+        if (yawDeg) n.setRotationFromEuler(0, yawDeg, 0);
         const rb = n.addComponent(RigidBody);
         rb.type = RigidBody.Type.STATIC;
         const col = n.addComponent(BoxCollider);
@@ -614,12 +636,14 @@ export class GameManager extends Component {
                 const angle = idx * 2.399963 + (this.levelRandom() - 0.5) * 0.3;
                 // 半径随投放进度连续扩大：视觉上仍是从中心长出一堆，
                 // 但后续物件会自然填满篮底，不会永远压在后半区。
-                const radius = 0.1 + Math.sqrt(index / Math.max(1, queue.length - 1)) * 0.58;
+                // 种子盘按容器内切半径缩放：矩形为 1（行为不变），更小的圆容器自动收窄。
+                const radius = (0.1 + Math.sqrt(index / Math.max(1, queue.length - 1)) * 0.58)
+                    * this.boundary.seedScale();
                 // 生成点抬到可视区外的高处：物件是"倒进来"的，而不是在画面里凭空出现。
                 n.setPosition(
-                    Math.cos(angle) * radius + (this.levelRandom() - 0.5) * 0.12,
+                    this.boundary.centerX + Math.cos(angle) * radius + (this.levelRandom() - 0.5) * 0.12,
                     4.2 + (idx % 5) * 0.22,
-                    GameManager.FENCE_CENTER_Z + 0.1
+                    this.boundary.centerZ + 0.1
                         + Math.sin(angle) * radius * 0.72
                         + (this.levelRandom() - 0.5) * 0.08,
                 );
@@ -764,14 +788,12 @@ export class GameManager extends Component {
         }
         if (!hasBounds) return false;
 
-        let dx = 0;
-        let dz = 0;
-        if (min.x < -GameManager.VISIBLE_HALF_X) dx = -GameManager.VISIBLE_HALF_X - min.x;
-        if (max.x + dx > GameManager.VISIBLE_HALF_X) dx += GameManager.VISIBLE_HALF_X - (max.x + dx);
-        if (min.z < GameManager.VISIBLE_MIN_Z) dz = GameManager.VISIBLE_MIN_Z - min.z;
-        if (max.z + dz > GameManager.VISIBLE_MAX_Z) dz += GameManager.VISIBLE_MAX_Z - (max.z + dz);
-        // 2cm 以下的误差不修正，避免边界附近因浮点噪声来回移动。
-        if (Math.abs(dx) < 0.02 && Math.abs(dz) < 0.02) return false;
+        // 把渲染 AABB 拉回当前边界的 clamp 形状内（矩形/圆形通用）；
+        // 位移都小于 2cm（浮点噪声级）时返回 null，避免边界附近来回抖。
+        const res = this.boundary.clampAabb(min.x, max.x, min.z, max.z);
+        if (!res) return false;
+        let dx = res.dx;
+        let dz = res.dz;
         dx = Math.max(-maxStep, Math.min(maxStep, dx));
         dz = Math.max(-maxStep, Math.min(maxStep, dz));
 
@@ -1046,11 +1068,9 @@ export class GameManager extends Component {
             const rbBack = e.node.getComponent(RigidBody)!;
             rbBack.linearDamping = 0.06;
             rbBack.angularDamping = 0.3;
-            e.node.setWorldPosition(
-                (Math.random() - 0.5) * 1.2,
-                1.3 + i * 0.5,
-                GameManager.FENCE_CENTER_Z + (Math.random() - 0.5) * 1.1,
-            );
+            // 落点走通用边界的回收点：矩形/圆形容器都能保证落在承载物内，逐件抬高错开。
+            const rp = this.boundary.respawn(Math.random);
+            e.node.setWorldPosition(rp.x, 1.3 + i * 0.5, rp.z);
             e.node.setScale(this.itemScale, this.itemScale, this.itemScale);
             this.setNaturalRotation(e.node, tag.id);
             const rb = e.node.getComponent(RigidBody)!;
@@ -1102,13 +1122,14 @@ export class GameManager extends Component {
         if (boxItems.length === 0) return false;
         this.shuffleInPlace(boxItems);
         for (const [i, t] of boxItems.entries()) {
-            // 重洗也沿用中央灌入，保证容器变化后仍自然向边缘摊开。
+            // 重洗也沿用中央灌入，保证容器变化后仍自然向边缘摊开。种子盘随边界缩放。
             const angle = (i + 1) * 2.399963;
-            const radius = 0.1 + Math.sqrt(i / Math.max(1, boxItems.length - 1)) * 0.58;
+            const radius = (0.1 + Math.sqrt(i / Math.max(1, boxItems.length - 1)) * 0.58)
+                * this.boundary.seedScale();
             t.node.setWorldPosition(
-                Math.cos(angle) * radius + (Math.random() - 0.5) * 0.1,
+                this.boundary.centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 0.1,
                 1.55 + (i % 6) * 0.1,
-                GameManager.FENCE_CENTER_Z + 0.1
+                this.boundary.centerZ + 0.1
                     + Math.sin(angle) * radius * 0.72
                     + (Math.random() - 0.5) * 0.06);
             this.setNaturalRotation(t.node, t.id);
