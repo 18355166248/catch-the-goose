@@ -2,7 +2,7 @@
   "ver": "1.0.27",
   "importer": "image",
   "imported": true,
-  "uuid": "1d3db86e-8dd8-4f38-a6d5-ceffbcc3c807",
+  "uuid": "d8b9346c-5c8a-48ae-b6ca-ae6a711a06ae",
   "files": [
     ".jpg",
     ".json"
@@ -10,8 +10,8 @@
   "subMetas": {
     "6c48a": {
       "importer": "texture",
-      "uuid": "1d3db86e-8dd8-4f38-a6d5-ceffbcc3c807@6c48a",
-      "displayName": "backdrop",
+      "uuid": "d8b9346c-5c8a-48ae-b6ca-ae6a711a06ae@6c48a",
+      "displayName": "bg_redwood",
       "id": "6c48a",
       "name": "texture",
       "userData": {
@@ -22,7 +22,7 @@
         "mipfilter": "none",
         "anisotropy": 0,
         "isUuid": true,
-        "imageUuidOrDatabaseUri": "1d3db86e-8dd8-4f38-a6d5-ceffbcc3c807",
+        "imageUuidOrDatabaseUri": "d8b9346c-5c8a-48ae-b6ca-ae6a711a06ae",
         "visible": false
       },
       "ver": "1.0.22",
@@ -37,6 +37,6 @@
     "type": "texture",
     "fixAlphaTransparencyArtifacts": false,
     "hasAlpha": false,
-    "redirect": "1d3db86e-8dd8-4f38-a6d5-ceffbcc3c807@6c48a"
+    "redirect": "d8b9346c-5c8a-48ae-b6ca-ae6a711a06ae@6c48a"
   }
 }

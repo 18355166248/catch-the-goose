@@ -480,7 +480,7 @@ export class GameManager extends Component {
         }
 
         // 大背景板 + 外框，模拟参考图中玻璃柜/木柜环境。
-        const bg = this.makeMat(skin.backdrop, skin.backdropTex ?? 'backdrop', false);
+        const bg = this.makeMat(skin.backdrop, skin.backdropTex, false);
         this.makeVisualBox('backdrop', v3(0, -0.92, -2), v3(44, 0.1, 44), bg);
         this.makeVisualBox('cabinetLeft', v3(-3.25, -0.46, -0.2), v3(0.34, 0.32, 12), frameMat);
         this.makeVisualBox('cabinetRight', v3(3.25, -0.46, -0.2), v3(0.34, 0.32, 12), frameMat);
