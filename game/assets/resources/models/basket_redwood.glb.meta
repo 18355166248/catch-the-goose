@@ -1,0 +1,239 @@
+{
+  "ver": "2.3.14",
+  "importer": "gltf",
+  "imported": true,
+  "uuid": "82b77047-d7d0-493d-a4d2-c2944e3baddb",
+  "files": [],
+  "subMetas": {
+    "71714": {
+      "importer": "gltf-embeded-image",
+      "uuid": "82b77047-d7d0-493d-a4d2-c2944e3baddb@71714",
+      "displayName": "",
+      "id": "71714",
+      "name": "bamboo+basket+3d+model_normal.jpg.image",
+      "userData": {
+        "gltfIndex": 2,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".jpg",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "349e2": {
+      "importer": "gltf-mesh",
+      "uuid": "82b77047-d7d0-493d-a4d2-c2944e3baddb@349e2",
+      "displayName": "",
+      "id": "349e2",
+      "name": "meshes[0].mesh",
+      "userData": {
+        "gltfIndex": 0,
+        "triangleCount": 10046
+      },
+      "ver": "1.1.1",
+      "imported": true,
+      "files": [
+        ".bin",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "e7d81": {
+      "importer": "gltf-embeded-image",
+      "uuid": "82b77047-d7d0-493d-a4d2-c2944e3baddb@e7d81",
+      "displayName": "",
+      "id": "e7d81",
+      "name": "bamboo+basket+3d+model_basecolor.jpg.image",
+      "userData": {
+        "gltfIndex": 0,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".jpg",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "07c73": {
+      "importer": "gltf-embeded-image",
+      "uuid": "82b77047-d7d0-493d-a4d2-c2944e3baddb@07c73",
+      "displayName": "",
+      "id": "07c73",
+      "name": "bamboo+basket+3d+model_rm.jpg.image",
+      "userData": {
+        "gltfIndex": 1,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".jpg",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "3effa": {
+      "importer": "texture",
+      "uuid": "82b77047-d7d0-493d-a4d2-c2944e3baddb@3effa",
+      "displayName": "",
+      "id": "3effa",
+      "name": "UnnamedTexture-0.texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "82b77047-d7d0-493d-a4d2-c2944e3baddb@e7d81"
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "221a5": {
+      "importer": "texture",
+      "uuid": "82b77047-d7d0-493d-a4d2-c2944e3baddb@221a5",
+      "displayName": "",
+      "id": "221a5",
+      "name": "UnnamedTexture-1.texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "82b77047-d7d0-493d-a4d2-c2944e3baddb@71714"
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "0089c": {
+      "importer": "texture",
+      "uuid": "82b77047-d7d0-493d-a4d2-c2944e3baddb@0089c",
+      "displayName": "",
+      "id": "0089c",
+      "name": "UnnamedTexture-2.texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "82b77047-d7d0-493d-a4d2-c2944e3baddb@07c73"
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "0d73e": {
+      "importer": "gltf-material",
+      "uuid": "82b77047-d7d0-493d-a4d2-c2944e3baddb@0d73e",
+      "displayName": "",
+      "id": "0d73e",
+      "name": "tripo_material_a13c293c-2e28-4616-ada8-150f4e3ced74.material",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "170e6": {
+      "importer": "gltf-scene",
+      "uuid": "82b77047-d7d0-493d-a4d2-c2944e3baddb@170e6",
+      "displayName": "",
+      "id": "170e6",
+      "name": "basket_redwood.prefab",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "imageMetas": [
+      {
+        "name": "bamboo+basket+3d+model_basecolor.jpg",
+        "uri": "82b77047-d7d0-493d-a4d2-c2944e3baddb@e7d81"
+      },
+      {
+        "name": "bamboo+basket+3d+model_rm.jpg",
+        "uri": "82b77047-d7d0-493d-a4d2-c2944e3baddb@07c73"
+      },
+      {
+        "name": "bamboo+basket+3d+model_normal.jpg",
+        "uri": "82b77047-d7d0-493d-a4d2-c2944e3baddb@71714"
+      }
+    ],
+    "lods": {
+      "enable": false,
+      "hasBuiltinLOD": false,
+      "options": [
+        {
+          "screenRatio": 0.25,
+          "faceCount": 1
+        },
+        {
+          "screenRatio": 0.125,
+          "faceCount": 0.25
+        },
+        {
+          "screenRatio": 0.01,
+          "faceCount": 0.1
+        }
+      ]
+    },
+    "assetFinder": {
+      "meshes": [
+        "82b77047-d7d0-493d-a4d2-c2944e3baddb@349e2"
+      ],
+      "skeletons": [],
+      "textures": [
+        "82b77047-d7d0-493d-a4d2-c2944e3baddb@3effa",
+        "82b77047-d7d0-493d-a4d2-c2944e3baddb@221a5",
+        "82b77047-d7d0-493d-a4d2-c2944e3baddb@0089c"
+      ],
+      "materials": [
+        "82b77047-d7d0-493d-a4d2-c2944e3baddb@0d73e"
+      ],
+      "scenes": [
+        "82b77047-d7d0-493d-a4d2-c2944e3baddb@170e6"
+      ]
+    }
+  }
+}
