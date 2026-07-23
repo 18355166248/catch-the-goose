@@ -2178,17 +2178,11 @@
   },
   {
     "__type__": "cc.SkyboxInfo",
-    "_envmap": {
-      "__uuid__": "5af201b5-5951-4e2c-a81f-ac4aad9132cb@b47c0"
-    },
-    "_enabled": true,
+    "_envmap": null,
+    "_enabled": false,
     "_useHDR": true,
-    "_envmapLDR": {
-      "__uuid__": "5af201b5-5951-4e2c-a81f-ac4aad9132cb@b47c0"
-    },
-    "_envmapHDR": {
-      "__uuid__": "5af201b5-5951-4e2c-a81f-ac4aad9132cb@b47c0"
-    },
+    "_envmapLDR": null,
+    "_envmapHDR": null,
     "_diffuseMapLDR": null,
     "_diffuseMapHDR": null,
     "_envLightingType": 0
