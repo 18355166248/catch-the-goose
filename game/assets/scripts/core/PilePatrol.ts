@@ -17,6 +17,33 @@ import { ContainerBoundary } from './ContainerBoundary';
  * 通过本类实例复用它。逻辑与原 update 内联版本一字不差，仅移动位置。
  */
 export class PilePatrol {
+    /**
+     * 静止微颤冻结阈值:约 0.6~0.75s 内空间振幅小于此值(米)即判定"已钉在原位",直接冻结。
+     * 调小 = 更严格(要几乎完全不动才冻,残留微颤时间略长);调大 = 更早冻但可能掐掉真实微沉降。
+     */
+    private static readonly PIN_AMP = 0.02;
+    /**
+     * 逐周期"钉住"判据:单个巡检周期(0.15s)内净位移小于此值(米)记一次,连续 PIN_TICKS 次即冻结。
+     * 比 PIN_AMP 的 0.75s 窗口更快(约 0.45s)逮住微颤,缩短落定后的残留抖动时间。
+     * 微颤的逐周期净位移≈0,真实滚动/滑动会超过它而清零计数,不会误冻。
+     */
+    private static readonly PIN_STEP = 0.000;
+    private static readonly PIN_TICKS = 3;
+    /**
+     * 整堆静定阈值:当**所有**动态物件的运动强度 eff 都低于此值(没有任何一件还在真正下落/滚动,
+     * 只剩接触求解的原地高频微颤),立刻整堆冻结,而不是干等 schedulePileSettle 的固定定时器。
+     * 这消除了"落定后到强制冻结之间那 1~2s 的明显抖动窗口"。
+     * 调小 = 更晚锁(要更彻底静止,残留抖动久);调大 = 更早锁但可能掐掉尚在缓慢滚定的物件。
+     */
+    private static readonly PILE_CALM = 0.35;
+    /**
+     * 微颤即锁:一件的 eff 已降到微颤级(< PILE_CALM)且本周期净位移小于此值(米)——
+     * 即"低速 + 不平移",是微颤的专属特征——单个巡检周期即冻,不等 2 拍、不等整堆钉子户。
+     * 这是压掉"暂停前几百毫秒残留抖动"的关键:已静下来的物件各自立刻锁死,不再陪跑。
+     * 真在滚入位(净位移大)或半空下落(eff 高)的物件都不会被误锁。
+     */
+    private static readonly SETTLE_STEP = 0.01;
+
     private boundary: ContainerBoundary;
     private patrolTimer = 0;
 
@@ -65,13 +92,26 @@ export class PilePatrol {
             rb.type = RigidBody.Type.KINEMATIC;
         };
 
+        // 整堆静定:没有任何一件还在真正下落/滚动(全体 eff 都降到微颤级)→ 整堆立即冻结。
+        // 直击"落定到强制冻结之间那 1~2s 抖动窗口"——一静即锁,而非死等定时器。
+        // 只要还有一件在真运动就跳过(maxEff 高),不会误冻正在下落的堆。
+        if (dyn.length > 0) {
+            let maxEff = 0;
+            for (const it of dyn) maxEff = Math.max(maxEff, it.eff);
+            if (maxEff < PilePatrol.PILE_CALM) {
+                for (const it of dyn) freeze(it.t, it.rb);
+                return;
+            }
+        }
+
         for (const it of dyn) {
             const { t, rb, speed, eff } = it;
-            // 两段阻尼:下落/翻滚用低阻尼保真实,进入低速沉降段切高阻尼快速耗能,
-            // 圆环类"落定前反复摇摆"两下内停稳,不再靠位置修正硬掐。
+            // 两段阻尼:下落/翻滚用低阻尼保真实,进入低速沉降段切高阻尼快速耗能。
+            // 阻尼加狠(0.85/0.98)让残余微颤能量更快耗尽、振幅塌到 PIN_AMP 以下,
+            // 使冻结判据更早触发,缩短落定后的残留抖动。
             if (eff < 0.35 && rb.linearDamping < 0.3) {
-                rb.linearDamping = 0.6;
-                rb.angularDamping = 0.94;
+                rb.linearDamping = 0.85;
+                rb.angularDamping = 0.98;
             }
             const p = t.node.worldPosition;
             if (this.boundary.isEscaped(p.x, p.z, p.y)) {
@@ -84,6 +124,7 @@ export class PilePatrol {
                 rb.setAngularVelocity(v3());
                 t.slowTicks = 0;
                 t.rattleTicks = 0;
+                t.pinTicks = 0;
                 t.lastPY = -99;
                 t.trail.length = 0;
                 t.effWin.length = 0;
@@ -96,6 +137,23 @@ export class PilePatrol {
             // (≈0.45s)即认定为打转，掐掉速度直接锁死——它本来就"停"在那了。
             const moved = Math.hypot(p.x - t.lastPX, p.y - t.lastPY, p.z - t.lastPZ);
             t.lastPX = p.x; t.lastPY = p.y; t.lastPZ = p.z;
+            // 微颤即锁(单周期,逐件,不等整堆):运动强度已降到微颤级 + 本周期几乎没平移
+            // = 已静下来只在原地颤 → 立刻冻结。这是压掉"暂停前几百毫秒残留抖动"的关键。
+            // 半空下落 eff 高、真滚入位 moved 大,都不满足,不会误锁。
+            if (eff < PilePatrol.PILE_CALM && moved < PilePatrol.SETTLE_STEP) {
+                freeze(t, rb);
+                continue;
+            }
+            // 逐周期钉住:净位移连续多周期都极小 = 已停在原位、只是在高频颤,直接冻结。
+            // 无视速度、绕开 busyNeighbor,比 0.75s 的 amp 窗口更快逮住微颤(约 0.45s)。
+            if (moved < PilePatrol.PIN_STEP) {
+                if (++t.pinTicks >= PilePatrol.PIN_TICKS) {
+                    freeze(t, rb);
+                    continue;
+                }
+            } else {
+                t.pinTicks = 0;
+            }
             // 阈值 0.08 与慢冻结阈值 0.07 首尾相接,不给"低强度持续震颤"留缝隙。
             const expectedPath = eff * 0.15;
             if (eff > 0.08 && moved < expectedPath * 0.45) {
@@ -139,7 +197,13 @@ export class PilePatrol {
                 // 平均运动强度不受 0.15s 采样对高频振荡的路径混叠影响:
                 // 持续有速度、振幅却极小,同样判定为原地振荡。
                 const avgEff = t.effWin.reduce((a, b) => a + b, 0) / t.effWin.length;
-                if ((path > 0.038 || avgEff > 0.09) && amp < Math.max(0.025, path * 0.3)) {
+                // 静止微颤专治(“已落定却一直抖”):约 0.6~0.75s 内位置始终困在 2cm 的
+                // 小 blob 里(空间振幅极小)= 实际没移动,只是接触求解在原地高频颤。
+                // 无视瞬时速度直接冻结——闭合速度死区 [0.07,0.09],并绕开 busyNeighbor 死锁
+                // (一片物件同时微颤时,逐件冻结会因邻居都在抖而互相卡住,永不冻结)。
+                // 已钉在原位的物件冻结不会推挤邻居,安全。
+                if (amp < PilePatrol.PIN_AMP
+                    || ((path > 0.038 || avgEff > 0.09) && amp < Math.max(0.025, path * 0.3))) {
                     freeze(t, rb);
                     continue;
                 }

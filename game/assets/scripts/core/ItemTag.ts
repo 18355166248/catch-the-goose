@@ -11,6 +11,8 @@ export class ItemTag extends Component {
     slowTicks = 0;
     /** 原地打转计数:速度不小但位置几乎不动(被夹缝反复弹) → 强制冻结。 */
     rattleTicks = 0;
+    /** 逐周期净位移极小的连续计数:命中即"已钉在原位",无视速度直接冻结,专治静止微颤。 */
+    pinTicks = 0;
     /** 上个巡逻周期的世界坐标,供打转检测比较。 */
     lastPX = 0;
     lastPY = -99;

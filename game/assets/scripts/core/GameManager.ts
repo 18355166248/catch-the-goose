@@ -1,9 +1,10 @@
 import {
     _decorator, Component, Node, Camera, Label, instantiate,
-    RigidBody, BoxCollider, MeshRenderer,
+    RigidBody, BoxCollider, Collider, CylinderCollider, EAxisDirection, MeshRenderer,
     PhysicsSystem, input, Input, EventTouch, tween, Tween, v3, Vec3, Quat, Mat4, geometry, screen,
-    Layers, PhysicsMaterial,
+    Layers, PhysicsMaterial, Color,
 } from 'cc';
+import { DebugViz } from './DebugViz';
 import { LEVELS, LevelDef } from './LevelConfig';
 import { SceneSkin, getSkin, DEFAULT_SKIN_ID } from './SceneSkin';
 import { ContainerBoundary, BoundaryDef } from './ContainerBoundary';
@@ -75,6 +76,11 @@ export class GameManager extends Component {
     private static readonly FENCE_HALF_X = 1.35;
     private static readonly FENCE_CENTER_Z = -0.88;
     private static readonly FENCE_HALF_Z = 1.42;
+    /**
+     * 调试开关：把隐形围栏 / 地板顶面 / boundary 形状渲成半透明盒叠在容器上，
+     * 用来对齐物理容纳与视觉容器（穿模排查）。发布前保持 false。
+     */
+    private static readonly DEBUG_FENCE = false;
     /** 模型外轮廓允许占用的最终可见范围（不是节点中心范围）。 */
     private static readonly VISIBLE_HALF_X = 1.70;
     private static readonly VISIBLE_MIN_Z = -2.25;
@@ -89,6 +95,35 @@ export class GameManager extends Component {
     private settleToken = 0;
     /** 本关物件基准缩放:少件关卡放大物件,保证盒子饱满、目标好点。 */
     private itemScale = 0.46;
+
+    // ===== 堆叠投放旋钮(具名化,便于后续调参) =====
+    /** 基准物件缩放(对应满关 66 件)。调大 = 模型整体更大更饱满。 */
+    private static readonly PILE_ITEM_BASE = 0.65;
+    /** 少件关卡放大后的上限,防止超出容器。与 BASE 同向调。 */
+    private static readonly PILE_ITEM_MAX = 0.78;
+    /** 投放盘扩张半径系数:越小物件越往中心落、越易相互穿插。 */
+    private static readonly PILE_SPREAD = 0.58;
+    /** 逐件投放间隔(秒/件):越小灌入越快、总时长越短,但同时在场刚体更多、穿插更深。 */
+    private static readonly SPAWN_INTERVAL = 0.03;
+    /** 兜底强制冻结延迟(末件投放后再等这么久整堆硬冻)。巡检自锁通常早已完成,这里只兜底。 */
+    private static readonly SETTLE_BACKSTOP = 1.0;
+    /**
+     * 逐件定时硬冻:每件 spawn 后经过此时长(落体~0.6s + 短沉降)即无条件冻成 KINEMATIC。
+     * 关键:高频挤压抖动在 0.15s 巡检下会混叠、检测抓不住,而"到点直接冻"不依赖检测——
+     * 无论它抖得多凶,到点即锁。每件各自计时 → 早落的物件不必陪着整堆抖一整个投放期。
+     * 调大 = 给沉降更多时间(更可能落到位,但抖动窗口更长);调小 = 更早锁死(抖动窗口更短)。
+     */
+    private static readonly SPAWN_FREEZE_DELAY = 0.9;
+    /** 出生缩放弹大("从小变大"):spawn 时缩放起始比例(相对目标),越小弹得越夸张。 */
+    private static readonly SPAWN_POP_FROM = 0.3;
+    /** 弹大时长(秒)。必须显著短于落体时间(~0.6s),保证长大发生在无接触的自由下落段,不推挤邻居。 */
+    private static readonly SPAWN_POP_TIME = 0.15;
+    /**
+     * 圆形/环形物件:用圆柱碰撞体而非方盒。方盒的四个空角埋在堆里会被邻居深插 → 求解器狂弹 →
+     * 高速抖(尤以手串等环形最明显)。圆柱无角、贴合圆盘轮廓,密堆时接触干净、抖动大减。
+     * 玉牌(yupai)是矩形薄片,仍用方盒。
+     */
+    private static readonly ROUND_ITEMS = new Set(['banzhi', 'bracelet', 'pingankou', 'tongqian', 'yuzhuo']);
     /** 只服务于初始堆叠的确定性随机流，不受巡逻、道具等运行时随机行为干扰。 */
     private levelRandomState = 1;
 
@@ -295,8 +330,22 @@ export class GameManager extends Component {
         // 隐形围栏（只有碰撞体，无渲染）：厚 1.2、下探到台面以下，杜绝高速隧穿和底缝钻出。
         // 墙段由当前边界生成——矩形出 4 面厚墙（与旧硬编码等价），圆形出一圈切向环段。
         const WH = 7, WT = 1.2, WY = WH / 2 - 1; // 竖向覆盖 -1 ~ 6
-        for (const w of this.boundary.buildWallSpecs(WH, WY, WT)) {
+        const wallSpecs = this.boundary.buildWallSpecs(WH, WY, WT);
+        for (const w of wallSpecs) {
             this.makeInvisibleWall(w.name, w.pos, w.size, w.yawDeg);
+        }
+
+        // 调试：把物理容纳画出来叠在容器上，用于对齐视觉容器、排查穿模。
+        if (GameManager.DEBUG_FENCE) {
+            // 围栏墙段：青色半透明，直接勾出 boundary 的 XZ 形状（矩形 4 面 / 圆形环段）。
+            for (const w of wallSpecs) {
+                DebugViz.box(root, `dbg_${w.name}`, w.pos, w.size, w.yawDeg, new Color(0, 200, 255, 70));
+            }
+            // 物理静止面（地板顶面 y=0，始终是那块矩形底板）：物件实际停靠的高度。
+            // 薄黄片，用来比对容器可见内底是否与之齐平（不齐 = 悬空或陷底穿模）。
+            DebugViz.box(root, 'dbg_restPlane',
+                v3(0, 0, -0.88), v3(4.1, 0.02, 4.15),
+                0, new Color(255, 220, 0, 80));
         }
 
         // 背景改由 SceneBackground 的全屏 2D Sprite 承接（skin.backdrop/backdropTex），
@@ -410,15 +459,15 @@ export class GameManager extends Component {
         }
         this.shuffleInPlace(queue, () => this.levelRandom());
         this.totalCount = queue.length;
-        // 66 件对应 0.46;件数减少按体积等比放大,上限 0.64 防止超出容器。
-        this.itemScale = Math.min(0.64, 0.46 * Math.cbrt(66 / Math.max(1, queue.length)));
+        // 66 件对应 BASE;件数减少按体积等比放大,上限 MAX 防止超出容器。
+        this.itemScale = Math.min(GameManager.PILE_ITEM_MAX,
+            GameManager.PILE_ITEM_BASE * Math.cbrt(66 / Math.max(1, queue.length)));
 
         queue.forEach((id, index) => {
             const prefab = this.prefabs.get(id)!;
             const idx = index + 1;
-            // 参考录屏约 2.5~3 秒灌满容器；逐件投放保留真实碰撞过程，
-            // 同时避免同一帧生成几十个刚体导致求解器爆开。
-            const delay = idx * 0.04;
+            // 逐件投放保留真实碰撞过程，同时避免同一帧生成几十个刚体导致求解器爆开。
+            const delay = idx * GameManager.SPAWN_INTERVAL;
             this.scheduleOnce(() => {
                 const n = instantiate(prefab);
                 n.setParent(this.node);
@@ -429,7 +478,7 @@ export class GameManager extends Component {
                 // 半径随投放进度连续扩大：视觉上仍是从中心长出一堆，
                 // 但后续物件会自然填满篮底，不会永远压在后半区。
                 // 种子盘按容器内切半径缩放：矩形为 1（行为不变），更小的圆容器自动收窄。
-                const radius = (0.1 + Math.sqrt(index / Math.max(1, queue.length - 1)) * 0.58)
+                const radius = (0.1 + Math.sqrt(index / Math.max(1, queue.length - 1)) * GameManager.PILE_SPREAD)
                     * this.boundary.seedScale();
                 // 生成点抬到可视区外的高处：物件是"倒进来"的，而不是在画面里凭空出现。
                 n.setPosition(
@@ -441,7 +490,9 @@ export class GameManager extends Component {
                 );
                 // 参考录屏中单件约为篮宽的 1/6；66 件时形成紧凑但不过高的堆。
                 const scale = this.itemScale + (idx % 4) * 0.012;
-                n.setScale(scale, scale, scale);
+                // 出生缩放弹大("从小变大"):先设小,下方在自由下落头 SPAWN_POP_TIME 内 tween 到满。
+                const from = scale * GameManager.SPAWN_POP_FROM;
+                n.setScale(from, from, from);
 
                 const tag = n.addComponent(ItemTag);
                 tag.id = id;
@@ -453,7 +504,10 @@ export class GameManager extends Component {
                 rb.linearDamping = 0.06;
                 rb.sleepThreshold = 0.15;
                 rb.useCCD = true;
-                const col = n.addComponent(BoxCollider);
+                // 圆形/环形物件用圆柱碰撞体(消除方角互插导致的高速抖),其余用方盒。
+                const col: Collider = GameManager.ROUND_ITEMS.has(id)
+                    ? n.addComponent(CylinderCollider)
+                    : n.addComponent(BoxCollider);
                 col.sharedMaterial = this.pileMaterial;
                 this.centerVisualAndFitCollider(n, col);
                 this.setNaturalRotation(n, id, () => this.levelRandom());
@@ -467,15 +521,21 @@ export class GameManager extends Component {
                     (this.levelRandom() - 0.5) * 1.2,
                     (this.levelRandom() - 0.5) * 1.2,
                 ));
+                // 弹大动画:趁下落无接触段从 from 长到满(backOut 带轻微过冲更弹)。
+                // 碰撞体随节点缩放同步长大,但全程在半空、无接触,不会推挤邻居。
+                tween(n).to(GameManager.SPAWN_POP_TIME, { scale: v3(scale, scale, scale) },
+                    { easing: 'backOut' }).start();
                 // 物件投平面阴影
                 for (const mr of n.getComponentsInChildren(MeshRenderer)) {
                     mr.shadowCastingMode = MeshRenderer.ShadowCastingMode.ON;
                 }
+                // 逐件定时硬冻:落定所需时间后无条件锁死,不依赖检测(高频挤压抖检测抓不住)。
+                this.scheduleOnce(() => this.hardFreezeItem(n), GameManager.SPAWN_FREEZE_DELAY);
             }, delay);
         });
-        // 最后一件落下(高处下落约 0.6s)后再给物理约 1 秒自然沉降,然后锁定整堆。
+        // 最后一件落下(高处下落约 0.6s)后再给物理一段自然沉降,然后锁定整堆。
         // 巡逻里的逐件冻结通常早已把大部分物件锁死,这里只是兜底。
-        this.schedulePileSettle(queue.length * 0.04 + 1.6);
+        this.schedulePileSettle(queue.length * GameManager.SPAWN_INTERVAL + GameManager.SETTLE_BACKSTOP);
         console.log(`[GameManager] 关卡 ${this.levelIndex + 1}：生成 ${this.totalCount} 个物件，seed=${this.level.seed}`);
     }
 
@@ -484,7 +544,7 @@ export class GameManager extends Component {
      * 旧实现把碰撞盒固定放在 Prefab 根节点，视觉模型却在旁边，物理上没有真正包住模型。
      * 这里读取所有 Mesh 的局部包围盒，统一把视觉内容移回根节点中心，再按真实尺寸生成碰撞盒。
      */
-    private centerVisualAndFitCollider(root: Node, collider: BoxCollider) {
+    private centerVisualAndFitCollider(root: Node, collider: Collider) {
         // 刚实例化并 setPosition/setScale 的节点，worldMatrix 可能仍是上一帧缓存。
         // 若直接求 bounds，会把“生成落点”误算进模型自身偏移，再次平移视觉子树，
         // 结果就是碰撞体分散在篮底、所有可见模型却挤到同一侧，看起来严重穿模。
@@ -518,8 +578,8 @@ export class GameManager extends Component {
         }
 
         if (!hasBounds) {
-            // 资源尚未提供 bounds 时使用保守盒，仍比原先 0.75³ 更不容易露出模型。
-            collider.size = v3(1.05, 1.05, 1.05);
+            // 资源尚未提供 bounds 时使用保守尺寸，仍比原先 0.75³ 更不容易露出模型。
+            this.fitColliderDims(collider, 1.05, 1.05, 1.05);
             collider.center = v3();
             return;
         }
@@ -539,14 +599,51 @@ export class GameManager extends Component {
         }
         root.updateWorldTransform();
 
-        // 4% 安全余量防视觉表面相交；比旧版 12% 更贴合，避免高密度时出现明显悬空。
-        // 薄片仍至少 0.20，配合 CCD 避免单步跨越。
-        collider.size = v3(
-            Math.max(0.20, (max.x - min.x) * 1.04),
-            Math.max(0.20, (max.y - min.y) * 1.04),
-            Math.max(0.20, (max.z - min.z) * 1.04),
-        );
+        this.fitColliderDims(collider, max.x - min.x, max.y - min.y, max.z - min.z);
         collider.center = v3();
+    }
+
+    /**
+     * 按包围盒三轴尺寸设定碰撞体。
+     * 方盒:直接用尺寸(4% 安全余量防表面相交,薄片至少 0.20 配合 CCD 防单步穿越)。
+     * 圆柱:自动挑**最薄的轴**为圆柱轴向(圆盘法线,自适应各模型网格朝向),另两轴较大半长为半径。
+     */
+    private fitColliderDims(collider: Collider, ex: number, ey: number, ez: number) {
+        if (collider instanceof CylinderCollider) {
+            let axis: EAxisDirection;
+            let radius: number;
+            let height: number;
+            if (ey <= ex && ey <= ez) { axis = EAxisDirection.Y_AXIS; radius = Math.max(ex, ez) / 2; height = ey; }
+            else if (ex <= ey && ex <= ez) { axis = EAxisDirection.X_AXIS; radius = Math.max(ey, ez) / 2; height = ex; }
+            else { axis = EAxisDirection.Z_AXIS; radius = Math.max(ex, ey) / 2; height = ez; }
+            collider.direction = axis;
+            // 圆柱已贴合圆盘,余量取小(2%);高度贴合薄片厚度,下限防退化。
+            collider.radius = Math.max(0.1, radius * 1.02);
+            collider.height = Math.max(0.12, height * 1.04);
+        } else if (collider instanceof BoxCollider) {
+            collider.size = v3(
+                Math.max(0.20, ex * 1.04),
+                Math.max(0.20, ey * 1.04),
+                Math.max(0.20, ez * 1.04),
+            );
+        }
+    }
+
+    /**
+     * 单件无条件硬冻(逐件定时器回调)。不看速度/检测:高频挤压抖动检测抓不住,到点直接锁。
+     * 已被拾取/已销毁/已是运动学的跳过。冻前把视觉外轮廓拉回边界内。
+     */
+    private hardFreezeItem(n: Node) {
+        if (!n.isValid || !this.playing) return;
+        const tag = n.getComponent(ItemTag);
+        if (!tag || tag.picked) return;
+        const rb = n.getComponent(RigidBody);
+        if (!rb?.enabled || rb.type === RigidBody.Type.KINEMATIC) return;
+        this.patrol.constrainVisualInside(n, 0.03);
+        try { rb.clearState(); } catch { /* 忽略 */ }
+        rb.setLinearVelocity(v3());
+        rb.setAngularVelocity(v3());
+        rb.type = RigidBody.Type.KINEMATIC;
     }
 
     /** 延迟冻结当前堆；token 防止重开、连续拾取时旧定时器误冻新一轮运动。 */
@@ -714,7 +811,7 @@ export class GameManager extends Component {
         this.cam.worldToScreen(node.worldPosition, screenPos);
         // 物理组件失效，交给 Tween 接管
         node.getComponent(RigidBody)!.enabled = false;
-        node.getComponent(BoxCollider)!.enabled = false;
+        node.getComponent(Collider)!.enabled = false;
 
         const { matched, full, index } = this.tray.add(tag.id, node);
         this.audio?.play(tag.id === 'goose' ? 'honk' : 'pick');
@@ -804,6 +901,7 @@ export class GameManager extends Component {
             tag.picked = false;
             tag.slowTicks = 0;
             tag.rattleTicks = 0;
+            tag.pinTicks = 0;
             tag.lastPY = -99;
             tag.trail.length = 0;
             tag.effWin.length = 0;
@@ -819,10 +917,10 @@ export class GameManager extends Component {
             rb.type = RigidBody.Type.DYNAMIC;
             rb.enabled = true;
             rb.wakeUp();
-            e.node.getComponent(BoxCollider)!.enabled = true;
+            e.node.getComponent(Collider)!.enabled = true;
         });
         this.reflowTray();
-        this.schedulePileSettle(1.6);
+        this.schedulePileSettle(GameManager.SETTLE_BACKSTOP);
     }
 
     /** 凑齐：自动吸取盒中物件补全一组三消（优先补槽内已有的类别） */
@@ -866,7 +964,7 @@ export class GameManager extends Component {
         for (const [i, t] of boxItems.entries()) {
             // 重洗也沿用中央灌入，保证容器变化后仍自然向边缘摊开。种子盘随边界缩放。
             const angle = (i + 1) * 2.399963;
-            const radius = (0.1 + Math.sqrt(i / Math.max(1, boxItems.length - 1)) * 0.58)
+            const radius = (0.1 + Math.sqrt(i / Math.max(1, boxItems.length - 1)) * GameManager.PILE_SPREAD)
                 * this.boundary.seedScale();
             t.node.setWorldPosition(
                 this.boundary.centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 0.1,
@@ -877,6 +975,7 @@ export class GameManager extends Component {
             this.setNaturalRotation(t.node, t.id);
             t.slowTicks = 0;
             t.rattleTicks = 0;
+            t.pinTicks = 0;
             t.lastPY = -99;
             t.trail.length = 0;
             t.effWin.length = 0;
@@ -888,7 +987,7 @@ export class GameManager extends Component {
             rb.wakeUp();
             rb.setLinearVelocity(v3((Math.random() - 0.5) * 0.4, -1.2, (Math.random() - 0.5) * 0.4));
         }
-        this.schedulePileSettle(1.6);
+        this.schedulePileSettle(GameManager.SETTLE_BACKSTOP);
         return true;
     }
 

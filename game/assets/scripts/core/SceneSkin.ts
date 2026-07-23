@@ -55,6 +55,14 @@ export const SKINS: SceneSkin[] = [
         backdrop: WHITE(),
         backdropTex: 'bg_jade',
         containerModel: 'bowl_jade',
+        // 圆碗必须用圆边界：套默认矩形围栏时，矩形 4 角会把物件顶到碗壁外侧 = 穿模。
+        // 圆心沿用默认矩形中心 (0,-0.88)。半径为保守初值——物件先落在碗内留余量；
+        // 打开 GameManager.DEBUG_FENCE 看青色环段与碗口的差距后，逐步调大到贴合碗口。
+        // clamp 略大于 wall，给渲染外轮廓留一点缓冲。
+        boundary: {
+            wall: { kind: 'circle', cx: 0, cz: -0.88, radius: 1.65 },
+            clamp: { kind: 'circle', cx: 0, cz: -0.88, radius: 1.85 },
+        },
     },
     {
         // 藤编方托盘模型待出（见 container-model-prompts.md 第 3 条），暂无可见容器。
