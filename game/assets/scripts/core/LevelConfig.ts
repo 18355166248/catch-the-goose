@@ -15,7 +15,9 @@ export interface LevelDef {
 export const ALL_ITEMS = [
     'goose', 'baicai', 'mile', 'pixiu',
     'banzhi', 'bracelet', 'hulu', 'pingankou',
-    'tongqian', 'yupai', 'yuzhuo',
+    'tongqian', 'yuzhuo',
+    // CC0/CC-BY 新增(见 resources/models/CREDITS.md)
+    'yuanbao', 'baoshi', 'yushi', 'jingling',
 ];
 
 export const LEVELS: LevelDef[] = [
@@ -24,9 +26,9 @@ export const LEVELS: LevelDef[] = [
     { items: ['goose', 'baicai', 'tongqian', 'bracelet'], groupsPerItem: 2, timeSec: 240, seed: 104729 },
     { items: ['goose', 'banzhi', 'tongqian', 'pingankou', 'hulu'], groupsPerItem: 2, timeSec: 270, seed: 130363 },
     { items: ['goose', 'baicai', 'banzhi', 'tongqian', 'pingankou', 'yuzhuo'], groupsPerItem: 2, timeSec: 300, seed: 155921 },
-    { items: ['goose', 'baicai', 'mile', 'banzhi', 'hulu', 'tongqian', 'yupai', 'yuzhuo'], groupsPerItem: 2, timeSec: 330, seed: 181081 },
-    // 终盘关：全 11 种 × 2 组 = 66 件，展示完整灌入式堆叠。
-    { items: ALL_ITEMS, groupsPerItem: 2, timeSec: 390, seed: 206369 },
+    { items: ['goose', 'baicai', 'mile', 'banzhi', 'hulu', 'tongqian', 'yuzhuo', 'yuanbao', 'yushi', 'jingling'], groupsPerItem: 2, timeSec: 330, seed: 181081 },
+    // 终盘关：11 种 × 2 组 = 66 件（含全部 4 个新物件），密度控制在已调优的量级。
+    { items: ['goose', 'baicai', 'mile', 'pixiu', 'tongqian', 'bracelet', 'yuanbao', 'baoshi', 'yushi', 'jingling', 'hulu'], groupsPerItem: 2, timeSec: 390, seed: 206369 },
 ];
 
 /** 校验：每关物件总数必须是 3 的倍数（groupsPerItem 保证了这一点，这里防御性再查一遍） */

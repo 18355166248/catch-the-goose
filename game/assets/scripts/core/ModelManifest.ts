@@ -16,6 +16,5 @@ export const MODEL_PREFAB_UUID: Record<string, string> = {
     pingankou: '881785d5-2ec1-4f38-9c6b-e8c668ace3a0@16ff8',
     pixiu: 'b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@ccca3',
     tongqian: 'f92603ee-7571-477c-95bb-70f79e9d4a36@7e87c',
-    yupai: '7f36cfae-5ae0-4e3b-a1f7-15d264652682@da8aa',
     yuzhuo: '6e2e06ba-498c-40f0-a81d-e74e2dd7f8c5@51ccb',
 };

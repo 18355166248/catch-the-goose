@@ -43,26 +43,6 @@
       ],
       "subMetas": {}
     },
-    "8586e": {
-      "importer": "gltf-embeded-image",
-      "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@8586e",
-      "displayName": "",
-      "id": "8586e",
-      "name": "pixiu+jade+statue+3d+model_basecolor.image",
-      "userData": {
-        "gltfIndex": 1,
-        "fixAlphaTransparencyArtifacts": true,
-        "hasAlpha": false,
-        "type": "texture"
-      },
-      "ver": "1.0.3",
-      "imported": true,
-      "files": [
-        ".jpg",
-        ".json"
-      ],
-      "subMetas": {}
-    },
     "52c4e": {
       "importer": "gltf-embeded-image",
       "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@52c4e",
@@ -70,7 +50,7 @@
       "id": "52c4e",
       "name": "pixiu+jade+statue+3d+model_rm.image",
       "userData": {
-        "gltfIndex": 2,
+        "gltfIndex": 1,
         "fixAlphaTransparencyArtifacts": true,
         "hasAlpha": false,
         "type": "texture"
@@ -97,7 +77,7 @@
         "mipfilter": "linear",
         "anisotropy": 0,
         "isUuid": true,
-        "imageUuidOrDatabaseUri": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@8586e"
+        "imageUuidOrDatabaseUri": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@b5130"
       },
       "ver": "1.0.22",
       "imported": true,
@@ -112,29 +92,6 @@
       "displayName": "",
       "id": "221a5",
       "name": "UnnamedTexture-1.texture",
-      "userData": {
-        "wrapModeS": "repeat",
-        "wrapModeT": "repeat",
-        "minfilter": "linear",
-        "magfilter": "linear",
-        "mipfilter": "linear",
-        "anisotropy": 0,
-        "isUuid": true,
-        "imageUuidOrDatabaseUri": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@b5130"
-      },
-      "ver": "1.0.22",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
-    "0089c": {
-      "importer": "texture",
-      "uuid": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@0089c",
-      "displayName": "",
-      "id": "0089c",
-      "name": "UnnamedTexture-2.texture",
       "userData": {
         "wrapModeS": "repeat",
         "wrapModeT": "repeat",
@@ -192,10 +149,6 @@
         "uri": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@b5130"
       },
       {
-        "name": "pixiu+jade+statue+3d+model_basecolor",
-        "uri": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@8586e"
-      },
-      {
         "name": "pixiu+jade+statue+3d+model_rm",
         "uri": "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@52c4e"
       }
@@ -225,8 +178,7 @@
       "skeletons": [],
       "textures": [
         "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@3effa",
-        "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@221a5",
-        "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@0089c"
+        "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@221a5"
       ],
       "materials": [
         "b3f7bbe5-f2c9-4eb8-bf78-5f4c62f68ad3@9ef86"

@@ -121,7 +121,7 @@ export class GameManager extends Component {
     /**
      * 圆形/环形物件:用圆柱碰撞体而非方盒。方盒的四个空角埋在堆里会被邻居深插 → 求解器狂弹 →
      * 高速抖(尤以手串等环形最明显)。圆柱无角、贴合圆盘轮廓,密堆时接触干净、抖动大减。
-     * 玉牌(yupai)是矩形薄片,仍用方盒。
+     * 非圆形物件(鹅/佛像/葫芦等)仍用方盒。
      */
     private static readonly ROUND_ITEMS = new Set(['banzhi', 'bracelet', 'pingankou', 'tongqian', 'yuzhuo']);
     /** 只服务于初始堆叠的确定性随机流，不受巡逻、道具等运行时随机行为干扰。 */
@@ -731,7 +731,7 @@ export class GameManager extends Component {
     /** 限制初始倾斜，避免钱币/玉环直立后高速翻滚造成旋转穿透。 */
     private setNaturalRotation(node: Node, id: string, random: () => number = Math.random) {
         const flat = id === 'banzhi' || id === 'bracelet' || id === 'pingankou'
-            || id === 'tongqian' || id === 'yupai' || id === 'yuzhuo';
+            || id === 'tongqian' || id === 'yuzhuo';
         const tilt = flat ? 20 : 32;
         const q = new Quat();
         Quat.fromEuler(

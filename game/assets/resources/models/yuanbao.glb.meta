@@ -1,0 +1,93 @@
+{
+  "ver": "2.3.14",
+  "importer": "gltf",
+  "imported": true,
+  "uuid": "a77e1b7f-9afa-4495-a550-8464722b9fe4",
+  "files": [],
+  "subMetas": {
+    "332d4": {
+      "importer": "gltf-mesh",
+      "uuid": "a77e1b7f-9afa-4495-a550-8464722b9fe4@332d4",
+      "displayName": "",
+      "id": "332d4",
+      "name": "Prop_GoldBag.mesh",
+      "userData": {
+        "gltfIndex": 0,
+        "triangleCount": 3954
+      },
+      "ver": "1.1.1",
+      "imported": true,
+      "files": [
+        ".bin",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "89a26": {
+      "importer": "gltf-material",
+      "uuid": "a77e1b7f-9afa-4495-a550-8464722b9fe4@89a26",
+      "displayName": "",
+      "id": "89a26",
+      "name": "Atlas.material",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "eaeb4": {
+      "importer": "gltf-scene",
+      "uuid": "a77e1b7f-9afa-4495-a550-8464722b9fe4@eaeb4",
+      "displayName": "",
+      "id": "eaeb4",
+      "name": "yuanbao.prefab",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "imageMetas": [],
+    "lods": {
+      "enable": false,
+      "hasBuiltinLOD": false,
+      "options": [
+        {
+          "screenRatio": 0.25,
+          "faceCount": 1
+        },
+        {
+          "screenRatio": 0.125,
+          "faceCount": 0.25
+        },
+        {
+          "screenRatio": 0.01,
+          "faceCount": 0.1
+        }
+      ]
+    },
+    "assetFinder": {
+      "meshes": [
+        "a77e1b7f-9afa-4495-a550-8464722b9fe4@332d4"
+      ],
+      "skeletons": [],
+      "textures": [],
+      "materials": [
+        "a77e1b7f-9afa-4495-a550-8464722b9fe4@89a26"
+      ],
+      "scenes": [
+        "a77e1b7f-9afa-4495-a550-8464722b9fe4@eaeb4"
+      ]
+    }
+  }
+}

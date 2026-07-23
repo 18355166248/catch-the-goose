@@ -2,18 +2,18 @@
   "ver": "2.3.14",
   "importer": "gltf",
   "imported": true,
-  "uuid": "7f36cfae-5ae0-4e3b-a1f7-15d264652682",
+  "uuid": "3aeee7aa-4586-4899-84df-a7bc41954ae8",
   "files": [],
   "subMetas": {
-    "41ac8": {
+    "5ca58": {
       "importer": "gltf-mesh",
-      "uuid": "7f36cfae-5ae0-4e3b-a1f7-15d264652682@41ac8",
+      "uuid": "3aeee7aa-4586-4899-84df-a7bc41954ae8@5ca58",
       "displayName": "",
-      "id": "41ac8",
-      "name": "Cube.001.mesh",
+      "id": "5ca58",
+      "name": "Crystal_Big.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1100
+        "triangleCount": 590
       },
       "ver": "1.1.1",
       "imported": true,
@@ -23,12 +23,12 @@
       ],
       "subMetas": {}
     },
-    "a3c0a": {
+    "89a26": {
       "importer": "gltf-material",
-      "uuid": "7f36cfae-5ae0-4e3b-a1f7-15d264652682@a3c0a",
+      "uuid": "3aeee7aa-4586-4899-84df-a7bc41954ae8@89a26",
       "displayName": "",
-      "id": "a3c0a",
-      "name": "JadeLight.material",
+      "id": "89a26",
+      "name": "Atlas.material",
       "userData": {
         "gltfIndex": 0
       },
@@ -39,28 +39,12 @@
       ],
       "subMetas": {}
     },
-    "0be58": {
-      "importer": "gltf-material",
-      "uuid": "7f36cfae-5ae0-4e3b-a1f7-15d264652682@0be58",
-      "displayName": "",
-      "id": "0be58",
-      "name": "Gold.material",
-      "userData": {
-        "gltfIndex": 1
-      },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
-    "da8aa": {
+    "7cac6": {
       "importer": "gltf-scene",
-      "uuid": "7f36cfae-5ae0-4e3b-a1f7-15d264652682@da8aa",
+      "uuid": "3aeee7aa-4586-4899-84df-a7bc41954ae8@7cac6",
       "displayName": "",
-      "id": "da8aa",
-      "name": "yupai.prefab",
+      "id": "7cac6",
+      "name": "yushi.prefab",
       "userData": {
         "gltfIndex": 0
       },
@@ -94,16 +78,15 @@
     },
     "assetFinder": {
       "meshes": [
-        "7f36cfae-5ae0-4e3b-a1f7-15d264652682@41ac8"
+        "3aeee7aa-4586-4899-84df-a7bc41954ae8@5ca58"
       ],
       "skeletons": [],
       "textures": [],
       "materials": [
-        "7f36cfae-5ae0-4e3b-a1f7-15d264652682@a3c0a",
-        "7f36cfae-5ae0-4e3b-a1f7-15d264652682@0be58"
+        "3aeee7aa-4586-4899-84df-a7bc41954ae8@89a26"
       ],
       "scenes": [
-        "7f36cfae-5ae0-4e3b-a1f7-15d264652682@da8aa"
+        "3aeee7aa-4586-4899-84df-a7bc41954ae8@7cac6"
       ]
     }
   }
