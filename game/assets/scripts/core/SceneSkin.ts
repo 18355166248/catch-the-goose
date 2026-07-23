@@ -4,15 +4,9 @@ import { BoundaryDef } from './ContainerBoundary';
 /**
  * 场景皮肤（换肤只换外观，不改玩法与物理边界）。
  *
- * 3D 容器/背景全部由 GameManager.buildBox() 程序化生成，颜色和贴图都是参数。
- * 这里把整套调色板抽成预设，切皮时销毁并按新皮肤重建 SceneRoot 即可。
+ * 一套皮肤 = 一张整屏背景图（SceneBackground 等比铺满）+ 一个中央置物筐 3D 模型。
+ * 换肤时销毁并按新皮肤重建 SceneRoot 即可。
  */
-
-/** 一个可换色部件：底色 + 可选贴图（贴图会被底色着色，走 resources/textures/<tex>/texture）。 */
-export interface SkinRole {
-    color: Color;
-    tex?: string;
-}
 
 export interface SceneSkin {
     id: string;
@@ -20,69 +14,54 @@ export interface SceneSkin {
     name: string;
     /** 选皮面板预览用的两个代表色（面色 + 描边色）。 */
     swatch: [Color, Color];
-    /** 篮底板。 */
-    floor: SkinRole;
-    /** 厚框 / 外框 / 柜框。 */
-    frame: SkinRole;
-    /** 内沿 / 格栅 / 高光沿。 */
-    rim: SkinRole;
-    /** 铰链 / 角件（金件或金属件）。 */
-    accent: Color;
-    /** 篮底投影色。 */
-    shadow: Color;
-    /** 背景大板（unlit，叠加在背景贴图上着色）。 */
+    /** 背景 Sprite 的叠加色，通常留白（255,255,255）不改变贴图本色。 */
     backdrop: Color;
-    /** 背景贴图名，默认 'backdrop'。 */
+    /** 背景贴图名（resources/textures/<tex>/texture）。 */
     backdropTex?: string;
-    /** 木盒三大部件粗糙度：塑料/瓷器更小更亮，木头留空用默认 0.85。 */
-    gloss?: number;
+    /**
+     * 中央置物筐 3D 模型 id（resources/models/<id>.glb）。加载后摆到容器中央并按开口缩放。
+     * 留空则中央无可见容器（模型尚未就绪的皮肤），物件仍由隐形围栏约束。
+     */
+    containerModel?: string;
     /**
      * 承载物边界（换成圆锅/圆碗/圆筐等造型时声明）。留空 = 沿用默认矩形边界。
      * 声明后物理围栏、逃逸判定、视觉兜底、投放种子全部按该形状生效，物品不会离开容器。
-     * 注意：非矩形场景还需在 GameManager.buildBox 里替换对应的可见容器几何。
+     * 需与 containerModel 的开口对齐。
      */
     boundary?: BoundaryDef;
 }
 
 /**
- * 六套皮肤。第一套 redwood 与换肤前的硬编码调色板一字不差，作为默认皮肤。
+ * 三套皮肤。背景图为「不带置物筐」的纯场景（四周陈设 + 中央留空），由 SceneBackground
+ * 全屏等比铺满、不变形、随设备自适应；中央置物筐是独立的 3D 模型（containerModel），
+ * 按皮肤加载并自动缩放到 CONTAINER_SPAN，隐形物理围栏保证物件精确落在筐内。
+ *
+ * 尚未配模型的皮肤留空 containerModel，中央暂无可见容器，
+ * 物件仍由隐形围栏 + 平面阴影表现。
  */
+const WHITE = () => new Color(255, 255, 255);
+
 export const SKINS: SceneSkin[] = [
     {
         id: 'redwood', name: '深红木',
-        swatch: [new Color(137, 72, 48), new Color(72, 28, 22)],
-        floor: { color: new Color(93, 45, 33), tex: 'wood_floor' },
-        frame: { color: new Color(72, 28, 22), tex: 'wood_dark' },
-        rim: { color: new Color(137, 72, 48), tex: 'wood_floor' },
-        accent: new Color(205, 151, 62),
-        shadow: new Color(39, 18, 17),
-        backdrop: new Color(255, 255, 255),
+        swatch: [new Color(151, 78, 50), new Color(198, 156, 92)],
+        backdrop: WHITE(),
         backdropTex: 'bg_redwood',
+        containerModel: 'basket_redwood',
     },
     {
         id: 'jade', name: '翡翠青玉',
-        swatch: [new Color(70, 156, 128), new Color(20, 72, 58)],
-        floor: { color: new Color(34, 102, 84) },
-        frame: { color: new Color(20, 72, 58) },
-        rim: { color: new Color(70, 156, 128) },
-        accent: new Color(214, 178, 98),
-        shadow: new Color(10, 38, 30),
-        backdrop: new Color(255, 255, 255),
+        swatch: [new Color(120, 178, 150), new Color(214, 178, 98)],
+        backdrop: WHITE(),
         backdropTex: 'bg_jade',
-        gloss: 0.45,
+        containerModel: 'bowl_jade',
     },
     {
+        // 藤编方托盘模型待出（见 container-model-prompts.md 第 3 条），暂无可见容器。
         id: 'picnic', name: '户外野餐',
-        // 藤编野餐篮：暖调柳条 + 草绿格纹背景（bg_picnic）；矩形边界沿用默认，容器几何暂用木盒重着色。
         swatch: [new Color(198, 158, 108), new Color(120, 150, 78)],
-        floor: { color: new Color(198, 158, 108) },
-        frame: { color: new Color(150, 112, 68) },
-        rim: { color: new Color(216, 184, 130) },
-        accent: new Color(180, 140, 90),
-        shadow: new Color(90, 70, 44),
-        backdrop: new Color(255, 255, 255),
+        backdrop: WHITE(),
         backdropTex: 'bg_picnic',
-        gloss: 0.5,
     },
 ];
 

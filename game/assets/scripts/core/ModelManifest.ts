@@ -1,4 +1,11 @@
-/** 自动生成：物件 id -> glb 预制体子资源 uuid（scripts/gen_manifest.py） */
+/**
+ * 物件 id -> glb 预制体子资源 uuid，仅作 PrefabCache 的**兜底**：
+ * 正常路径加载（models/<id>/<id>）失败时才用。
+ *
+ * 注意：这份表是手工维护的历史产物（原注释提到的 scripts/gen_manifest.py 已不存在）。
+ * 新增模型**不必**登记——basket_redwood / bowl_jade 都不在表内且路径加载正常。
+ * 若真机构建出现路径加载失败，再把对应 uuid（见 <model>.glb.meta 的 subMetas）补进来。
+ */
 export const MODEL_PREFAB_UUID: Record<string, string> = {
     baicai: '3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@d8820',
     banzhi: '6a42c322-ea5c-48f7-9fd8-08e633b1d929@63c27',
