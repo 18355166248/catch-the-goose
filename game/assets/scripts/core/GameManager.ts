@@ -518,10 +518,14 @@ export class GameManager extends Component {
                     -2.6,
                     (this.levelRandom() - 0.5) * 0.2,
                 ));
+                // 薄片(铜钱/玉环/平安扣等)只给绕竖轴的自转(改朝向、仍拍平落),
+                // 大幅收窄横轴翻滚——否则它们在半空翻立起来边缘着地、圆柱立着打滚,
+                // 是这类物件抖动/蹭墙/堆乱的主因。非薄片保留全向翻滚的自然感。
+                const tumble = GameManager.ROUND_ITEMS.has(id) ? 0.25 : 1.2;
                 rb.setAngularVelocity(v3(
+                    (this.levelRandom() - 0.5) * tumble,
                     (this.levelRandom() - 0.5) * 1.2,
-                    (this.levelRandom() - 0.5) * 1.2,
-                    (this.levelRandom() - 0.5) * 1.2,
+                    (this.levelRandom() - 0.5) * tumble,
                 ));
                 // 弹大动画:趁下落无接触段从 from 长到满(backOut 带轻微过冲更弹)。
                 // 碰撞体随节点缩放同步长大,但全程在半空、无接触,不会推挤邻居。
@@ -751,7 +755,9 @@ export class GameManager extends Component {
     private setNaturalRotation(node: Node, id: string, random: () => number = Math.random) {
         const flat = id === 'banzhi' || id === 'bracelet' || id === 'pingankou'
             || id === 'tongqian' || id === 'yuzhuo';
-        const tilt = flat ? 20 : 32;
+        // 薄片起始更贴近水平(20°→12°):配合下落只保留竖轴自转,落下即拍平叠摞,
+        // 不会立起来边缘着地。非薄片保持较大随机倾斜的自然感。
+        const tilt = flat ? 12 : 32;
         const q = new Quat();
         Quat.fromEuler(
             q,
