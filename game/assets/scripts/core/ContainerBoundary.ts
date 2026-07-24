@@ -134,6 +134,29 @@ export class ContainerBoundary {
     }
 
     /**
+     * 把一个越界点沿最近法向拉回墙内 inset 距离处（矩形夹取 / 圆形径向收回）。
+     * 逃逸回收用：就地拉回而非瞬移到高空重砸——玩家几乎察觉不到，也不会看到穿帮的
+     * “飞出去又从天而降”。已在墙内的点原样返回。
+     */
+    clampPointToWall(x: number, z: number, inset = 0.1): { x: number; z: number } {
+        const s = this.wall;
+        if (s.kind === 'rect') {
+            const hx = Math.max(0, s.halfX - inset);
+            const hz = Math.max(0, s.halfZ - inset);
+            return {
+                x: Math.min(s.cx + hx, Math.max(s.cx - hx, x)),
+                z: Math.min(s.cz + hz, Math.max(s.cz - hz, z)),
+            };
+        }
+        const dx = x - s.cx, dz = z - s.cz;
+        const d = Math.hypot(dx, dz);
+        const r = Math.max(0, s.radius - inset);
+        if (d <= r || d < 1e-6) return { x, z };
+        const k = r / d;
+        return { x: s.cx + dx * k, z: s.cz + dz * k };
+    }
+
+    /**
      * 视觉外轮廓兜底：给定物件渲染 AABB 在 XZ 的范围，返回需要的最小平移把它拉回 clamp 形状内；
      * 位移都小于 2cm（浮点噪声级）则返回 null 表示无需修正。
      */

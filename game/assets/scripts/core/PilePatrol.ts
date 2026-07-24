@@ -115,12 +115,16 @@ export class PilePatrol {
             }
             const p = t.node.worldPosition;
             if (this.boundary.isEscaped(p.x, p.z, p.y)) {
-                const rp = this.boundary.respawn(Math.random);
-                t.node.setWorldPosition(rp.x, 2.2, rp.z);
+                // 逃逸回收:不再瞬移到 2.2 高空重砸(那一下"飞出去又从天而降"非常穿帮)。
+                // 水平越界 → 就地沿法向拉回墙内、保持当前高度,并归零外向速度,近乎无感;
+                // 掉出底面(y<0,厚地板下极少发生) → 抬到台面稍上方轻放,而非高空重砸。
+                const below = p.y < 0;
+                const cp = this.boundary.clampPointToWall(p.x, p.z, 0.12);
+                t.node.setWorldPosition(cp.x, below ? 0.3 : p.y, cp.z);
                 try { rb.clearState(); } catch { /* 忽略 */ }
                 rb.linearDamping = 0.06;
                 rb.angularDamping = 0.3;
-                rb.setLinearVelocity(v3(0, -0.5, 0));
+                rb.setLinearVelocity(v3(0, below ? -0.3 : 0, 0));
                 rb.setAngularVelocity(v3());
                 t.slowTicks = 0;
                 t.rattleTicks = 0;

@@ -101,10 +101,12 @@ export class GameManager extends Component {
     private static readonly PILE_ITEM_BASE = 0.65;
     /** 少件关卡放大后的上限,防止超出容器。与 BASE 同向调。 */
     private static readonly PILE_ITEM_MAX = 0.78;
-    /** 投放盘扩张半径系数:越小物件越往中心落、越易相互穿插。 */
-    private static readonly PILE_SPREAD = 0.58;
-    /** 逐件投放间隔(秒/件):越小灌入越快、总时长越短,但同时在场刚体更多、穿插更深。 */
-    private static readonly SPAWN_INTERVAL = 0.03;
+    /** 投放盘扩张半径系数:越小物件越往中心落、越易相互穿插。
+     *  0.58→0.72:向外铺开,降低中央堆叠的初始深插——这是穿插与落定抖动的共同根源。 */
+    private static readonly PILE_SPREAD = 0.72;
+    /** 逐件投放间隔(秒/件):越小灌入越快、总时长越短,但同时在场刚体更多、穿插更深。
+     *  0.03→0.05:同帧在场的动态刚体更少,求解器有余量把相邻件分开,少锁死互插。 */
+    private static readonly SPAWN_INTERVAL = 0.05;
     /** 兜底强制冻结延迟(末件投放后再等这么久整堆硬冻)。巡检自锁通常早已完成,这里只兜底。 */
     private static readonly SETTLE_BACKSTOP = 1.0;
     /**
@@ -618,13 +620,16 @@ export class GameManager extends Component {
             else { axis = EAxisDirection.Z_AXIS; radius = Math.max(ex, ey) / 2; height = ez; }
             collider.direction = axis;
             // 圆柱已贴合圆盘,余量取小(2%);高度贴合薄片厚度,下限防退化。
+            // 高度下限 0.12→0.05:一枚 ~2cm 厚铜钱曾被撑成 12cm,堆叠悬空/松散。
+            // 薄片的单步穿越由 CCD 兜底,不再靠加厚碰撞体防穿。
             collider.radius = Math.max(0.1, radius * 1.02);
-            collider.height = Math.max(0.12, height * 1.04);
+            collider.height = Math.max(0.05, height * 1.02);
         } else if (collider instanceof BoxCollider) {
+            // 膨胀 4%→2% + 下限 0.20→0.08:碰撞体更贴合网格,消除"件件撑开的空隙"观感。
             collider.size = v3(
-                Math.max(0.20, ex * 1.04),
-                Math.max(0.20, ey * 1.04),
-                Math.max(0.20, ez * 1.04),
+                Math.max(0.08, ex * 1.02),
+                Math.max(0.08, ey * 1.02),
+                Math.max(0.08, ez * 1.02),
             );
         }
     }
@@ -695,6 +700,20 @@ export class GameManager extends Component {
             const n = candidate.t.node;
             const rb = n.getComponent(RigidBody);
             if (!rb?.enabled) continue;
+
+            // 该件正下方若仍被别的物件顶着(近距离、略低),说明它并没真正失去支撑——
+            // 强行下沉 + 固定倾斜正是"动画假"的来源(玩家看到凭空抽搐)。此时直接跳过。
+            const cp = n.worldPosition.clone();
+            const stillSupported = this.node.getComponentsInChildren(ItemTag).some(o => {
+                if (o === candidate.t || o.picked || !o.node.isValid) return false;
+                const q = o.node.worldPosition;
+                const dyBelow = cp.y - q.y;               // 正 = o 在下方
+                if (dyBelow < 0.02 || dyBelow > 0.6) return false;
+                const dxh = q.x - cp.x, dzh = q.z - cp.z;
+                return dxh * dxh + dzh * dzh < 0.28 * 0.28; // 正下方近距离 = 仍有支撑
+            });
+            if (stillSupported) continue;
+
             Tween.stopAllByTarget(n);
             rb.clearState();
             rb.type = RigidBody.Type.KINEMATIC;
