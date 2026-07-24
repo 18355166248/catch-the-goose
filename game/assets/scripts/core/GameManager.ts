@@ -925,7 +925,7 @@ export class GameManager extends Component {
             e.node.active = true;
             tag.picked = false;
             tag.stillTicks = 0;
-            tag.lastPY = -99;
+            tag.anchorY = -99;
             const rbBack = e.node.getComponent(RigidBody)!;
             rbBack.linearDamping = 0.06;
             rbBack.angularDamping = 0.3;
@@ -995,7 +995,7 @@ export class GameManager extends Component {
                     + (Math.random() - 0.5) * 0.06);
             this.setNaturalRotation(t.node, t.id);
             t.stillTicks = 0;
-            t.lastPY = -99;
+            t.anchorY = -99;
             const rb = t.node.getComponent(RigidBody)!;
             rb.linearDamping = 0.06;
             rb.angularDamping = 0.3;

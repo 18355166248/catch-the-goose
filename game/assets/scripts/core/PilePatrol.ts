@@ -7,8 +7,8 @@ import { ContainerBoundary } from './ContainerBoundary';
  *
  * 每约 0.15s 跑一遍 {@link tick}，冻结判据只有**两条**（早先的 6 套重叠启发式已精简）：
  *   - 条 1 整堆静定：全体运动强度都降到 {@link PILE_CALM} 以下 → 整堆一次冻死；
- *   - 条 2 逐件静止：单件连续 {@link STILL_TICKS} 个周期净位移 < {@link STILL_STEP} → 冻死。
- *     这一条同时覆盖真静止与"被夹缝原地振荡"（两者净位移都极小），真在下落/滚动的不误冻。
+ *   - 条 2 逐件静止：单件连续 {@link STILL_TICKS} 拍都困在锚点 {@link STILL_RADIUS} 小 blob 内 → 冻死。
+ *     锚点振幅法同时覆盖真静止与"被夹缝原地振荡"（都不挪窝），真在下落/滚动的会跑出 blob 不误冻。
  *   抓不到的极端边角，由 GameManager 的 0.9s 硬冻定时器（SPAWN_FREEZE_DELAY）兜底保证必冻。
  *   另有：逃逸回收（质心穿墙 → 就地拉回墙内）、视觉外轮廓兜底、限速。
  *
@@ -27,12 +27,15 @@ export class PilePatrol {
      */
     private static readonly PILE_CALM = 0.35;
     /**
-     * 逐件冻结判据(条 2)的净位移阈值:单个巡检周期(0.15s)内净位移小于此值(米)记一次,
-     * 连续 STILL_TICKS 次即判定"已停在原位"直接冻结。0.006m/周期 ≈ 4cm/s——真在下落/
-     * 滚动的物件远超它、清零计数不会误冻;真静止或被夹缝原地振荡的物件净位移都极小 → 收敛。
+     * 逐件冻结判据(条 2)的锚点 blob 半径(米):物件停在锚点周围 STILL_RADIUS 的小球内
+     * 就算"没挪窝"。连续 STILL_TICKS 拍都困在 blob 内即冻结。
+     * 关键:用**振幅**(离锚点多远)而非**逐周期净位移**——夹缝里"每拍抖 6mm+、整体却
+     * 不离开原地"的残余微颤,逐周期净位移抓不住(会一直重置计数、干等定时器兜底,那 0.9s
+     * 里就一直轻颤),但它始终困在 blob 内 → 锚点法能提前锁死。1.5cm 足以罩住接触微颤,
+     * 又远小于真实滚动/下落一拍走过的距离(那会跑出 blob、重置锚点,不误冻)。
      * 这一条取代了旧的 微颤即锁 / 逐周期钉住 / 打转 / 慢摇振幅 / 逐件慢冻 共 5 套重叠启发式。
      */
-    private static readonly STILL_STEP = 0.006;
+    private static readonly STILL_RADIUS = 0.015;
     private static readonly STILL_TICKS = 3;
 
     private boundary: ContainerBoundary;
@@ -98,7 +101,7 @@ export class PilePatrol {
         for (const it of dyn) {
             const { t, rb, speed, eff } = it;
             // 两段阻尼:下落/翻滚用低阻尼保真实,进入低速沉降段切高阻尼(0.85/0.98)快速耗能,
-            // 让残余微颤能量更快耗尽、净位移更快塌到 STILL_STEP 以下,使冻结判据更早触发。
+            // 让残余微颤能量更快耗尽、振幅更快收进锚点 blob,使冻结判据更早触发。
             if (eff < 0.35 && rb.linearDamping < 0.3) {
                 rb.linearDamping = 0.85;
                 rb.angularDamping = 0.98;
@@ -117,26 +120,24 @@ export class PilePatrol {
                 rb.setLinearVelocity(v3(0, below ? -0.3 : 0, 0));
                 rb.setAngularVelocity(v3());
                 t.stillTicks = 0;
-                t.lastPY = -99;
+                t.anchorY = -99;
                 continue;
             }
 
-            // 条 2 —— 逐件冻结的**唯一**判据:本周期净位移极小,连续 STILL_TICKS 个周期
-            // (≈0.45s)成立即判定"已停在原位"直接冻结。这一条同时覆盖了旧的
-            // 微颤即锁 / 逐周期钉住 / 打转 / 慢摇振幅 / 逐件慢冻 五套重叠启发式:
-            //   · 真静止 → 净位移≈0,收敛;
-            //   · 被夹缝原地振荡(旧 rattle/慢摇要抓的病态)→ 净位移同样极小,一并收敛;
-            //   · 真在下落/滚动 → 净位移远超阈值,清零计数不会误冻。
-            // 不再需要 busyNeighbor 守卫:只有物件自身连续静止才冻,邻居在砸它时接触
-            // 会让净位移超阈、自然不冻。抓不到的极端边角交给 GameManager 的 0.9s 硬冻兜底。
-            const moved = Math.hypot(p.x - t.lastPX, p.y - t.lastPY, p.z - t.lastPZ);
-            t.lastPX = p.x; t.lastPY = p.y; t.lastPZ = p.z;
-            if (moved < PilePatrol.STILL_STEP) {
+            // 条 2 —— 逐件冻结的**唯一**判据(锚点振幅法):物件仍困在锚点 STILL_RADIUS 的
+            // 小 blob 内 → 累加;连续 STILL_TICKS 拍(≈0.45s)都没跑出 blob = 停在原地,冻结。
+            // 用离锚点的距离(振幅)而非逐周期净位移,才能逮住"每拍抖几毫米、整体却不挪窝"
+            // 的夹缝残余微颤(旧 rattle/慢摇要治的病态);真在下落/滚动会跑出 blob、重置锚点
+            // 与计数,不会误冻。不需要 busyNeighbor 守卫:邻居砸它时它会跑出 blob 自然不冻。
+            // 抓不到的极端边角交给 GameManager 的 0.9s 硬冻兜底。
+            const ax = p.x - t.anchorX, ay = p.y - t.anchorY, az = p.z - t.anchorZ;
+            if (ax * ax + ay * ay + az * az < PilePatrol.STILL_RADIUS * PilePatrol.STILL_RADIUS) {
                 if (++t.stillTicks >= PilePatrol.STILL_TICKS) {
                     freeze(t, rb);
                     continue;
                 }
             } else {
+                t.anchorX = p.x; t.anchorY = p.y; t.anchorZ = p.z;
                 t.stillTicks = 0;
             }
 
