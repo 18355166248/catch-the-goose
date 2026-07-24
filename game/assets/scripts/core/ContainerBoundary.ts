@@ -86,9 +86,13 @@ export class ContainerBoundary {
         }
         // 圆壁：N 段薄墙沿半径 (radius + WT/2) 均布，内壁恰好落在 radius 上。
         // 段长 = 弧长 × 重叠系数，宁可相邻重叠也不留缝（缝会漏物件）。
-        const N = 28;
+        // 段数随半径自适应：半径越大越多段，逼近真圆——减小"多边形外凸"(内壁弦
+        // 在段间凸出真圆之外，物件可被顶到弦外)与段间楔出缝。下限 28 保底。
+        const N = Math.max(28, Math.ceil(s.radius * 22));
         const ringR = s.radius + WT / 2;
-        const segLen = (2 * Math.PI * ringR / N) * 1.5;
+        // 重叠系数按**内壁**(半径 s.radius)处的弧长算，保证连内壁接缝都相互重叠、
+        // 不给小件留缝；旧版按 ringR(外圈)算，内壁处重叠偏小仍可能被薄片钻缝。
+        const segLen = (2 * Math.PI * s.radius / N) * 1.8;
         const specs: WallSpec[] = [];
         for (let i = 0; i < N; i++) {
             const theta = (i / N) * Math.PI * 2;
