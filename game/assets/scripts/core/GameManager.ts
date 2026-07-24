@@ -924,12 +924,8 @@ export class GameManager extends Component {
             this.forceLayer(e.node);
             e.node.active = true;
             tag.picked = false;
-            tag.slowTicks = 0;
-            tag.rattleTicks = 0;
-            tag.pinTicks = 0;
+            tag.stillTicks = 0;
             tag.lastPY = -99;
-            tag.trail.length = 0;
-            tag.effWin.length = 0;
             const rbBack = e.node.getComponent(RigidBody)!;
             rbBack.linearDamping = 0.06;
             rbBack.angularDamping = 0.3;
@@ -998,12 +994,8 @@ export class GameManager extends Component {
                     + Math.sin(angle) * radius * 0.72
                     + (Math.random() - 0.5) * 0.06);
             this.setNaturalRotation(t.node, t.id);
-            t.slowTicks = 0;
-            t.rattleTicks = 0;
-            t.pinTicks = 0;
+            t.stillTicks = 0;
             t.lastPY = -99;
-            t.trail.length = 0;
-            t.effWin.length = 0;
             const rb = t.node.getComponent(RigidBody)!;
             rb.linearDamping = 0.06;
             rb.angularDamping = 0.3;

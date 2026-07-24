@@ -3,46 +3,37 @@ import { ItemTag } from './ItemTag';
 import { ContainerBoundary } from './ContainerBoundary';
 
 /**
- * 堆内物件的巡检 / 沉降 / 逃逸回收（从 GameManager.update 抽出的高频物理启发式）。
+ * 堆内物件的巡检 / 冻结 / 逃逸回收（从 GameManager.update 抽出的高频物理收尾）。
  *
- * 每约 0.15s 跑一遍 {@link tick}：
- *   - 逃逸回收：质心穿墙的物件按当前边界重新倒入；
- *   - 抖动 / 慢摇 / 原地振荡检测：判定为“已经停在那了”的物件直接切 KINEMATIC 锁死，消除接触抖动；
- *   - 逐件冻结：连续低速且邻域安静时冻结；
- *   - 视觉外轮廓兜底 + 限速。
+ * 每约 0.15s 跑一遍 {@link tick}，冻结判据只有**两条**（早先的 6 套重叠启发式已精简）：
+ *   - 条 1 整堆静定：全体运动强度都降到 {@link PILE_CALM} 以下 → 整堆一次冻死；
+ *   - 条 2 逐件静止：单件连续 {@link STILL_TICKS} 个周期净位移 < {@link STILL_STEP} → 冻死。
+ *     这一条同时覆盖真静止与"被夹缝原地振荡"（两者净位移都极小），真在下落/滚动的不误冻。
+ *   抓不到的极端边角，由 GameManager 的 0.9s 硬冻定时器（SPAWN_FREEZE_DELAY）兜底保证必冻。
+ *   另有：逃逸回收（质心穿墙 → 就地拉回墙内）、视觉外轮廓兜底、限速。
  *
  * 与 {@link ContainerBoundary} 强耦合：逃逸、回收落点、视觉 clamp 全走边界。换肤重建容器时
- * GameManager 调 {@link setBoundary} 换上新边界。{@link constrainVisualInside} 也一并搬到这里，
+ * GameManager 调 {@link setBoundary} 换上新边界。{@link constrainVisualInside} 也在这里，
  * 因为它同样以 boundary 为唯一裁剪依据；GameManager 的 schedulePileSettle / settleNearRemoved
- * 通过本类实例复用它。逻辑与原 update 内联版本一字不差，仅移动位置。
+ * 通过本类实例复用它。
  */
 export class PilePatrol {
-    /**
-     * 静止微颤冻结阈值:约 0.6~0.75s 内空间振幅小于此值(米)即判定"已钉在原位",直接冻结。
-     * 调小 = 更严格(要几乎完全不动才冻,残留微颤时间略长);调大 = 更早冻但可能掐掉真实微沉降。
-     */
-    private static readonly PIN_AMP = 0.02;
-    /**
-     * 逐周期"钉住"判据:单个巡检周期(0.15s)内净位移小于此值(米)记一次,连续 PIN_TICKS 次即冻结。
-     * 比 PIN_AMP 的 0.75s 窗口更快(约 0.45s)逮住微颤,缩短落定后的残留抖动时间。
-     * 微颤的逐周期净位移≈0,真实滚动/滑动会超过它而清零计数,不会误冻。
-     */
-    private static readonly PIN_STEP = 0.000;
-    private static readonly PIN_TICKS = 3;
     /**
      * 整堆静定阈值:当**所有**动态物件的运动强度 eff 都低于此值(没有任何一件还在真正下落/滚动,
      * 只剩接触求解的原地高频微颤),立刻整堆冻结,而不是干等 schedulePileSettle 的固定定时器。
      * 这消除了"落定后到强制冻结之间那 1~2s 的明显抖动窗口"。
      * 调小 = 更晚锁(要更彻底静止,残留抖动久);调大 = 更早锁但可能掐掉尚在缓慢滚定的物件。
+     * —— 精简后的两条冻结判据之一(条 1:整堆一起冻)。
      */
     private static readonly PILE_CALM = 0.35;
     /**
-     * 微颤即锁:一件的 eff 已降到微颤级(< PILE_CALM)且本周期净位移小于此值(米)——
-     * 即"低速 + 不平移",是微颤的专属特征——单个巡检周期即冻,不等 2 拍、不等整堆钉子户。
-     * 这是压掉"暂停前几百毫秒残留抖动"的关键:已静下来的物件各自立刻锁死,不再陪跑。
-     * 真在滚入位(净位移大)或半空下落(eff 高)的物件都不会被误锁。
+     * 逐件冻结判据(条 2)的净位移阈值:单个巡检周期(0.15s)内净位移小于此值(米)记一次,
+     * 连续 STILL_TICKS 次即判定"已停在原位"直接冻结。0.006m/周期 ≈ 4cm/s——真在下落/
+     * 滚动的物件远超它、清零计数不会误冻;真静止或被夹缝原地振荡的物件净位移都极小 → 收敛。
+     * 这一条取代了旧的 微颤即锁 / 逐周期钉住 / 打转 / 慢摇振幅 / 逐件慢冻 共 5 套重叠启发式。
      */
-    private static readonly SETTLE_STEP = 0.01;
+    private static readonly STILL_STEP = 0.006;
+    private static readonly STILL_TICKS = 3;
 
     private boundary: ContainerBoundary;
     private patrolTimer = 0;
@@ -106,9 +97,8 @@ export class PilePatrol {
 
         for (const it of dyn) {
             const { t, rb, speed, eff } = it;
-            // 两段阻尼:下落/翻滚用低阻尼保真实,进入低速沉降段切高阻尼快速耗能。
-            // 阻尼加狠(0.85/0.98)让残余微颤能量更快耗尽、振幅塌到 PIN_AMP 以下,
-            // 使冻结判据更早触发,缩短落定后的残留抖动。
+            // 两段阻尼:下落/翻滚用低阻尼保真实,进入低速沉降段切高阻尼(0.85/0.98)快速耗能,
+            // 让残余微颤能量更快耗尽、净位移更快塌到 STILL_STEP 以下,使冻结判据更早触发。
             if (eff < 0.35 && rb.linearDamping < 0.3) {
                 rb.linearDamping = 0.85;
                 rb.angularDamping = 0.98;
@@ -126,111 +116,28 @@ export class PilePatrol {
                 rb.angularDamping = 0.3;
                 rb.setLinearVelocity(v3(0, below ? -0.3 : 0, 0));
                 rb.setAngularVelocity(v3());
-                t.slowTicks = 0;
-                t.rattleTicks = 0;
-                t.pinTicks = 0;
+                t.stillTicks = 0;
                 t.lastPY = -99;
-                t.trail.length = 0;
-                t.effWin.length = 0;
                 continue;
             }
 
-            // 剧烈抖动检测：净位移远小于速度对应的预期路径 = 原地往复振荡
-            // (被不可动邻居夹住后求解器来回弹)。真实滚动/下落的净位移与速度
-            // 成正比,不会触发;振荡则大部分路程被来回抵消。连续 3 个周期
-            // (≈0.45s)即认定为打转，掐掉速度直接锁死——它本来就"停"在那了。
+            // 条 2 —— 逐件冻结的**唯一**判据:本周期净位移极小,连续 STILL_TICKS 个周期
+            // (≈0.45s)成立即判定"已停在原位"直接冻结。这一条同时覆盖了旧的
+            // 微颤即锁 / 逐周期钉住 / 打转 / 慢摇振幅 / 逐件慢冻 五套重叠启发式:
+            //   · 真静止 → 净位移≈0,收敛;
+            //   · 被夹缝原地振荡(旧 rattle/慢摇要抓的病态)→ 净位移同样极小,一并收敛;
+            //   · 真在下落/滚动 → 净位移远超阈值,清零计数不会误冻。
+            // 不再需要 busyNeighbor 守卫:只有物件自身连续静止才冻,邻居在砸它时接触
+            // 会让净位移超阈、自然不冻。抓不到的极端边角交给 GameManager 的 0.9s 硬冻兜底。
             const moved = Math.hypot(p.x - t.lastPX, p.y - t.lastPY, p.z - t.lastPZ);
             t.lastPX = p.x; t.lastPY = p.y; t.lastPZ = p.z;
-            // 微颤即锁(单周期,逐件,不等整堆):运动强度已降到微颤级 + 本周期几乎没平移
-            // = 已静下来只在原地颤 → 立刻冻结。这是压掉"暂停前几百毫秒残留抖动"的关键。
-            // 半空下落 eff 高、真滚入位 moved 大,都不满足,不会误锁。
-            if (eff < PilePatrol.PILE_CALM && moved < PilePatrol.SETTLE_STEP) {
-                freeze(t, rb);
-                continue;
-            }
-            // 逐周期钉住:净位移连续多周期都极小 = 已停在原位、只是在高频颤,直接冻结。
-            // 无视速度、绕开 busyNeighbor,比 0.75s 的 amp 窗口更快逮住微颤(约 0.45s)。
-            if (moved < PilePatrol.PIN_STEP) {
-                if (++t.pinTicks >= PilePatrol.PIN_TICKS) {
+            if (moved < PilePatrol.STILL_STEP) {
+                if (++t.stillTicks >= PilePatrol.STILL_TICKS) {
                     freeze(t, rb);
                     continue;
                 }
             } else {
-                t.pinTicks = 0;
-            }
-            // 阈值 0.08 与慢冻结阈值 0.07 首尾相接,不给"低强度持续震颤"留缝隙。
-            const expectedPath = eff * 0.15;
-            if (eff > 0.08 && moved < expectedPath * 0.45) {
-                if (++t.rattleTicks >= 2) {
-                    freeze(t, rb);
-                    continue;
-                }
-            } else {
-                t.rattleTicks = 0;
-            }
-
-            // 慢摇检测:0.75s 轨迹窗口内走了不少路程、却几乎回到原地 =
-            // 接触求解持续注入能量的往复摇摆(圆环落定前的典型病态)。
-            // 真实滚动的净位移与路程同量级,不会触发。
-            t.trail.push(p.x, p.y, p.z);
-            if (t.trail.length > 15) t.trail.splice(0, 3);
-            t.effWin.push(eff);
-            if (t.effWin.length > 5) t.effWin.shift();
-            if (t.trail.length === 15) {
-                let path = 0;
-                let cx = 0, cy = 0, cz = 0;
-                for (let i = 0; i < 15; i += 3) {
-                    cx += t.trail[i]; cy += t.trail[i + 1]; cz += t.trail[i + 2];
-                    if (i >= 3) {
-                        path += Math.hypot(
-                            t.trail[i] - t.trail[i - 3],
-                            t.trail[i + 1] - t.trail[i - 2],
-                            t.trail[i + 2] - t.trail[i - 1],
-                        );
-                    }
-                }
-                cx /= 5; cy /= 5; cz /= 5;
-                // 振幅 = 相对轨迹质心的最大偏移。真实滚动路径伸展、振幅与路程同量级;
-                // 原地(或缓慢漂移中)的振荡路程长、振幅小。用振幅而非净位移,
-                // 才能抓住"边漂移边抖"的病态。
-                let amp = 0;
-                for (let i = 0; i < 15; i += 3) {
-                    amp = Math.max(amp, Math.hypot(
-                        t.trail[i] - cx, t.trail[i + 1] - cy, t.trail[i + 2] - cz));
-                }
-                // 平均运动强度不受 0.15s 采样对高频振荡的路径混叠影响:
-                // 持续有速度、振幅却极小,同样判定为原地振荡。
-                const avgEff = t.effWin.reduce((a, b) => a + b, 0) / t.effWin.length;
-                // 静止微颤专治(“已落定却一直抖”):约 0.6~0.75s 内位置始终困在 2cm 的
-                // 小 blob 里(空间振幅极小)= 实际没移动,只是接触求解在原地高频颤。
-                // 无视瞬时速度直接冻结——闭合速度死区 [0.07,0.09],并绕开 busyNeighbor 死锁
-                // (一片物件同时微颤时,逐件冻结会因邻居都在抖而互相卡住,永不冻结)。
-                // 已钉在原位的物件冻结不会推挤邻居,安全。
-                if (amp < PilePatrol.PIN_AMP
-                    || ((path > 0.038 || avgEff > 0.09) && amp < Math.max(0.025, path * 0.3))) {
-                    freeze(t, rb);
-                    continue;
-                }
-            }
-
-            // 逐件冻结：连续两个巡逻周期(≈0.3s)近乎静止，且邻域也安静才锁死。
-            // 若正上方/旁边还有运动中的物件，先不冻——运动学刚体质量无限大，
-            // 冻在与邻居微穿插的位置会把邻居猛推出去，表现为突发的剧烈弹跳。
-            if (eff < 0.07) {
-                if (++t.slowTicks >= 2) {
-                    const busyNeighbor = dyn.some(o => {
-                        if (o.t === t || o.eff < 0.15) return false;
-                        const q = o.t.node.worldPosition;
-                        const dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z;
-                        return dx * dx + dy * dy + dz * dz < 0.6 * 0.6;
-                    });
-                    if (!busyNeighbor) {
-                        freeze(t, rb);
-                        continue;
-                    }
-                }
-            } else {
-                t.slowTicks = 0;
+                t.stillTicks = 0;
             }
 
             // 高速下落阶段不做视觉外轮廓硬修正——半空中横向"吸附"正是抖动来源之一；
