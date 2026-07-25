@@ -874,7 +874,9 @@ export class GameManager extends Component {
 
     // ---------- 道具 ----------
 
-    private propCounts: Record<PropKind, number> = { remove: 3, magnet: 3, shuffle: 3 };
+    // 道具收紧：白送兜底越少，越逼玩家靠决策而非道具解僵局。
+    // 「凑齐」(magnet)直接白给一组三消、能破任何死局，破坏性最强 → 压到 1。
+    private propCounts: Record<PropKind, number> = { remove: 2, magnet: 1, shuffle: 2 };
     private static readonly PROP_NAMES: Record<PropKind, string> = { remove: '移出', magnet: '凑齐', shuffle: '打乱' };
 
     private loadProps() {

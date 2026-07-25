@@ -64,12 +64,12 @@ export function getActiveTheme(): Theme {
 export function buildLevels(family: string[]): LevelDef[] {
     const pick = (n: number) => family.slice(0, Math.min(n, family.length));
     return [
-        // 第 1 关·送温暖：4 种强对比 × 2 组 = 24 件 / 270s（~11s/件）
-        { items: pick(4), groupsPerItem: 2, timeSec: 270, seed: 104729 },
-        // 第 2 关·正常：6 种 × 2 组 = 36 件 / 255s（~7s/件），引入同色系
-        { items: pick(6), groupsPerItem: 2, timeSec: 255, seed: 130363 },
-        // 第 3 关·地狱：9 种 × 2 组 = 54 件 / 240s（~4.4s/件），满槽压力最大
-        { items: pick(9), groupsPerItem: 2, timeSec: 240, seed: 155921 },
+        // 第 1 关·送温暖：4 种强对比 × 2 组 = 24 件 / 255s（~10.6s/件），教学关保持宽松
+        { items: pick(4), groupsPerItem: 2, timeSec: 255, seed: 104729 },
+        // 第 2 关·正常：6 种 × 2 组 = 36 件 / 200s（~5.6s/件），引入同色系
+        { items: pick(6), groupsPerItem: 2, timeSec: 200, seed: 130363 },
+        // 第 3 关·地狱：9 种 × 2 组 = 54 件 / 165s（~3.1s/件），手速+决策双压
+        { items: pick(9), groupsPerItem: 2, timeSec: 165, seed: 155921 },
     ];
 }
 
