@@ -180,6 +180,7 @@ export class GameManager extends Component {
         this.msgLabel = this.hud.msgLabel;
         this.audio = new AudioMan(this.node.scene);
         this.loadProps();
+        this.grantDailyPropGift();
         // 关卡进度本地存储:上次通到第几关,这次直接从那关开始。
         const savedLevel = SaveData.getLevel();
         if (savedLevel !== null) {
@@ -887,9 +888,8 @@ export class GameManager extends Component {
 
     // ---------- 道具 ----------
 
-    // 道具收紧：白送兜底越少，越逼玩家靠决策而非道具解僵局。
-    // 「凑齐」(magnet)直接白给一组三消、能破任何死局，破坏性最强 → 压到 1。
-    private propCounts: Record<PropKind, number> = { remove: 2, magnet: 1, shuffle: 2 };
+    // 道具默认 0，不再白送；改为靠获取途径累积（通关奖励 / 看广告等，见 grantProps）。
+    private propCounts: Record<PropKind, number> = { remove: 0, magnet: 0, shuffle: 0 };
     private static readonly PROP_NAMES: Record<PropKind, string> = { remove: '移出', magnet: '凑齐', shuffle: '打乱' };
 
     private loadProps() {
@@ -902,6 +902,37 @@ export class GameManager extends Component {
         this.refreshPropHud();
     }
 
+    /** 统一的道具发放入口：通关星级奖励、每日登录、看广告补充都走这里。 */
+    private grantProps(delta: Partial<Record<PropKind, number>>) {
+        for (const k of ['remove', 'magnet', 'shuffle'] as PropKind[]) {
+            this.propCounts[k] += delta[k] ?? 0;
+        }
+        this.saveProps();
+    }
+
+    /** 每日首次进入送一套道具（跨天重置）。 */
+    private grantDailyPropGift() {
+        if (SaveData.claimedPropGiftToday()) return;
+        SaveData.markPropGift();
+        this.grantProps({ remove: 1, magnet: 1, shuffle: 1 });
+    }
+
+    /**
+     * 道具用尽时点击 → 看激励视频补 1 次。
+     * MVP 占位：确认即发放；接入微信后把 onAction 换成 wx.createRewardedVideoAd 的 onClose(isEnded) 回调。
+     */
+    private offerAdForProp(kind: PropKind) {
+        if (this.paused) return;
+        this.hud?.showNotice(`${GameManager.PROP_NAMES[kind]}用完了`, '看段广告补充 1 个吧',
+            '看广告 +1', () => {
+                const delta: Partial<Record<PropKind, number>> = {};
+                delta[kind] = 1;
+                this.grantProps(delta);
+                this.audio?.play('prop');
+                this.hud?.hideResult();
+            });
+    }
+
     private refreshPropHud() {
         if (!this.hud) return;
         for (const k of ['remove', 'magnet', 'shuffle'] as PropKind[]) {
@@ -911,7 +942,7 @@ export class GameManager extends Component {
 
     useProp(kind: PropKind) {
         if (!this.playing || this.paused || this.interactionLocked) return;
-        if (this.propCounts[kind] <= 0) return;
+        if (this.propCounts[kind] <= 0) { this.offerAdForProp(kind); return; }
         let used = false;
         if (kind === 'remove') used = this.propRemove();
         else if (kind === 'magnet') used = this.propMagnet();
@@ -1047,11 +1078,12 @@ export class GameManager extends Component {
         this.loseReason = win ? '' : (reason === '槽位已满' ? '槽位已满' : '时间到');
         this.audio?.play(win ? 'win' : 'lose');
         const stars = this.progress >= 100 ? 3 : this.progress >= 70 ? 2 : this.progress >= 50 ? 1 : 0;
-        // 星级奖励：一星+移出、二星再+凑齐、三星再+打乱
-        if (stars >= 1) this.propCounts.remove++;
-        if (stars >= 2) this.propCounts.magnet++;
-        if (stars >= 3) this.propCounts.shuffle++;
-        if (stars > 0) this.saveProps();
+        // 星级奖励：一星+移出、二星再+凑齐、三星再+打乱（走统一发放入口）
+        const reward: Partial<Record<PropKind, number>> = {};
+        if (stars >= 1) reward.remove = 1;
+        if (stars >= 2) reward.magnet = 1;
+        if (stars >= 3) reward.shuffle = 1;
+        this.grantProps(reward);
         console.log(`[GameManager] ${win ? '胜利' : `失败（${reason}）`} 完成度 ${this.progress}%`);
 
         const finishedLevel = this.levelIndex;

@@ -1,11 +1,14 @@
 import {
     Node, Scene, Camera, Canvas, Label, Layers, Color, UITransform, Sprite, SpriteFrame, Texture2D,
-    NodeEventType, Widget, view, screen, Graphics, UIOpacity, Font, resources,
+    NodeEventType, Widget, view, screen, Graphics, UIOpacity, resources,
     tween, v3, Vec3, Tween,
 } from 'cc';
 import { SKINS } from './SceneSkin';
 
 export type PropKind = 'remove' | 'magnet' | 'shuffle';
+
+/** UI 矢量图标种类（不依赖字体，见 HudUI.drawGlyph）。 */
+type IconKind = PropKind | 'pause' | 'play' | 'palette' | 'star';
 
 type HorizontalAlign = { left?: number; right?: number; centerX?: boolean };
 
@@ -31,7 +34,7 @@ const TRAY_ICON_LAYOUT: Record<string, TrayIconLayout> = {
 
 /**
  * 参考竞品重制的 HUD：顶部暂停/计时、轻量进度条、底部桃木控制台、
- * 三个立体黄色道具按钮。图标使用 Font Awesome Free，避免文字/emoji 占位。
+ * 三个立体黄色道具按钮。图标用 Graphics 矢量绘制（见 drawGlyph），不依赖字体。
  */
 export class HudUI {
     timerLabel!: Label;
@@ -48,15 +51,15 @@ export class HudUI {
     private progressFill!: UITransform;
     private trayDangerGlow!: Node;
     private trayDangerOpacity!: UIOpacity;
-    private pauseIcon!: Label;
+    private pauseIcon!: Graphics;
+    /** 道具栏总开关（关闭则完全隐藏道具 UI）。 */
+    private static readonly SHOW_PROPS = true;
     private static readonly PROGRESS_W = 252;
     private static readonly TRAY_BOTTOM = 126;
     private static readonly TRAY_CENTER_Y = 169;
     private static readonly SLOT_STEP = 88;
     private propBadge: Record<PropKind, Label> = {} as Record<PropKind, Label>;
     private propOpacity: Record<PropKind, UIOpacity> = {} as Record<PropKind, UIOpacity>;
-    private iconLabels: Label[] = [];
-    private iconFont: Font | null = null;
     private levelLabel!: Label;
     private dailyLabel!: Label;
     private resultRoot: Node | null = null;
@@ -110,7 +113,7 @@ export class HudUI {
             undefined, 0, { left: 23 });
         const pauseBtn = this.makePanel(64, 64, 18, new Color(215, 158, 105), { top: 22 }, 0,
             new Color(124, 75, 42), 4, { left: 26 });
-        this.pauseIcon = this.addIcon(pauseBtn, '\uf04c', 31, cream, 0, 0);
+        this.pauseIcon = this.drawIcon(pauseBtn, 'pause', 31, cream, 0, 0);
         pauseBtn.on(NodeEventType.TOUCH_END, () => onPause?.());
 
         // \u6362\u80a4\u952e\uff1a\u6682\u505c\u952e\u6b63\u4e0b\u65b9\uff0c\u540c\u6b3e\u68d5\u8272\u8f6f\u7cd6\u8d28\u611f\uff0c\u8c03\u8272\u76d8\u56fe\u6807\u3002
@@ -119,7 +122,7 @@ export class HudUI {
                 undefined, 0, { left: 23 });
             const skinBtn = this.makePanel(64, 64, 18, new Color(215, 158, 105), { top: 100 }, 0,
                 new Color(124, 75, 42), 4, { left: 26 });
-            this.addIcon(skinBtn, '\uf53f', 28, cream, 0, 0);
+            this.drawIcon(skinBtn, 'palette', 28, cream, 0, 0);
             skinBtn.on(NodeEventType.TOUCH_START, () => {
                 tween(skinBtn).stop();
                 tween(skinBtn).to(0.07, { scale: v3(0.95, 0.95, 1) }).start();
@@ -179,6 +182,8 @@ export class HudUI {
             this.addSlotLight(slot);
         }
 
+        // 道具栏默认隐藏（见 SHOW_PROPS）；将来接微信激励视频变现时再打开。
+        if (HudUI.SHOW_PROPS) {
         // 底部桃木控制台，覆盖整宽并保留圆润顶沿。
         this.makePanel(760, 128, 28, new Color(116, 65, 43, 215), { bottom: -18 }, 0);
         this.makePanel(752, 120, 25, new Color(221, 150, 105, 245), { bottom: -12 }, 0,
@@ -199,14 +204,14 @@ export class HudUI {
             const btn = this.makePanel(184, 80, 18, new Color(255, 207, 55), { bottom: 17 }, 0,
                 new Color(171, 118, 29), 5, align);
             this.propOpacity[kind] = btn.addComponent(UIOpacity);
-            this.addIcon(btn, icon, 38, color, 0, 12);
+            this.drawIcon(btn, kind, 38, color, 0, 12);
             this.addLabel(btn, text, 22, warmBrown, 0, -24, true);
 
             const badgeShadow = this.makePanelChild(btn, 40, 40, 20, new Color(79, 72, 65), 78, 38);
             badgeShadow.setPosition(78, 36, 0);
             const badge = this.makePanelChild(btn, 36, 36, 18, new Color(112, 110, 105), 78, 39,
                 new Color(246, 242, 225), 4);
-            this.propBadge[kind] = this.addLabel(badge, '+3', 15, new Color(255, 255, 255), 0, 0, true);
+            this.propBadge[kind] = this.addLabel(badge, '0', 15, new Color(255, 255, 255), 0, 0, true);
 
             btn.on(NodeEventType.TOUCH_START, () => {
                 tween(btn).stop();
@@ -216,16 +221,8 @@ export class HudUI {
             btn.on(NodeEventType.TOUCH_END, () => { release(); onProp(kind); });
             btn.on(NodeEventType.TOUCH_CANCEL, release);
         });
+        } // if SHOW_PROPS
 
-        // Cocos 异步导入开源图标字体；导入完成前标签为空白但不会显示伪图标。
-        resources.load('fonts/fa-solid-900', Font, (err, font) => {
-            if (err || !font) {
-                console.warn('[HudUI] Font Awesome 字体加载失败', err);
-                return;
-            }
-            this.iconFont = font;
-            for (const label of this.iconLabels) label.font = font;
-        });
     }
 
     setLevel(n: number) {
@@ -342,7 +339,7 @@ export class HudUI {
 
     /**
      * 结算弹窗:遮罩 + 面板 + 三星逐颗弹出 + 行动按钮。
-     * 星星用 Font Awesome 实心星,未获得的显示为灰色底星。
+     * 星星用 Graphics 矢量五角星,未获得的显示为灰色底星。
      */
     showResult(opts: {
         win: boolean; stars: number; progress: number;
@@ -379,11 +376,9 @@ export class HudUI {
         for (let i = 0; i < 3; i++) {
             const x = (i - 1) * 108;
             const y = i === 1 ? 78 : 58;
-            const base = this.addIcon(panel, '', 66, new Color(205, 198, 182), x, y);
-            base.outlineColor = new Color(160, 152, 138, 200);
+            this.drawIcon(panel, 'star', 66, new Color(205, 198, 182), x, y);
             if (i < opts.stars) {
-                const star = this.addIcon(panel, '', 66, new Color(255, 201, 40), x, y);
-                star.outlineColor = new Color(196, 130, 30, 255);
+                const star = this.drawIcon(panel, 'star', 66, new Color(255, 201, 40), x, y);
                 star.node.setScale(0, 0, 1);
                 tween(star.node)
                     .delay(0.35 + i * 0.28)
@@ -680,12 +675,16 @@ export class HudUI {
     }
 
     setPropCount(kind: PropKind, _text: string, count: number) {
-        this.propBadge[kind].string = `+${count}`;
-        this.propOpacity[kind].opacity = count > 0 ? 255 : 110;
+        if (!HudUI.SHOW_PROPS) return;
+        const usable = count > 0;
+        // 角标标清剩余次数；0 次时数字转红 + 按钮明显置灰，直观表达「不可用 / 需获取」。
+        this.propBadge[kind].string = `${count}`;
+        this.propBadge[kind].color = usable ? new Color(255, 255, 255) : new Color(255, 120, 96);
+        this.propOpacity[kind].opacity = usable ? 255 : 120;
     }
 
     setPaused(paused: boolean) {
-        this.pauseIcon.string = paused ? '\uf04b' : '\uf04c';
+        HudUI.drawGlyph(this.pauseIcon, paused ? 'play' : 'pause', 31, new Color(255, 247, 218));
     }
 
     private makePanel(w: number, h: number, r: number, fill: Color,
@@ -773,13 +772,101 @@ export class HudUI {
         return l;
     }
 
-    private addIcon(parent: Node, text: string, size: number, color: Color, x = 0, y = 0): Label {
-        const label = this.addLabel(parent, text, size, color, x, y, true);
-        label.outlineColor = new Color(73, 51, 47, 230);
-        label.outlineWidth = 3;
-        if (this.iconFont) label.font = this.iconFont;
-        else this.iconLabels.push(label);
-        return label;
+    private drawIcon(parent: Node, kind: IconKind, size: number, color: Color, x = 0, y = 0): Graphics {
+        const n = new Node('icon');
+        n.layer = Layers.Enum.UI_2D;
+        n.setParent(parent);
+        n.setPosition(x, y, 0);
+        const g = n.addComponent(Graphics);
+        HudUI.drawGlyph(g, kind, size, color);
+        return g;
+    }
+
+    /**
+     * 用 Graphics 矢量绘制 UI 图标，取代 Font Awesome 图标字体。
+     * 微信小游戏 canvas 对字体私有区(PUA)字形不渲染，字体图标在真机会整片消失，矢量则 100% 可靠。
+     * 每个图标只用一次 fill 或一次 stroke（单色），与本文件既有 Graphics 用法一致，避免多色路径叠加。
+     */
+    private static drawGlyph(g: Graphics, kind: IconKind, size: number, color: Color): void {
+        g.clear();
+        const s = size;
+        g.fillColor = color;
+        g.strokeColor = color;
+        switch (kind) {
+            case 'pause': {
+                const bw = s * 0.16, bh = s * 0.58, gap = s * 0.13;
+                g.roundRect(-gap - bw, -bh / 2, bw, bh, bw * 0.4);
+                g.roundRect(gap, -bh / 2, bw, bh, bw * 0.4);
+                g.fill();
+                break;
+            }
+            case 'play': {
+                const r = s * 0.4;
+                g.moveTo(-r * 0.72, r * 0.92);
+                g.lineTo(-r * 0.72, -r * 0.92);
+                g.lineTo(r, 0);
+                g.close();
+                g.fill();
+                break;
+            }
+            case 'palette': {
+                // 单色描边：盘身大圈 + 拇指孔 + 三个颜料点，读作调色盘。
+                g.lineWidth = Math.max(2, s * 0.07);
+                g.circle(0, 0, s * 0.4);
+                g.circle(s * 0.13, -s * 0.15, s * 0.1);
+                g.circle(-s * 0.16, s * 0.1, s * 0.055);
+                g.circle(s * 0.02, s * 0.2, s * 0.055);
+                g.circle(s * 0.19, s * 0.05, s * 0.055);
+                g.stroke();
+                break;
+            }
+            case 'remove': {
+                // 向上顶出的箭头（把物件移出槽）。
+                g.moveTo(0, s * 0.5);
+                g.lineTo(-s * 0.33, s * 0.06);
+                g.lineTo(s * 0.33, s * 0.06);
+                g.close();
+                g.roundRect(-s * 0.11, -s * 0.45, s * 0.22, s * 0.52, s * 0.05);
+                g.fill();
+                break;
+            }
+            case 'magnet': {
+                // U 形马蹄磁铁（开口朝上）。
+                const aw = s * 0.27, top = s * 0.36;
+                g.lineWidth = s * 0.19;
+                g.moveTo(-aw, top);
+                g.lineTo(-aw, 0);
+                g.arc(0, 0, aw, Math.PI, Math.PI * 2, false);
+                g.lineTo(aw, top);
+                g.stroke();
+                break;
+            }
+            case 'shuffle': {
+                // 两条交叉箭头。
+                g.lineWidth = s * 0.1;
+                const R = s * 0.4, H = s * 0.26, a = s * 0.18;
+                g.moveTo(-R, -H); g.lineTo(R, H);
+                g.moveTo(-R, H); g.lineTo(R, -H);
+                g.moveTo(R, H); g.lineTo(R - a, H);
+                g.moveTo(R, H); g.lineTo(R, H - a);
+                g.moveTo(R, -H); g.lineTo(R - a, -H);
+                g.moveTo(R, -H); g.lineTo(R, -H + a);
+                g.stroke();
+                break;
+            }
+            case 'star': {
+                const R = s * 0.5, r = R * 0.44;
+                for (let i = 0; i < 10; i++) {
+                    const ang = Math.PI / 2 + i * Math.PI / 5;
+                    const rad = i % 2 === 0 ? R : r;
+                    if (i === 0) g.moveTo(Math.cos(ang) * rad, Math.sin(ang) * rad);
+                    else g.lineTo(Math.cos(ang) * rad, Math.sin(ang) * rad);
+                }
+                g.close();
+                g.fill();
+                break;
+            }
+        }
     }
 
     private makeFloatingLabel(text: string, size: number, color: Color,

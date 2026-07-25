@@ -15,6 +15,7 @@ export class SaveData {
     private static readonly BEST = 'goose_best_v1';
     private static readonly SKIN = 'goose_skin_v1';
     private static readonly PROP = 'goose_props_v1';
+    private static readonly PROPGIFT = 'goose_propgift_v1';
 
     private static read(key: string): string | null {
         try { return sys.localStorage.getItem(key); } catch { return null; }
@@ -77,5 +78,13 @@ export class SaveData {
     }
     static setProps(counts: unknown): void {
         SaveData.write(SaveData.PROP, JSON.stringify(counts));
+    }
+
+    /** 每日道具礼包：今天是否已领取（跨天自动重置）。 */
+    static claimedPropGiftToday(): boolean {
+        return SaveData.read(SaveData.PROPGIFT) === SaveData.todayKey();
+    }
+    static markPropGift(): void {
+        SaveData.write(SaveData.PROPGIFT, SaveData.todayKey());
     }
 }
