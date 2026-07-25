@@ -5,7 +5,7 @@ import {
     Layers, PhysicsMaterial, Color,
 } from 'cc';
 import { DebugViz } from './DebugViz';
-import { LEVELS, LevelDef } from './LevelConfig';
+import { LEVELS, LevelDef, getActiveTheme } from './LevelConfig';
 import { SceneSkin, getSkin, DEFAULT_SKIN_ID } from './SceneSkin';
 import { ContainerBoundary, BoundaryDef } from './ContainerBoundary';
 import { SlotTray, TRAY_CAPACITY } from './SlotTray';
@@ -143,8 +143,9 @@ export class GameManager extends Component {
         PhysicsSystem.instance.maxSubSteps = 8;
         PhysicsSystem.instance.fixedTimeStep = 1 / 120;
         PhysicsSystem.instance.sleepThreshold = 0.15;
-        // 皮肤要在建盒之前定好：getSkin 对未知/损坏 id 回落默认皮肤。
-        this.skinId = getSkin(SaveData.getSkin()).id;
+        // 皮肤要在建盒之前定好。每天固定一个场景：皮肤跟随当天主题（getActiveTheme），
+        // 不再由玩家自选决定「场景身份」；HUD 换肤面板仅作背景微调，不改物件族。
+        this.skinId = getSkin(getActiveTheme().skinId).id;
         this.buildBox();
         input.on(Input.EventType.TOUCH_START, this.onTouch, this);
     }

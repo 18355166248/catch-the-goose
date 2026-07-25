@@ -1,4 +1,12 @@
-/** 关卡配置：种类 × 组数 × 时限。每组 = 3 个相同物件。 */
+/**
+ * 关卡与场景配置。
+ *
+ * 设计：一个「场景主题」= 一套皮肤（SceneSkin）+ 一族物件（family）。
+ * 每天按日期轮播一个主题（全服同一天同场景，天然可上好友榜）。
+ * 当天固定 3 关阶梯，物件从该主题的 family 派生：
+ *   第 1 关·送温暖(4 种) → 第 2 关·正常(6 种) → 第 3 关·地狱(9 种)。
+ * 物件颜色对比逐关降低（先纯色强对比，再引入同色系靠形状区分），配合密度/时限收紧难度。
+ */
 
 export interface LevelDef {
     /** 参与本关的物件 id（对应 resources/models/ 下的 glb 文件名） */
@@ -11,25 +19,62 @@ export interface LevelDef {
     seed: number;
 }
 
-/** 全部可用物件 id */
-export const ALL_ITEMS = [
-    'goose', 'baicai', 'mile', 'pixiu',
-    'banzhi', 'bracelet', 'hulu', 'pingankou',
-    'tongqian', 'yuzhuo',
-    // CC0/CC-BY 新增(见 resources/models/CREDITS.md)
-    'yuanbao', 'baoshi', 'yushi', 'jingling',
+/** 场景主题：皮肤 + 物件族。family 顺序即难度引入顺序（前 4 个为强对比上手件）。 */
+export interface Theme {
+    id: string;
+    /** 显示名 */
+    name: string;
+    /** 对应 SceneSkin.id（决定背景与置物容器外观） */
+    skinId: string;
+    /**
+     * 物件族（该场景专属模型 id）。至少 9 种以喂满第 3 关。
+     * 排序讲究：slice(0,4) 必须颜色两两分明；后段可引入同色系提升辨识难度。
+     */
+    family: string[];
+}
+
+/**
+ * 全部场景主题。目前先上「水果摊」，甜品店/池塘农场待模型就绪后按同结构追加，
+ * 追加即自动进入每日轮播，无需改玩法层。
+ */
+export const THEMES: Theme[] = [
+    {
+        id: 'fruit', name: '水果摊', skinId: 'redwood',
+        // slice(0,4)=红/黄/紫/橙 四色分明；后段草莓(红)柠檬(黄)与前段同色系，靠形状区分。
+        family: ['apple', 'banana', 'grape', 'orange',
+                 'strawberry', 'lemon', 'pear', 'cherry', 'goose'],
+    },
 ];
 
-export const LEVELS: LevelDef[] = [
-    // 总时长随物件数增加，单位物件时间逐关下降：10s → 9s → 8.3s → 6.9s → 5.9s。
-    // 第 1 关是上手关：4 种强对比配色 × 2 组 = 24 件，先教会“找同类凑三”。
-    { items: ['goose', 'baicai', 'tongqian', 'bracelet'], groupsPerItem: 2, timeSec: 240, seed: 104729 },
-    { items: ['goose', 'banzhi', 'tongqian', 'pingankou', 'hulu'], groupsPerItem: 2, timeSec: 270, seed: 130363 },
-    { items: ['goose', 'baicai', 'banzhi', 'tongqian', 'pingankou', 'yuzhuo'], groupsPerItem: 2, timeSec: 300, seed: 155921 },
-    { items: ['goose', 'baicai', 'mile', 'banzhi', 'hulu', 'tongqian', 'yuzhuo', 'yuanbao', 'yushi', 'jingling'], groupsPerItem: 2, timeSec: 330, seed: 181081 },
-    // 终盘关：11 种 × 2 组 = 66 件（含全部 4 个新物件），密度控制在已调优的量级。
-    { items: ['goose', 'baicai', 'mile', 'pixiu', 'tongqian', 'bracelet', 'yuanbao', 'baoshi', 'yushi', 'jingling', 'hulu'], groupsPerItem: 2, timeSec: 390, seed: 206369 },
-];
+/** 按日期取模选当天主题（UTC 天数；全服一致）。 */
+export function activeThemeIndex(): number {
+    const day = Math.floor(Date.now() / 86400000);
+    return ((day % THEMES.length) + THEMES.length) % THEMES.length;
+}
+
+export function getActiveTheme(): Theme {
+    return THEMES[activeThemeIndex()];
+}
+
+/**
+ * 从物件族派生 3 关阶梯。
+ * 密度递增（24→36→54 件）而单关总时限递减，单位物件时间从 ~11s 压到 ~4.4s，
+ * 形成「送温暖 → 正常 → 地狱」的陡峭曲线。
+ */
+export function buildLevels(family: string[]): LevelDef[] {
+    const pick = (n: number) => family.slice(0, Math.min(n, family.length));
+    return [
+        // 第 1 关·送温暖：4 种强对比 × 2 组 = 24 件 / 270s（~11s/件）
+        { items: pick(4), groupsPerItem: 2, timeSec: 270, seed: 104729 },
+        // 第 2 关·正常：6 种 × 2 组 = 36 件 / 255s（~7s/件），引入同色系
+        { items: pick(6), groupsPerItem: 2, timeSec: 255, seed: 130363 },
+        // 第 3 关·地狱：9 种 × 2 组 = 54 件 / 240s（~4.4s/件），满槽压力最大
+        { items: pick(9), groupsPerItem: 2, timeSec: 240, seed: 155921 },
+    ];
+}
+
+/** 当天的 3 关（模块加载时按当天主题定；一局游戏时长内日期不变，无需热更）。 */
+export const LEVELS: LevelDef[] = buildLevels(getActiveTheme().family);
 
 /** 校验：每关物件总数必须是 3 的倍数（groupsPerItem 保证了这一点，这里防御性再查一遍） */
 export function validateLevel(def: LevelDef): boolean {

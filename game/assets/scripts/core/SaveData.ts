@@ -34,12 +34,18 @@ export class SaveData {
         return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
     }
 
+    /**
+     * 关卡进度按天作用域：只有当天存过的进度才沿用，跨天自动回落 null
+     * → 上层从第 1 关重开。配合「每天固定场景 + 3 关阶梯」的每日挑战循环。
+     * 兼容旧版纯数字存档（解析为 number，无 date 字段 → 视为非今天 → 重开）。
+     */
     static getLevel(): number | null {
-        const n = parseInt(SaveData.read(SaveData.LEVEL) ?? '', 10);
-        return isNaN(n) ? null : n;
+        const raw = SaveData.readJson<{ date?: string; index?: number } | null>(SaveData.LEVEL, null);
+        return raw && raw.date === SaveData.todayKey() && typeof raw.index === 'number'
+            ? raw.index : null;
     }
     static setLevel(index: number): void {
-        SaveData.write(SaveData.LEVEL, String(index));
+        SaveData.write(SaveData.LEVEL, JSON.stringify({ date: SaveData.todayKey(), index }));
     }
 
     /** 仅当存档日期是今天才沿用剩余次数，否则回落 fallback（跨天自动重置）。 */
