@@ -174,8 +174,9 @@ export class HudUI {
         const trayPanel = this.makePanel(654, 82, 18, new Color(244, 242, 235),
             { bottom: HudUI.TRAY_BOTTOM }, 0, new Color(151, 146, 140), 4);
         for (let i = 0; i < 7; i++) {
-            this.makePanelChild(trayPanel, 78, 64, 14, new Color(177, 177, 174),
-                (i - 3) * HudUI.SLOT_STEP, 0, new Color(255, 255, 255, 230), 3);
+            const slot = this.makePanelChild(trayPanel, 78, 64, 14, new Color(196, 195, 191),
+                (i - 3) * HudUI.SLOT_STEP, 0, new Color(255, 255, 255, 235), 3);
+            this.addSlotLight(slot);
         }
 
         // 底部桃木控制台，覆盖整宽并保留圆润顶沿。
@@ -733,6 +734,24 @@ export class HudUI {
             g.stroke();
         }
         return n;
+    }
+
+    /**
+     * 槽内柔光：叠加数层半透明暖白圆，中心最亮向边缘衰减，模拟顶部聚光。
+     * 光斑略偏上，物品图标随后置于其上，靠对比把偏暗的模型缩略图“提亮”。
+     */
+    private addSlotLight(slot: Node): void {
+        const n = new Node('slotLight');
+        n.layer = Layers.Enum.UI_2D;
+        n.setParent(slot);
+        n.setPosition(0, 5, 0);
+        const g = n.addComponent(Graphics);
+        const radii = [32, 25, 19, 13];
+        for (const r of radii) {
+            g.fillColor = new Color(255, 253, 244, 42);
+            g.circle(0, 0, r);
+            g.fill();
+        }
     }
 
     private addLabel(parent: Node, text: string, size: number, color: Color,
