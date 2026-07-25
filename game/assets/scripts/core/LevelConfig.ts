@@ -17,7 +17,15 @@ export interface LevelDef {
     timeSec: number;
     /** 初始条件种子：同一关重试保持物件顺序、投放点、旋转和初速度一致 */
     seed: number;
+    /**
+     * 障碍物（石头）数量。默认 0。石头可拾取、占 1 格但无法三消（≤2 个永远配不齐），
+     * 不计入胜利判定 → 误拿即长期占格，只能靠「移出」道具清掉，制造真实残局/爆槽风险。
+     */
+    distractors?: number;
 }
+
+/** 障碍物 id（对应 resources/models/rock.glb）；跨主题通用，不属于任何物件族。 */
+export const DISTRACTOR_ID = 'rock';
 
 /** 场景主题：皮肤 + 物件族。family 顺序即难度引入顺序（前 4 个为强对比上手件）。 */
 export interface Theme {
@@ -64,12 +72,12 @@ export function getActiveTheme(): Theme {
 export function buildLevels(family: string[]): LevelDef[] {
     const pick = (n: number) => family.slice(0, Math.min(n, family.length));
     return [
-        // 第 1 关·送温暖：4 种强对比 × 2 组 = 24 件 / 255s（~10.6s/件），教学关保持宽松
+        // 第 1 关·送温暖：4 种强对比 × 2 组 = 24 件 / 255s（~10.6s/件），教学关不添堵（无障碍物）
         { items: pick(4), groupsPerItem: 2, timeSec: 255, seed: 104729 },
-        // 第 2 关·正常：6 种 × 2 组 = 36 件 / 200s（~5.6s/件），引入同色系
-        { items: pick(6), groupsPerItem: 2, timeSec: 200, seed: 130363 },
-        // 第 3 关·地狱：9 种 × 2 组 = 54 件 / 165s（~3.1s/件），手速+决策双压
-        { items: pick(9), groupsPerItem: 2, timeSec: 165, seed: 155921 },
+        // 第 2 关·正常：6 种 × 2 组 = 36 件 / 200s（~5.6s/件），引入同色系 + 1 块石头
+        { items: pick(6), groupsPerItem: 2, timeSec: 200, seed: 130363, distractors: 1 },
+        // 第 3 关·地狱：9 种 × 2 组 = 54 件 / 165s（~3.1s/件），手速+决策双压 + 2 块石头
+        { items: pick(9), groupsPerItem: 2, timeSec: 165, seed: 155921, distractors: 2 },
     ];
 }
 

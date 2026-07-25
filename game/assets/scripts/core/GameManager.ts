@@ -5,7 +5,7 @@ import {
     Layers, PhysicsMaterial, Color,
 } from 'cc';
 import { DebugViz } from './DebugViz';
-import { LEVELS, LevelDef, getActiveTheme } from './LevelConfig';
+import { LEVELS, LevelDef, getActiveTheme, DISTRACTOR_ID } from './LevelConfig';
 import { SceneSkin, getSkin, DEFAULT_SKIN_ID } from './SceneSkin';
 import { ContainerBoundary, BoundaryDef } from './ContainerBoundary';
 import { SlotTray, TRAY_CAPACITY } from './SlotTray';
@@ -204,10 +204,15 @@ export class GameManager extends Component {
         await this.startInitialRound();
     }
 
+    /** 本关需加载的 prefab id：物件族 +（本关有障碍物时）石头。 */
+    private levelPrefabIds(): string[] {
+        return this.level.distractors ? [...this.level.items, DISTRACTOR_ID] : this.level.items;
+    }
+
     /** 首次进入关卡的统一入口：确认有次数后再扣减、加载和生成。 */
     private async startInitialRound() {
         this.consumeDaily();
-        await this.prefabs.loadAll(this.level.items);
+        await this.prefabs.loadAll(this.levelPrefabIds());
         this.spawnItems();
         this.playing = true;
         this.updateHud();
@@ -461,7 +466,15 @@ export class GameManager extends Component {
             for (let i = 0; i < count; i++) queue.push(id);
         }
         this.shuffleInPlace(queue, () => this.levelRandom());
+        // 胜利判定只算正常物件：石头无法三消，不能计入 totalCount，否则 removedCount 永远追不上。
         this.totalCount = queue.length;
+        // 混入障碍物（石头）：一起投放但不计胜利。≤2 个永不配齐 → 占格残局风险。
+        // push 后整队再洗一次，让石头散落堆中而非全压在最外圈。
+        const nRock = this.level.distractors ?? 0;
+        if (nRock > 0 && this.prefabs.get(DISTRACTOR_ID)) {
+            for (let i = 0; i < nRock; i++) queue.push(DISTRACTOR_ID);
+            this.shuffleInPlace(queue, () => this.levelRandom());
+        }
         // 66 件对应 BASE;件数减少按体积等比放大,上限 MAX 防止超出容器。
         this.itemScale = Math.min(GameManager.PILE_ITEM_MAX,
             GameManager.PILE_ITEM_BASE * Math.cbrt(66 / Math.max(1, queue.length)));
@@ -1123,7 +1136,7 @@ export class GameManager extends Component {
         if (this.msgLabel) this.msgLabel.string = '';
         if (this.hud) this.hud.subMsgLabel.string = '';
         // 进入新关卡时可能出现首次使用的物件种类,补加载对应 Prefab。
-        await this.prefabs.loadAll(this.level.items);
+        await this.prefabs.loadAll(this.levelPrefabIds());
         this.spawnItems();
         this.paused = false;
         this.hud?.setPaused(false);
