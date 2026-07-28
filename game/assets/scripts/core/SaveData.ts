@@ -1,6 +1,7 @@
 import { sys } from 'cc';
 
-export interface BestRecord { stars: number; progress: number; }
+/** score 为后加字段，旧存档没有 → 读取方按 0 处理。 */
+export interface BestRecord { stars: number; progress: number; score?: number; }
 
 /**
  * 本地存档 I/O。
@@ -16,6 +17,8 @@ export class SaveData {
     private static readonly SKIN = 'goose_skin_v1';
     private static readonly PROP = 'goose_props_v1';
     private static readonly PROPGIFT = 'goose_propgift_v1';
+    private static readonly SOUND = 'goose_sound_v1';
+    private static readonly TAUGHT = 'goose_taught_v1';
 
     private static read(key: string): string | null {
         try { return sys.localStorage.getItem(key); } catch { return null; }
@@ -78,6 +81,22 @@ export class SaveData {
     }
     static setProps(counts: unknown): void {
         SaveData.write(SaveData.PROP, JSON.stringify(counts));
+    }
+
+    /** 音效开关。未存过按开启处理（首次进入有声）。 */
+    static getSound(): boolean {
+        return SaveData.read(SaveData.SOUND) !== '0';
+    }
+    static setSound(on: boolean): void {
+        SaveData.write(SaveData.SOUND, on ? '1' : '0');
+    }
+
+    /** 新手引导：是否已看过一次玩法说明（永久，不跨天重置）。 */
+    static taught(): boolean {
+        return SaveData.read(SaveData.TAUGHT) === '1';
+    }
+    static markTaught(): void {
+        SaveData.write(SaveData.TAUGHT, '1');
     }
 
     /** 每日道具礼包：今天是否已领取（跨天自动重置）。 */

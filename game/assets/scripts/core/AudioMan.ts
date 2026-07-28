@@ -1,4 +1,5 @@
 import { Node, Scene, AudioSource, AudioClip, resources } from 'cc';
+import { SaveData } from './SaveData';
 
 export type SfxName = 'pick' | 'drop' | 'match' | 'win' | 'lose' | 'honk' | 'shuffle' | 'prop';
 
@@ -11,6 +12,8 @@ export class AudioMan {
     private source: AudioSource;
     private clips = new Map<SfxName, AudioClip>();
     private lastPlay = new Map<SfxName, number>();
+    /** 音效总开关，跟随本地存档；关闭时 play 直接返回。 */
+    private enabled = SaveData.getSound();
 
     constructor(scene: Scene) {
         const n = new Node('AudioMan');
@@ -25,7 +28,17 @@ export class AudioMan {
         }
     }
 
+    get soundOn(): boolean { return this.enabled; }
+
+    /** 切换音效开关并持久化，返回切换后的状态。 */
+    toggleSound(): boolean {
+        this.enabled = !this.enabled;
+        SaveData.setSound(this.enabled);
+        return this.enabled;
+    }
+
     play(name: SfxName, volume = 1) {
+        if (!this.enabled) return;
         const clip = this.clips.get(name);
         if (!clip) return;
         // 同名音效 60ms 内去重：凑齐道具连续拾取时避免爆音叠加。

@@ -62,7 +62,15 @@ export class HudUI {
     private propOpacity: Record<PropKind, UIOpacity> = {} as Record<PropKind, UIOpacity>;
     private levelLabel!: Label;
     private dailyLabel!: Label;
+    private scoreLabel!: Label;
+    /** 计时牌节点：进入读秒时整体脉冲，制造紧迫感。 */
+    private timerPanel!: Node;
+    private timerUrgent = false;
     private resultRoot: Node | null = null;
+    private pauseRoot: Node | null = null;
+    private homeRoot: Node | null = null;
+    private hintRoot: Node | null = null;
+    private comboPopRoot: Node | null = null;
     private capturedModels = new Map<Node, number>();
     private capturedIcons = new Map<Node, Node>();
     private skinRoot: Node | null = null;
@@ -137,6 +145,7 @@ export class HudUI {
         timerShadow.setPosition(0, -5, 0);
         const timerPanel = this.makePanel(160, 54, 25, new Color(62, 36, 24, 232), { top: 22 }, 0,
             new Color(168, 108, 57), 3);
+        this.timerPanel = timerPanel;
         this.timerLabel = this.addLabel(timerPanel, '0:00', 34, new Color(255, 220, 87), 0, 0, true);
 
         // 右上关卡标牌,与左上暂停键对称。
@@ -160,7 +169,25 @@ export class HudUI {
         fg.roundRect(0, -8, W - 8, 16, 8);
         fg.fill();
         fillNode.setScale(0, 1);
+        // 星级刻度：50% / 70% 两道浅色竖线，让玩家随时看清离下一颗星还差多少。
+        const tickNode = new Node('progressTicks');
+        tickNode.layer = Layers.Enum.UI_2D;
+        tickNode.setParent(progPanel);
+        const tg = tickNode.addComponent(Graphics);
+        tg.strokeColor = new Color(255, 244, 214, 175);
+        tg.lineWidth = 2;
+        for (const p of [0.5, 0.7]) {
+            const x = -W / 2 + 4 + (W - 8) * p;
+            tg.moveTo(x, -7);
+            tg.lineTo(x, 7);
+        }
+        tg.stroke();
         this.progressLabel = this.addLabel(progPanel, '0%', 17, cream, 0, 0, true);
+
+        // 得分牌：与进度条同一行，贴在它左侧的空白带里（不与左上两枚圆键重叠）。
+        const scorePanel = this.makePanel(130, 30, 15, new Color(45, 29, 21, 205), { top: 85 }, 0,
+            new Color(118, 78, 46), 2, { left: 96 });
+        this.scoreLabel = this.addLabel(scorePanel, '得分 0', 19, new Color(255, 220, 87), 0, 0, true);
 
         // 结算文案。
         this.msgLabel = this.makeFloatingLabel('', 48, new Color(255, 221, 91), { centerY: 92 });
@@ -298,11 +325,153 @@ export class HudUI {
         this.burstAt(icon.position.clone(), new Color(255, 205, 64, 255), 10, 64, 7);
     }
 
-    /** 轻量通知弹窗(每日次数用尽等):标题 + 正文 + 单按钮。 */
-    showNotice(title: string, body: string, actionText: string, onAction: () => void) {
-        this.hideResult();
-        const root = new Node('resultRoot');
-        this.resultRoot = root;
+    /** 得分刷新：数字换新的同时弹一下，让加分被看见。 */
+    setScore(score: number) {
+        this.scoreLabel.string = `得分 ${score}`;
+        const n = this.scoreLabel.node;
+        Tween.stopAllByTarget(n);
+        n.setScale(1, 1, 1);
+        tween(n)
+            .to(0.09, { scale: v3(1.2, 1.2, 1) }, { easing: 'quadOut' })
+            .to(0.15, { scale: v3(1, 1, 1) }, { easing: 'backOut' })
+            .start();
+    }
+
+    /**
+     * 三消得分飘字：收集区正上方弹出 "+N"，连击 ≥2 时再补一行 "连击 ×N"。
+     * 位置固定在槽位上方，与消除爆点同处一个视线焦点，不用来回找。
+     */
+    comboPop(combo: number, gain: number) {
+        // 上一条还没飘完就来了新的（道具连消时常见）→ 直接替换，不叠字。
+        if (this.comboPopRoot?.isValid) this.comboPopRoot.destroy();
+        const root = new Node('comboPop');
+        this.comboPopRoot = root;
+        root.layer = Layers.Enum.UI_2D;
+        root.setParent(this.contentRoot);
+        root.setPosition(0, -this.contentUT.height / 2 + 262, 2);
+        const op = root.addComponent(UIOpacity);
+
+        // 缩放弹跳挂在子节点上，与根节点的上浮位移互不干扰。
+        const inner = new Node('inner');
+        inner.layer = Layers.Enum.UI_2D;
+        inner.setParent(root);
+        this.addLabel(inner, `+${gain}`, combo >= 2 ? 46 : 38, new Color(255, 214, 76), 0, 0, true);
+        if (combo >= 2) {
+            this.addLabel(inner, `连击 ×${combo}`, 26, new Color(255, 146, 62), 0, -38, true);
+        }
+
+        inner.setScale(0.5, 0.5, 1);
+        tween(inner)
+            .to(0.16, { scale: v3(1.12, 1.12, 1) }, { easing: 'backOut' })
+            .to(0.1, { scale: v3(1, 1, 1) })
+            .start();
+        tween(root).delay(0.2).by(0.75, { position: v3(0, 78, 0) }, { easing: 'quadOut' }).start();
+        tween(op).delay(0.55).to(0.42, { opacity: 0 }).start();
+        tween(root).delay(1.05).call(() => root.destroy()).start();
+    }
+
+    // ---------- 提示与吉祥物 ----------
+
+    /**
+     * 在给定的屏幕坐标上打一组呼吸光环（玩家发呆时指出一组可消的物件）。
+     * 只画 2D 环、不碰 3D 物件本身，避免动到已冻结的刚体。
+     */
+    showHint(screenPositions: Vec3[]) {
+        this.clearHint();
+        if (screenPositions.length === 0) return;
+        const root = new Node('hint');
+        root.layer = Layers.Enum.UI_2D;
+        root.setParent(this.contentRoot);
+        this.hintRoot = root;
+        for (const sp of screenPositions) {
+            const n = new Node('ring');
+            n.layer = Layers.Enum.UI_2D;
+            n.setParent(root);
+            n.setPosition(this.screenToContent(sp));
+            const g = n.addComponent(Graphics);
+            g.lineWidth = 6;
+            g.strokeColor = new Color(255, 238, 150, 255);
+            g.circle(0, 0, 36);
+            g.stroke();
+            const op = n.addComponent(UIOpacity);
+            tween(n).repeat(3, tween(n)
+                .set({ scale: v3(0.75, 0.75, 1) })
+                .to(0.62, { scale: v3(1.3, 1.3, 1) }, { easing: 'quadOut' })).start();
+            tween(op).repeat(3, tween(op)
+                .set({ opacity: 255 })
+                .to(0.62, { opacity: 0 })).start();
+        }
+        tween(root).delay(1.95).call(() => this.clearHint()).start();
+    }
+
+    clearHint() {
+        if (this.hintRoot?.isValid) this.hintRoot.destroy();
+        this.hintRoot = null;
+    }
+
+    /**
+     * 拾到大鹅时在拾取点弹一句吉祥物台词。
+     * 游戏叫《抓住大鹅》，鹅是吉祥物也是最稀有的目标，抓到它该有点动静。
+     */
+    speechPop(screenPos: Vec3, text: string) {
+        const root = new Node('speech');
+        root.layer = Layers.Enum.UI_2D;
+        root.setParent(this.contentRoot);
+        root.setPosition(this.screenToContent(screenPos));
+        const op = root.addComponent(UIOpacity);
+
+        const bubble = this.makePanelChild(root, 112, 56, 20, new Color(255, 250, 232), 0, 46,
+            new Color(196, 130, 64), 4);
+        this.addLabel(bubble, text, 30, new Color(232, 122, 24), 0, 0, true);
+
+        bubble.setScale(0.2, 0.2, 1);
+        tween(bubble)
+            .to(0.18, { scale: v3(1.15, 1.15, 1) }, { easing: 'backOut' })
+            .to(0.1, { scale: v3(1, 1, 1) })
+            .start();
+        tween(root).delay(0.3).by(0.6, { position: v3(0, 52, 0) }, { easing: 'quadOut' }).start();
+        tween(op).delay(0.6).to(0.35, { opacity: 0 }).start();
+        tween(root).delay(1.0).call(() => root.destroy()).start();
+    }
+
+    /**
+     * 轻晃某个道具按钮（当前一组都凑不齐时指向「移出」）。
+     * 只是抖一下，不弹窗打断操作。
+     */
+    nudgeProp(kind: PropKind) {
+        if (!HudUI.SHOW_PROPS) return;
+        const btn = this.propOpacity[kind]?.node;
+        if (!btn?.isValid) return;
+        Tween.stopAllByTarget(btn);
+        btn.setScale(1, 1, 1);
+        tween(btn).repeat(3, tween(btn)
+            .to(0.16, { scale: v3(1.12, 1.12, 1) }, { easing: 'quadOut' })
+            .to(0.16, { scale: v3(1, 1, 1) }, { easing: 'quadIn' })).start();
+    }
+
+    /** 进入/退出读秒紧张态：计时数字转红并让整块牌子呼吸。 */
+    setTimeUrgent(on: boolean) {
+        if (on === this.timerUrgent) return;
+        this.timerUrgent = on;
+        this.timerLabel.color = on ? new Color(255, 106, 86) : new Color(255, 220, 87);
+        Tween.stopAllByTarget(this.timerPanel);
+        this.timerPanel.setScale(1, 1, 1);
+        if (!on) return;
+        tween(this.timerPanel)
+            .repeatForever(tween(this.timerPanel)
+                .to(0.4, { scale: v3(1.1, 1.1, 1) }, { easing: 'sineOut' })
+                .to(0.4, { scale: v3(1, 1, 1) }, { easing: 'sineIn' }))
+            .start();
+    }
+
+    // ---------- 弹窗骨架 ----------
+
+    /**
+     * 模态弹窗骨架：铺满屏幕、吞掉触摸的遮罩 + 缩放淡入的根节点。
+     * onMaskTap 传入时点遮罩空白处触发（用于可点外关闭的面板）；不传即纯吞触摸。
+     */
+    private makeModal(name: string, onMaskTap?: () => void): Node {
+        const root = new Node(name);
         root.layer = Layers.Enum.UI_2D;
         root.setParent(this.contentRoot);
 
@@ -314,7 +483,37 @@ export class HudUI {
         mg.fillColor = new Color(20, 12, 8, 165);
         mg.rect(-1200, -1600, 2400, 3200);
         mg.fill();
-        mask.on(NodeEventType.TOUCH_END, () => { /* 吞掉 */ });
+        mask.on(NodeEventType.TOUCH_END, () => onMaskTap?.());
+
+        root.setScale(0.7, 0.7, 1);
+        const op = root.addComponent(UIOpacity);
+        op.opacity = 0;
+        tween(root).to(0.26, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
+        tween(op).to(0.2, { opacity: 255 }).start();
+        return root;
+    }
+
+    /** 弹窗里的卡通立体按钮：深色投影 + 面板 + 按下缩放反馈。 */
+    private makeButton(parent: Node, text: string, w: number, h: number, x: number, y: number,
+        fill: Color, onTap: () => void, fontSize = 27): { node: Node; label: Label } {
+        this.makePanelChild(parent, w + 6, h + 4, 22, new Color(104, 61, 25, 235), x, y - 4);
+        const b = this.makePanelChild(parent, w, h, 20, fill, x, y, new Color(171, 118, 29), 5);
+        const label = this.addLabel(b, text, fontSize, new Color(102, 57, 28), 0, 0, true);
+        b.on(NodeEventType.TOUCH_START, () => {
+            tween(b).stop();
+            tween(b).to(0.07, { scale: v3(0.94, 0.94, 1) }).start();
+        });
+        const release = () => tween(b).to(0.08, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
+        b.on(NodeEventType.TOUCH_END, () => { release(); onTap(); });
+        b.on(NodeEventType.TOUCH_CANCEL, release);
+        return { node: b, label };
+    }
+
+    /** 轻量通知弹窗(每日次数用尽等):标题 + 正文 + 单按钮。 */
+    showNotice(title: string, body: string, actionText: string, onAction: () => void) {
+        this.hideResult();
+        const root = this.makeModal('resultRoot');
+        this.resultRoot = root;
 
         this.makePanelChild(root, 520, 340, 34, new Color(52, 27, 15, 235), 0, -8);
         const panel = this.makePanelChild(root, 508, 330, 30, new Color(255, 244, 214), 0, 0,
@@ -323,18 +522,86 @@ export class HudUI {
         const bodyLabel = this.addLabel(panel, body, 24, new Color(102, 57, 28), 0, 10, true);
         bodyLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
 
-        const btnShadow = this.makePanelChild(panel, 264, 84, 22, new Color(104, 61, 25, 235), 0, -96);
-        btnShadow.setPosition(0, -100, 0);
-        const btn = this.makePanelChild(panel, 258, 80, 20, new Color(255, 207, 55), 0, -92,
-            new Color(171, 118, 29), 5);
-        this.addLabel(btn, actionText, 28, new Color(102, 57, 28), 0, 0, true);
-        btn.on(NodeEventType.TOUCH_END, () => onAction());
+        this.makeButton(panel, actionText, 258, 80, 0, -92, new Color(255, 207, 55), onAction, 28);
+    }
 
-        root.setScale(0.7, 0.7, 1);
-        const op = root.addComponent(UIOpacity);
-        op.opacity = 0;
-        tween(root).to(0.28, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
-        tween(op).to(0.2, { opacity: 255 }).start();
+    // ---------- 首页 / 暂停菜单 ----------
+
+    /**
+     * 开局首页：进入即停在这里，玩家点「开始挑战」才扣次数、倒物件。
+     * 一上来就哗啦倒一堆物件，新玩家不知道在干嘛；这一屏交代场景、关卡、玩法和成绩。
+     */
+    showHome(opts: {
+        themeName: string; levelText: string; ruleText: string; warnText?: string;
+        dailyText: string; bestText: string; onStart: () => void;
+    }) {
+        this.hideHome();
+        const root = this.makeModal('homeRoot');
+        this.homeRoot = root;
+
+        const W = 560, H = 520;
+        this.makePanelChild(root, W + 12, H + 12, 36, new Color(52, 27, 15, 235), 0, -8);
+        const panel = this.makePanelChild(root, W, H, 32, new Color(255, 244, 214), 0, 0,
+            new Color(196, 130, 64), 6);
+
+        this.addLabel(panel, '抓住大鹅', 58, new Color(240, 150, 26), 0, H / 2 - 72, true);
+        this.addLabel(panel, `今日场景 · ${opts.themeName}`, 24, new Color(158, 122, 82), 0, H / 2 - 126, true);
+
+        // 关卡横幅：把「今天打第几关」做成视觉焦点，而不是混在文字里。
+        const banner = this.makePanelChild(panel, 380, 64, 18, new Color(250, 232, 196), 0, 62,
+            new Color(214, 172, 104), 4);
+        this.addLabel(banner, opts.levelText, 30, new Color(102, 57, 28), 0, 0, true);
+
+        const rule = this.addLabel(panel, opts.ruleText, 21, new Color(122, 88, 54), 0, -8, false);
+        rule.horizontalAlign = Label.HorizontalAlign.CENTER;
+        rule.overflow = Label.Overflow.RESIZE_HEIGHT;
+        rule.node.getComponent(UITransform)?.setContentSize(452, 60);
+
+        // 本关特有的注意事项（如第 2 关起混入的石头），没有就不占位。
+        if (opts.warnText) {
+            this.addLabel(panel, opts.warnText, 19, new Color(214, 106, 48), 0, -56, true);
+        }
+
+        this.makeButton(panel, '开始挑战', 300, 88, 0, -118, new Color(255, 207, 55), () => {
+            this.hideHome();
+            opts.onStart();
+        }, 32);
+
+        this.addLabel(panel, opts.dailyText, 19, new Color(158, 122, 82), -112, -196, true);
+        this.addLabel(panel, opts.bestText, 19, new Color(158, 122, 82), 112, -196, true);
+    }
+
+    hideHome() {
+        if (this.homeRoot?.isValid) this.homeRoot.destroy();
+        this.homeRoot = null;
+    }
+
+    /** 暂停菜单：继续 / 重开本关 / 音效开关。取代原先只有一个「暂停」字的空转状态。 */
+    showPauseMenu(opts: {
+        soundOn: boolean; onResume: () => void; onRestart: () => void; onToggleSound: () => boolean;
+    }) {
+        this.hidePauseMenu();
+        const root = this.makeModal('pauseRoot', () => opts.onResume());
+        this.pauseRoot = root;
+
+        const W = 500, H = 430;
+        this.makePanelChild(root, W + 12, H + 12, 34, new Color(52, 27, 15, 235), 0, -8);
+        const panel = this.makePanelChild(root, W, H, 30, new Color(255, 244, 214), 0, 0,
+            new Color(196, 130, 64), 6);
+        this.addLabel(panel, '暂 停', 46, new Color(240, 150, 26), 0, H / 2 - 58, true);
+
+        const soundText = (on: boolean) => `音效  ${on ? '开' : '关'}`;
+        this.makeButton(panel, '继续游戏', 320, 84, 0, 58, new Color(126, 217, 87), () => opts.onResume(), 30);
+        this.makeButton(panel, '重开本关', 320, 80, 0, -42, new Color(255, 207, 55), () => opts.onRestart());
+        const sound = this.makeButton(panel, soundText(opts.soundOn), 320, 72, 0, -136,
+            new Color(226, 208, 180), () => {
+                sound.label.string = soundText(opts.onToggleSound());
+            }, 25);
+    }
+
+    hidePauseMenu() {
+        if (this.pauseRoot?.isValid) this.pauseRoot.destroy();
+        this.pauseRoot = null;
     }
 
     /**
@@ -342,40 +609,31 @@ export class HudUI {
      * 星星用 Graphics 矢量五角星,未获得的显示为灰色底星。
      */
     showResult(opts: {
-        win: boolean; stars: number; progress: number;
+        win: boolean; stars: number; progress: number; score: number;
         rewardCount: number; actionText: string; onAction: () => void;
-        bestText?: string; newRecord?: boolean;
+        subtitle?: string; bestText?: string; newRecord?: boolean;
         rescueText?: string; onRescue?: () => void;
     }) {
         this.hideResult();
-        const root = new Node('resultRoot');
+        // 遮罩吞掉触摸,防止点到底下的 3D 区或道具按钮。
+        const root = this.makeModal('resultRoot');
         this.resultRoot = root;
-        root.layer = Layers.Enum.UI_2D;
-        root.setParent(this.contentRoot);
 
-        // 全屏遮罩:吞掉触摸,防止点到底下的 3D 区或道具按钮。
-        const mask = new Node('mask');
-        mask.layer = Layers.Enum.UI_2D;
-        mask.setParent(root);
-        mask.addComponent(UITransform).setContentSize(2400, 3200);
-        const mg = mask.addComponent(Graphics);
-        mg.fillColor = new Color(20, 12, 8, 165);
-        mg.rect(-1200, -1600, 2400, 3200);
-        mg.fill();
-        mask.on(NodeEventType.TOUCH_END, () => { /* 吞掉 */ });
-
-        const panelShadow = this.makePanelChild(root, 560, 470, 34, new Color(52, 27, 15, 235), 0, -10);
-        void panelShadow;
-        const panel = this.makePanelChild(root, 548, 460, 30, new Color(255, 244, 214), 0, 0,
+        this.makePanelChild(root, 560, 500, 34, new Color(52, 27, 15, 235), 0, -10);
+        const panel = this.makePanelChild(root, 548, 490, 30, new Color(255, 244, 214), 0, 0,
             new Color(196, 130, 64), 6);
 
         const titleColor = opts.win ? new Color(240, 150, 26) : new Color(112, 120, 132);
-        this.addLabel(panel, opts.win ? '胜 利 !' : '差一点…', 52, titleColor, 0, 158, true);
+        this.addLabel(panel, opts.win ? '胜 利 !' : '差一点…', 52, titleColor, 0, 182, true);
+        // 失败时把原因写清楚（槽位已满 / 时间到），玩家才知道下一局该改什么。
+        if (opts.subtitle) {
+            this.addLabel(panel, opts.subtitle, 20, new Color(150, 116, 78), 0, 140, true);
+        }
 
         // 三颗星:底星常驻,获得的金星延迟逐颗弹出。
         for (let i = 0; i < 3; i++) {
             const x = (i - 1) * 108;
-            const y = i === 1 ? 78 : 58;
+            const y = i === 1 ? 96 : 76;
             this.drawIcon(panel, 'star', 66, new Color(205, 198, 182), x, y);
             if (i < opts.stars) {
                 const star = this.drawIcon(panel, 'star', 66, new Color(255, 201, 40), x, y);
@@ -388,16 +646,19 @@ export class HudUI {
             }
         }
 
-        this.addLabel(panel, `完成度 ${opts.progress}%`, 30, new Color(102, 57, 28), 0, -14, true);
+        this.addLabel(panel, `完成度 ${opts.progress}%`, 28, new Color(102, 57, 28), 0, 8, true);
+        // 得分是本局的主成绩,字号压过完成度,并做一次数字滚动强调。
+        const scoreShown = this.addLabel(panel, '得分 0', 36, new Color(240, 150, 26), 0, -34, true);
+        this.countUpScore(scoreShown, opts.score);
         if (opts.rewardCount > 0) {
-            this.addLabel(panel, `获得 ${opts.rewardCount} 件道具奖励`, 24, new Color(52, 148, 68), 0, -54, true);
+            this.addLabel(panel, `获得 ${opts.rewardCount} 件道具奖励`, 23, new Color(52, 148, 68), 0, -72, true);
         }
         if (opts.bestText) {
-            this.addLabel(panel, opts.bestText, 20, new Color(158, 122, 82), 0, -86, true);
+            this.addLabel(panel, opts.bestText, 20, new Color(158, 122, 82), 0, -102, true);
         }
         if (opts.newRecord) {
             // 斜贴在星星右上角的"新纪录"角标。
-            const badge = this.addLabel(panel, '新纪录!', 26, new Color(255, 82, 62), 168, 128, true);
+            const badge = this.addLabel(panel, '新纪录!', 26, new Color(255, 82, 62), 168, 122, true);
             badge.node.setRotationFromEuler(0, 0, -14);
             badge.node.setScale(0, 0, 1);
             tween(badge.node)
@@ -407,36 +668,30 @@ export class HudUI {
                 .start();
         }
 
-        const mkBtn = (text: string, fill: Color, x: number, w: number, cb: () => void) => {
-            // 成绩文字最低可到 y=-98；按钮顶边从 -116 开始，保留 18px 呼吸区，
-            // 同时阴影底边仍距弹窗底部 24px，不会被面板裁切。
-            const shadow = this.makePanelChild(panel, w + 6, 84, 22, new Color(104, 61, 25, 235), x, -160);
-            shadow.setPosition(x, -164, 0);
-            const b = this.makePanelChild(panel, w, 80, 20, fill, x, -156,
-                new Color(171, 118, 29), 5);
-            this.addLabel(b, text, 27, new Color(102, 57, 28), 0, 0, true);
-            b.on(NodeEventType.TOUCH_START, () => {
-                tween(b).to(0.07, { scale: v3(0.94, 0.94, 1) }).start();
-            });
-            b.on(NodeEventType.TOUCH_END, () => {
-                tween(b).to(0.08, { scale: v3(1, 1, 1) }).start();
-                cb();
-            });
-        };
+        // 成绩文字最低到 y=-112；按钮顶边 -132 起，保留呼吸区，
+        // 阴影底边距弹窗底部 29px，不会被面板裁切。
         if (opts.rescueText && opts.onRescue) {
             // 救场是主行动(绿),重试退居右侧。
-            mkBtn(opts.rescueText, new Color(126, 217, 87), -128, 246, opts.onRescue);
-            mkBtn(opts.actionText, new Color(255, 207, 55), 128, 230, opts.onAction);
+            this.makeButton(panel, opts.rescueText, 246, 80, -128, -172, new Color(126, 217, 87), opts.onRescue);
+            this.makeButton(panel, opts.actionText, 230, 80, 128, -172, new Color(255, 207, 55), opts.onAction);
         } else {
-            mkBtn(opts.actionText, new Color(255, 207, 55), 0, 258, opts.onAction);
+            this.makeButton(panel, opts.actionText, 258, 80, 0, -172, new Color(255, 207, 55), opts.onAction);
         }
+    }
 
-        // 弹窗整体入场:从 0.7 缩放弹开。
-        root.setScale(0.7, 0.7, 1);
-        const op = root.addComponent(UIOpacity);
-        op.opacity = 0;
-        tween(root).to(0.28, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
-        tween(op).to(0.2, { opacity: 255 }).start();
+    /** 结算得分滚动:从 0 跳到最终分,让「这局打了多少」有个被读出来的过程。 */
+    private countUpScore(label: Label, target: number) {
+        if (target <= 0) { label.string = '得分 0'; return; }
+        const steps = 18;
+        for (let i = 1; i <= steps; i++) {
+            tween(label.node)
+                .delay(0.3 + i * 0.035)
+                .call(() => {
+                    if (!label.node.isValid) return;
+                    label.string = `得分 ${Math.round(target * (i / steps))}`;
+                })
+                .start();
+        }
     }
 
     hideResult() {
@@ -466,21 +721,9 @@ export class HudUI {
     private renderSkinPanel() {
         if (this.skinRoot?.isValid) this.skinRoot.destroy();
         const current = this.getSkinId?.() ?? SKINS[0].id;
-        const root = new Node('skinRoot');
+        // 遮罩点空白处关闭，同时吞掉触摸不穿透到 3D 拾取区。
+        const root = this.makeModal('skinRoot', () => this.closeSkinPanel());
         this.skinRoot = root;
-        root.layer = Layers.Enum.UI_2D;
-        root.setParent(this.contentRoot);
-
-        // 全屏遮罩：点空白处关闭，同时吞掉触摸不穿透到 3D 拾取区。
-        const mask = new Node('mask');
-        mask.layer = Layers.Enum.UI_2D;
-        mask.setParent(root);
-        mask.addComponent(UITransform).setContentSize(2400, 3200);
-        const mg = mask.addComponent(Graphics);
-        mg.fillColor = new Color(20, 12, 8, 165);
-        mg.rect(-1200, -1600, 2400, 3200);
-        mg.fill();
-        mask.on(NodeEventType.TOUCH_END, () => this.closeSkinPanel());
 
         const panelW = 548;
         const panelH = 560;
@@ -524,18 +767,8 @@ export class HudUI {
         });
 
         // 完成键。
-        const closeShadow = this.makePanelChild(panel, 200, 66, 20, new Color(104, 61, 25, 235), 0, -panelH / 2 + 30);
-        closeShadow.setPosition(0, -panelH / 2 + 26, 0);
-        const closeBtn = this.makePanelChild(panel, 194, 62, 18, new Color(255, 207, 55), 0, -panelH / 2 + 34,
-            new Color(171, 118, 29), 5);
-        this.addLabel(closeBtn, '完成', 26, new Color(102, 57, 28), 0, 0, true);
-        closeBtn.on(NodeEventType.TOUCH_END, () => this.closeSkinPanel());
-
-        root.setScale(0.7, 0.7, 1);
-        const op = root.addComponent(UIOpacity);
-        op.opacity = 0;
-        tween(root).to(0.24, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
-        tween(op).to(0.18, { opacity: 255 }).start();
+        this.makeButton(panel, '完成', 194, 62, 0, -panelH / 2 + 34, new Color(255, 207, 55),
+            () => this.closeSkinPanel(), 26);
     }
 
     sync() {

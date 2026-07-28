@@ -38,6 +38,12 @@
 - Seeded-initial-condition regression: reloaded level 1 twice with seed 104729 and confirmed the same configured item stream and spawn parameters. Final Bullet settling is intentionally not treated as pixel-deterministic because frame timing can amplify contact-order differences.
 - Tray-danger regression: filled the tray with five non-matching items and confirmed a thin orange-red edge appears without covering icons; the edge strengthened at six items, and browser warnings/errors remained at zero.
 - Result-dialog spacing regression: forced a seven-slot loss with the dual rescue/retry actions visible and verified an 18-art-pixel gap between the history-best line and button faces, plus 24 pixels below the button shadows. Text, borders, and shadows no longer touch or clip.
+- Home-screen pass: with local storage cleared, the round no longer starts on load. The title panel shows the daily theme, the level banner (`第 1 关 · 24 件 · 4:15`), the two-line rule text, the daily attempts left and the per-level best, and the header timer already reads the level limit instead of `0:00`. Tapping 开始挑战 consumes the attempt and spawns the pile.
+- Score/combo pass: three same-type picks scored 100 at combo ×1; a second group inside the combo window scored 200 at combo ×2 (total 300, progress 25%). The header score pill pops on each gain and the `+N / 连击 ×N` float renders above the tray; a second float now replaces the previous one instead of stacking.
+- First-play hint pass: on a fresh profile, three matching items were ringed automatically ~2 s after the pile settled. In play, six idle seconds re-ring a completable group, and any pick or prop use clears the rings and resets the idle timer.
+- Pause-menu pass: the pause key now opens 继续游戏 / 重开本关 / 音效 开关 over a full-screen mask, the header icon flips to ▶, and the sound toggle rewrites its own label and persists to local storage.
+- Result-dialog content pass: a timed-out round showed 差一点… with the `时间到了` reason line, the star row, `完成度 25%`, a counted-up `得分 300`, the previous record (`历史最佳 — 0% · 0 分`, taken before the new record is written), the 新纪录! badge and the rescue/retry pair, all inside the taller 548×490 panel.
+- Browser console errors across the home → play → match → pause → result passes: none.
 
 ## Findings and iteration history
 

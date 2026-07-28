@@ -12,7 +12,7 @@ import { SlotTray, TRAY_CAPACITY } from './SlotTray';
 import { ItemTag } from './ItemTag';
 import { PrefabCache } from './PrefabCache';
 import { PilePatrol } from './PilePatrol';
-import { SaveData } from './SaveData';
+import { SaveData, BestRecord } from './SaveData';
 import { HudUI, PropKind } from './HudUI';
 import { SceneBackground } from './SceneBackground';
 import { AudioMan } from './AudioMan';
@@ -64,8 +64,30 @@ export class GameManager extends Component {
     private dailyLeft = GameManager.DAILY_FREE;
     /** 判负缓冲和自动吸取期间锁住手动输入，保证槽位状态原子化。 */
     private interactionLocked = false;
-    /** 各关历史最佳:{ [levelIndex]: { stars, progress } } */
-    private best: Record<number, { stars: number; progress: number }> = {};
+    /** 各关历史最佳:{ [levelIndex]: { stars, progress, score } } */
+    private best: Record<number, BestRecord> = {};
+
+    // ===== 得分与连击 =====
+    /** 本局得分。每次三消入账,连击越长单次入账越多。 */
+    private score = 0;
+    /** 当前连击数(连续三消,中断即归零)。 */
+    private combo = 0;
+    /** 上次三消的时刻(秒),用于判断是否还在连击窗口内。 */
+    private lastMatchAt = -99;
+    /** 单次三消基础分。 */
+    private static readonly SCORE_BASE = 100;
+    /** 连击窗口(秒):在此窗口内再次三消即累加连击。 */
+    private static readonly COMBO_WINDOW = 4.5;
+    /** 连击倍率上限,防止后期一路滚雪球。 */
+    private static readonly COMBO_MAX_MULT = 5;
+
+    // ===== 提示与紧迫感 =====
+    /** 距上次有效操作的时间(秒);超过 HINT_IDLE 自动亮一组可消提示。 */
+    private idleTime = 0;
+    /** 发呆多久后给提示(秒)。 */
+    private static readonly HINT_IDLE = 6;
+    /** 剩余时间低于此值(秒)进入读秒紧张态。 */
+    private static readonly URGENT_SEC = 15;
 
     /**
      * 手机屏幕内的真实物理盒边界。
@@ -191,18 +213,63 @@ export class GameManager extends Component {
         this.hud.setLevel(this.levelIndex + 1);
         this.loadDaily();
         this.loadBest();
-        // 次数耗尽时不能靠刷新页面免费开新局；MVP 用立即成功的广告占位补一次。
-        if (this.dailyLeft <= 0) {
-            this.hud.showNotice('今日次数用完', '每天可免费挑战 3 次\n看段广告补充 1 次吧',
-                '看广告 +1', () => {
-                    this.dailyLeft++;
-                    this.saveDaily();
-                    this.hud?.hideResult();
-                    void this.startInitialRound();
-                });
-            return;
-        }
+        // 首页期间计时牌先显示本关时限，别停在 0:00。
+        this.updateHud();
+        // 开局停在首页：交代今天的场景、关卡与玩法，玩家点「开始挑战」才扣次数、倒物件。
+        this.showHome();
+    }
+
+    /** 首页：今日场景 + 本关信息 + 玩法一句话 + 成绩，点开始才真正入局。 */
+    private showHome() {
+        const count = this.level.items.length * this.level.groupsPerItem * 3;
+        const best = this.best[this.levelIndex];
+        this.hud?.showHome({
+            themeName: getActiveTheme().name,
+            levelText: `第 ${this.levelIndex + 1} 关 · ${count} 件 · ${GameManager.clock(this.level.timeSec)}`,
+            ruleText: '点盒里相同的物件收进底部 7 格\n凑齐 3 个自动消除；塞满或超时即失败',
+            // 第 2 关起混入石头，此前玩家只能自己踩坑才知道它凑不成三个。
+            warnText: this.level.distractors
+                ? `本关混了 ${this.level.distractors} 块石头：凑不成三个，误拿会一直占格`
+                : '',
+            dailyText: `今日剩余 ${this.dailyLeft}/${GameManager.DAILY_FREE}`,
+            bestText: best
+                ? `最佳 ${'★'.repeat(best.stars) || '—'} ${best.score ?? 0} 分`
+                : '本关暂无成绩',
+            onStart: () => void this.beginRound(),
+        });
+    }
+
+    /** 秒数 → m:ss。 */
+    private static clock(sec: number): string {
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    /**
+     * 每日次数门：有次数返回 true；没有则弹补充入口，玩家确认后重跑 next。
+     * MVP 直接发放；接入微信后把 onAction 换成激励视频的 onClose(isEnded) 回调。
+     */
+    private ensureDaily(next: () => void): boolean {
+        if (this.dailyLeft > 0) return true;
+        this.hud?.showNotice('今日次数用完', '每天可免费挑战 3 次\n看段广告补充 1 次吧',
+            '看广告 +1', () => {
+                this.dailyLeft++;
+                this.saveDaily();
+                this.hud?.hideResult();
+                next();
+            });
+        return false;
+    }
+
+    /** 从首页进入本关：过次数门 → 生成物件 → 新手首局直接亮一次提示。 */
+    private async beginRound() {
+        if (!this.ensureDaily(() => void this.beginRound())) return;
         await this.startInitialRound();
+        if (SaveData.taught()) return;
+        // 第一次玩：等堆叠落定后主动指一组可消的物件，比任何文字都直观。
+        SaveData.markTaught();
+        this.scheduleOnce(() => this.showHint(), 2.2);
     }
 
     /** 本关需加载的 prefab id：物件族 +（本关有障碍物时）石头。 */
@@ -240,13 +307,17 @@ export class GameManager extends Component {
         this.best = SaveData.getBest();
     }
 
-    /** 记录本关成绩,返回是否刷新纪录。 */
-    private recordBest(lvl: number, stars: number, progress: number): boolean {
+    /**
+     * 记录本关成绩,返回是否刷新纪录。
+     * 以得分为首要排序：得分包含完成度（每消一组必得分）又区分连击水平，比单看完成度更细。
+     */
+    private recordBest(lvl: number, stars: number, progress: number, score: number): boolean {
         const prev = this.best[lvl];
-        const better = !prev || progress > prev.progress
-            || (progress === prev.progress && stars > prev.stars);
+        const prevScore = prev?.score ?? 0;
+        const better = !prev || score > prevScore
+            || (score === prevScore && progress > prev.progress);
         if (better) {
-            this.best[lvl] = { stars, progress };
+            this.best[lvl] = { stars, progress, score };
             SaveData.setBest(this.best);
         }
         return better && !!prev; // 首次成绩不算"刷新纪录"
@@ -272,7 +343,60 @@ export class GameManager extends Component {
             this.timeLeft = 0;
             this.gameOver(false, '时间到');
         }
+        // 发呆到点就指一组可消的物件：卡在"看不出还能点什么"是这类玩法最常见的弃局原因。
+        this.idleTime += frameDt;
+        if (this.idleTime >= GameManager.HINT_IDLE) {
+            this.idleTime = 0;
+            this.showHint();
+        }
+        this.hud?.setTimeUrgent(this.timeLeft <= GameManager.URGENT_SEC);
         this.updateHud();
+    }
+
+    // ---------- 提示 ----------
+
+    /**
+     * 找一组"现在点下去就能消"的物件：优先补齐槽内已有的类别（步数最少），
+     * 其次退回盒中任意凑得出 3 个的类别。石头不参与（它永远配不齐）。
+     */
+    private findHintGroup(): Node[] {
+        const boxItems = this.node.getComponentsInChildren(ItemTag)
+            .filter(t => !t.picked && t.node.isValid && t.id !== DISTRACTOR_ID);
+        const availOf = (id: string) => boxItems.filter(t => t.id === id).length;
+        const free = TRAY_CAPACITY - this.tray.count;
+
+        let target: { id: string; need: number } | null = null;
+        for (const [id, have] of this.tray.countById()) {
+            const need = 3 - have;
+            if (need <= 0 || need > free || availOf(id) < need) continue;
+            if (!target || need < target.need) target = { id, need };
+        }
+        if (!target && free >= 3) {
+            const id = boxItems.find(t => availOf(t.id) >= 3)?.id;
+            if (id) target = { id, need: 3 };
+        }
+        if (!target) return [];
+        // 越靠上的越容易点到，优先指这些。
+        return boxItems.filter(t => t.id === target!.id)
+            .sort((a, b) => b.node.worldPosition.y - a.node.worldPosition.y)
+            .slice(0, target.need)
+            .map(t => t.node);
+    }
+
+    /** 把提示组的世界坐标换成屏幕坐标交给 HUD 画呼吸光环（不碰 3D 物件本身）。 */
+    private showHint() {
+        if (!this.playing || this.paused || !this.cam) return;
+        const nodes = this.findHintGroup();
+        if (nodes.length === 0) {
+            // 一组都凑不齐 = 槽位余量不够，指一下「移出」，别让玩家干瞪眼等超时。
+            if (this.tray.count > 0) this.hud?.nudgeProp('remove');
+            return;
+        }
+        const sp = v3();
+        this.hud?.showHint(nodes.map(n => {
+            this.cam.worldToScreen(n.worldPosition, sp);
+            return sp.clone();
+        }));
     }
 
     // ---------- 场景搭建 ----------
@@ -846,6 +970,9 @@ export class GameManager extends Component {
 
     private pick(node: Node, tag: ItemTag) {
         tag.picked = true;
+        // 有操作就重新计发呆时长，并撤掉还亮着的提示环。
+        this.idleTime = 0;
+        this.hud?.clearHint();
         const removedPos = node.worldPosition.clone();
         const screenPos = v3();
         this.cam.worldToScreen(node.worldPosition, screenPos);
@@ -856,6 +983,8 @@ export class GameManager extends Component {
         const { matched, full, index } = this.tray.add(tag.id, node);
         this.audio?.play(tag.id === 'goose' ? 'honk' : 'pick');
         this.hud?.pickBurst(screenPos);
+        // 抓到吉祥物大鹅时给一句台词——游戏叫《抓住大鹅》，它不该跟一颗苹果一个待遇。
+        if (tag.id === 'goose') this.hud?.speechPop(screenPos, '嘎——!');
         this.hud?.captureModel(node, screenPos, index);
         this.reflowTray();
         this.settleNearRemoved(removedPos);
@@ -875,6 +1004,7 @@ export class GameManager extends Component {
                         .start();
                 }
                 this.removedCount += 3;
+                this.addMatchScore();
                 this.reflowTray();
                 this.updateHud();
                 if (this.removedCount >= this.totalCount) this.gameOver(true, '全部消除！');
@@ -884,6 +1014,20 @@ export class GameManager extends Component {
             this.interactionLocked = true;
             this.scheduleOnce(() => this.gameOver(false, '槽位已满'), 0.4);
         }
+    }
+
+    /**
+     * 三消结算得分：连击窗口内连续消除叠加倍率（上限 COMBO_MAX_MULT），
+     * 断了就从 1 倍重来。奖励"看准了连着消"，但不给额外时间，不动既定难度曲线。
+     */
+    private addMatchScore() {
+        const now = performance.now() / 1000;
+        this.combo = now - this.lastMatchAt <= GameManager.COMBO_WINDOW ? this.combo + 1 : 1;
+        this.lastMatchAt = now;
+        const gain = GameManager.SCORE_BASE * Math.min(this.combo, GameManager.COMBO_MAX_MULT);
+        this.score += gain;
+        this.hud?.setScore(this.score);
+        this.hud?.comboPop(this.combo, gain);
     }
 
     // ---------- 道具 ----------
@@ -942,6 +1086,8 @@ export class GameManager extends Component {
 
     useProp(kind: PropKind) {
         if (!this.playing || this.paused || this.interactionLocked) return;
+        this.idleTime = 0;
+        this.hud?.clearHint();
         if (this.propCounts[kind] <= 0) { this.offerAdForProp(kind); return; }
         let used = false;
         if (kind === 'remove') used = this.propRemove();
@@ -1075,6 +1221,9 @@ export class GameManager extends Component {
         this.interactionLocked = false;
         this.paused = false;
         this.hud?.setPaused(false);
+        this.hud?.hidePauseMenu();
+        this.hud?.clearHint();
+        this.hud?.setTimeUrgent(false);
         this.loseReason = win ? '' : (reason === '槽位已满' ? '槽位已满' : '时间到');
         this.audio?.play(win ? 'win' : 'lose');
         const stars = this.progress >= 100 ? 3 : this.progress >= 70 ? 2 : this.progress >= 50 ? 1 : 0;
@@ -1087,8 +1236,9 @@ export class GameManager extends Component {
         console.log(`[GameManager] ${win ? '胜利' : `失败（${reason}）`} 完成度 ${this.progress}%`);
 
         const finishedLevel = this.levelIndex;
-        const newRecord = this.recordBest(finishedLevel, stars, this.progress);
+        // 先取旧纪录再写入，否则展示的"历史最佳"会变成刚打完的这一局。
         const prevBest = this.best[finishedLevel];
+        const newRecord = this.recordBest(finishedLevel, stars, this.progress, this.score);
 
         // 胜利推进关卡并持久化；最后一关通关后停在最后一关反复挑战。
         const wasLast = this.levelIndex >= LEVELS.length - 1;
@@ -1104,8 +1254,11 @@ export class GameManager extends Component {
         // 原地重置而不重载场景——loadScene 后自定义管线的主相机会停止渲染。
         this.scheduleOnce(() => {
             this.hud?.showResult({
-                win, stars, progress: this.progress, rewardCount: stars, actionText,
-                bestText: prevBest ? `历史最佳 ${'★'.repeat(prevBest.stars) || '—'} ${prevBest.progress}%` : '',
+                win, stars, progress: this.progress, score: this.score, rewardCount: stars, actionText,
+                subtitle: win ? '' : (this.loseReason === '槽位已满' ? '七格被塞满了' : '时间到了'),
+                bestText: prevBest
+                    ? `历史最佳 ${'★'.repeat(prevBest.stars) || '—'} ${prevBest.progress}% · ${prevBest.score ?? 0} 分`
+                    : '',
                 newRecord,
                 rescueText: canRescue
                     ? (this.loseReason === '槽位已满' ? '救一下:退回 3 件' : '救一下:+60 秒') : '',
@@ -1137,21 +1290,20 @@ export class GameManager extends Component {
 
     /** 原地开始 levelIndex 指向的关卡（重试当前关或进入下一关） */
     private async resetLevel() {
-        // 每日次数门:用完先弹补充入口(MVP 直接 +1;接微信后换激励视频回调)。
-        if (this.dailyLeft <= 0) {
-            this.hud?.showNotice('今日次数用完', '每天可免费挑战 3 次\n看段广告补充 1 次吧',
-                '看广告 +1', () => {
-                    this.dailyLeft++;
-                    this.saveDaily();
-                    this.resetLevel();
-                });
-            return;
-        }
+        if (!this.ensureDaily(() => void this.resetLevel())) return;
         this.consumeDaily();
         this.rescueUsed = false;
         this.loseReason = '';
         this.interactionLocked = false;
         this.hud?.hideResult();
+        this.hud?.hidePauseMenu();
+        this.hud?.clearHint();
+        // 新一局重置得分与连击（历史最佳已在上一局结算时落盘）。
+        this.score = 0;
+        this.combo = 0;
+        this.lastMatchAt = -99;
+        this.idleTime = 0;
+        this.hud?.setScore(0);
         for (const e of this.tray.entries) {
             if (e.node.isValid) e.node.destroy();
         }
@@ -1176,12 +1328,29 @@ export class GameManager extends Component {
         this.updateHud();
     }
 
+    /** 暂停键：打开带「继续 / 重开本关 / 音效开关」的菜单，而不是原地空转。 */
     private togglePause() {
         if (!this.playing) return;
-        this.paused = !this.paused;
-        this.hud?.setPaused(this.paused);
-        if (this.msgLabel) this.msgLabel.string = this.paused ? '暂停' : '';
-        if (this.hud) this.hud.subMsgLabel.string = this.paused ? '点击左上角继续' : '';
+        if (this.paused) { this.resumeFromPause(); return; }
+        this.paused = true;
+        this.hud?.setPaused(true);
+        this.hud?.clearHint();
+        this.hud?.showPauseMenu({
+            soundOn: this.audio?.soundOn ?? true,
+            onResume: () => this.resumeFromPause(),
+            onRestart: () => {
+                this.resumeFromPause();
+                void this.resetLevel();
+            },
+            onToggleSound: () => this.audio?.toggleSound() ?? false,
+        });
+    }
+
+    private resumeFromPause() {
+        this.hud?.hidePauseMenu();
+        this.paused = false;
+        this.idleTime = 0;
+        this.hud?.setPaused(false);
     }
 
     /**
