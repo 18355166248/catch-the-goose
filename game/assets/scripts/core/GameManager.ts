@@ -69,6 +69,8 @@ export class GameManager extends Component {
     private interactionLocked = false;
     /** 各关历史最佳:{ [levelIndex]: { stars, progress, score } } */
     private best: Record<number, BestRecord> = {};
+    /** 本局是否已经提示过石头。石头是唯一「拿了就亏」的物件,但只提示一次,别唠叨。 */
+    private rockWarned = false;
 
     // ===== 得分与连击 =====
     /** 本局得分。每次三消入账,连击越长单次入账越多。 */
@@ -231,7 +233,9 @@ export class GameManager extends Component {
         this.hud?.showHome({
             themeName: getActiveTheme().name,
             levelText: `第 ${this.levelIndex + 1} 关 · ${count} 件 · ${GameManager.clock(this.level.timeSec)}`,
-            ruleText: '点盒里相同的物件收进底部 7 格\n凑齐 3 个自动消除；塞满或超时即失败',
+            // 计分规则此前从没说过：连击是唯一的加分放大器，剩余时间也折算成分，
+            // 玩家不知道就只会慢慢挪，体验完全是另一个游戏。
+            ruleText: '点相同的物件收进底部 7 格，凑齐 3 个消除\n塞满或超时失败；连消翻倍、剩余时间也计分',
             // 第 2 关起混入石头，此前玩家只能自己踩坑才知道它凑不成三个。
             warnText: this.level.distractors
                 ? `本关混了 ${this.level.distractors} 块石头：凑不成三个，误拿会一直占格`
@@ -1028,6 +1032,12 @@ export class GameManager extends Component {
         this.hud?.pickBurst(screenPos);
         // 抓到吉祥物大鹅时给一句台词——游戏叫《抓住大鹅》，它不该跟一颗苹果一个待遇。
         if (tag.id === 'goose') this.hud?.speechPop(screenPos, '嘎——!');
+        // 石头永远凑不齐，拿一块就等于永久少一格。首页那行警告开局就翻篇了，
+        // 真正踩坑的这一刻必须当场说清楚，否则玩家只会以为自己运气差。
+        if (tag.id === DISTRACTOR_ID && !this.rockWarned) {
+            this.rockWarned = true;
+            this.hud?.toast('石头凑不成三个，会一直占着格子');
+        }
         this.hud?.captureModel(node, screenPos, index);
         this.reflowTray();
         this.settleNearRemoved(removedPos);
@@ -1036,7 +1046,6 @@ export class GameManager extends Component {
         if (matched) {
             // 飞入动画结束后再消除
             this.scheduleOnce(() => {
-                this.audio?.play('match');
                 for (const e of matched) {
                     Tween.stopAllByTarget(e.node);
                     this.hud?.matchBurst(e.node);
@@ -1048,6 +1057,9 @@ export class GameManager extends Component {
                 }
                 this.removedCount += 3;
                 this.addMatchScore();
+                // 音量随连击递增：引擎的 playOneShot 不支持变调，用响度给「连着消」一个听得见的正反馈。
+                // 放在 addMatchScore 之后，this.combo 才是这一次消除后的连击数。
+                this.audio?.play('match', Math.min(1, 0.72 + this.combo * 0.07));
                 this.reflowTray();
                 this.updateHud();
                 if (this.removedCount >= this.totalCount) {
@@ -1368,6 +1380,7 @@ export class GameManager extends Component {
         this.consumeDaily();
         this.rescueUsed = false;
         this.loseReason = '';
+        this.rockWarned = false;
         this.interactionLocked = false;
         this.hud?.hideResult();
         this.hud?.hidePauseMenu();
