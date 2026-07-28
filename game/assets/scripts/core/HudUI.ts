@@ -63,6 +63,15 @@ export class HudUI {
     private levelLabel!: Label;
     private dailyLabel!: Label;
     private scoreLabel!: Label;
+    /** 七个槽位面板，按下标索引（同类将满时闪框用）。 */
+    private slotNodes: Node[] = [];
+    /** 连击牌：牌身 / 透明度 / 文案 / 倒计条，见 setCombo。 */
+    private comboPill!: Node;
+    private comboPillOpacity!: UIOpacity;
+    private comboLabel!: Label;
+    private comboBar!: Node;
+    private comboShown = false;
+    private toastRoot: Node | null = null;
     /** 计时牌节点：进入读秒时整体脉冲，制造紧迫感。 */
     private timerPanel!: Node;
     private timerUrgent = false;
@@ -189,6 +198,25 @@ export class HudUI {
             new Color(118, 78, 46), 2, { left: 96 });
         this.scoreLabel = this.addLabel(scorePanel, '得分 0', 19, new Color(255, 220, 87), 0, 0, true);
 
+        // 连击牌：贴在得分牌正下方，倍率 + 一条走完即断连的倒计条。
+        // 连击是本作唯一的加分放大器，此前只在飘字里闪一下就没了，
+        // 玩家既不知道自己正连着，也不知道还剩多久——等于把核心爽点藏起来了。
+        this.comboPill = this.makePanel(130, 26, 13, new Color(84, 34, 18, 226), { top: 120 }, 0,
+            new Color(255, 146, 62), 2, { left: 96 });
+        this.comboPillOpacity = this.comboPill.addComponent(UIOpacity);
+        this.comboPillOpacity.opacity = 0;
+        this.comboLabel = this.addLabel(this.comboPill, '连击 ×2', 15, new Color(255, 214, 76), 0, 3, true);
+        const comboBar = new Node('comboBar');
+        comboBar.layer = Layers.Enum.UI_2D;
+        comboBar.setParent(this.comboPill);
+        comboBar.addComponent(UITransform).setAnchorPoint(0, 0.5);
+        comboBar.setPosition(-59, -9, 0);
+        const cbg = comboBar.addComponent(Graphics);
+        cbg.fillColor = new Color(255, 146, 62, 255);
+        cbg.roundRect(0, -2, 118, 4, 2);
+        cbg.fill();
+        this.comboBar = comboBar;
+
         // 结算文案。
         this.msgLabel = this.makeFloatingLabel('', 48, new Color(255, 221, 91), { centerY: 92 });
         this.subMsgLabel = this.makeFloatingLabel('', 25, cream, { centerY: 30 });
@@ -207,6 +235,7 @@ export class HudUI {
             const slot = this.makePanelChild(trayPanel, 78, 64, 14, new Color(196, 195, 191),
                 (i - 3) * HudUI.SLOT_STEP, 0, new Color(255, 255, 255, 235), 3);
             this.addSlotLight(slot);
+            this.slotNodes.push(slot);
         }
 
         // 道具栏默认隐藏（见 SHOW_PROPS）；将来接微信激励视频变现时再打开。
@@ -261,12 +290,25 @@ export class HudUI {
         this.dailyLabel.color = left > 0 ? new Color(233, 200, 156) : new Color(240, 120, 96);
     }
 
-    /** 屏幕坐标(px) → HudContent 内容坐标。 */
+    /**
+     * 3D 相机的屏幕坐标 → HudContent 内容坐标。
+     *
+     * 入参来自 camera.worldToScreen，单位是**帧缓冲物理像素**（dpr=2 的手机上是 780×1690）；
+     * 而 HUD 这一层跑在 Canvas 的**逻辑像素**坐标系里（view.getVisibleSize()，390×845），
+     * uiScale 也是按逻辑尺寸算出来的。所以必须先按两者之比降到逻辑像素再换算。
+     *
+     * 早先这里直接拿 screen.windowSize 当中心去减，等于把物理像素的偏移量当逻辑量用，
+     * dpr=2 时整体放大一倍：提示环、拾取爆点、大鹅气泡、飞入槽位的起点全落到空地上。
+     * dpr=1 时两套尺寸相等，所以在电脑浏览器上一直看不出问题。
+     */
     private screenToContent(screenPos: Vec3): Vec3 {
-        const px = screen.windowSize;
+        const win = screen.windowSize;
+        const vis = view.getVisibleSize();
+        const lx = win.width ? screenPos.x * vis.width / win.width : screenPos.x;
+        const ly = win.height ? screenPos.y * vis.height / win.height : screenPos.y;
         return v3(
-            (screenPos.x - px.width / 2) / this.uiScale,
-            (screenPos.y - px.height / 2) / this.uiScale,
+            (lx - vis.width / 2) / this.uiScale,
+            (ly - vis.height / 2) / this.uiScale,
             1,
         );
     }
@@ -318,6 +360,27 @@ export class HudUI {
         this.burstAt(this.screenToContent(screenPos), new Color(255, 246, 200, 255), 6, 44, 5);
     }
 
+    /**
+     * 胜利庆祝：屏幕上半区错开时间连撒几束金色粒子。
+     * 通关此前只有一个弹窗弹出来，画面上没有任何"成了"的反馈。
+     */
+    winCelebrate() {
+        const top = this.contentUT.height / 2;
+        for (let i = 0; i < 8; i++) {
+            const pos = v3((Math.random() - 0.5) * 600, top * (0.12 + Math.random() * 0.52), 0);
+            const gold = i % 2 === 0;
+            // 借一个空节点做定时器：粒子本身生命周期很短，必须错开撒才有"连绵"感。
+            const timer = new Node('celebrate');
+            timer.layer = Layers.Enum.UI_2D;
+            timer.setParent(this.contentRoot);
+            tween(timer).delay(i * 0.11).call(() => {
+                this.burstAt(pos, gold ? new Color(255, 205, 64, 255) : new Color(255, 246, 200, 255),
+                    12, 92, 8);
+                timer.destroy();
+            }).start();
+        }
+    }
+
     /** 三消时在对应槽位上的金色爆点。 */
     matchBurst(node: Node) {
         const icon = this.capturedIcons.get(node);
@@ -335,6 +398,72 @@ export class HudUI {
             .to(0.09, { scale: v3(1.2, 1.2, 1) }, { easing: 'quadOut' })
             .to(0.15, { scale: v3(1, 1, 1) }, { easing: 'backOut' })
             .start();
+    }
+
+    /**
+     * 连击牌刷新（每帧调用）：combo ≥ 2 时亮牌，倒计条按 remain（0~1）收缩，走完即隐。
+     * 只在显隐切换时做动画，中间帧仅改条长和文案，避免每帧 new Tween。
+     */
+    setCombo(combo: number, remain: number) {
+        const show = combo >= 2 && remain > 0;
+        if (show !== this.comboShown) {
+            this.comboShown = show;
+            Tween.stopAllByTarget(this.comboPillOpacity);
+            tween(this.comboPillOpacity).to(show ? 0.1 : 0.2, { opacity: show ? 255 : 0 }).start();
+            if (show) {
+                Tween.stopAllByTarget(this.comboPill);
+                this.comboPill.setScale(0.6, 0.6, 1);
+                tween(this.comboPill).to(0.18, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
+            }
+        }
+        if (!show) return;
+        this.comboLabel.string = `连击 ×${combo}`;
+        this.comboBar.setScale(Math.max(0, Math.min(1, remain)), 1, 1);
+    }
+
+    /**
+     * 槽内已攒到同类 2 件时闪一下这两格。
+     * 「还差一个就消了」是这类玩法最强的推进动力，但七格里两枚小图标很容易被漏看。
+     */
+    markNearMatch(indices: number[]) {
+        for (const i of indices) {
+            const slot = this.slotNodes[i];
+            if (!slot?.isValid) continue;
+            const ring = new Node('nearMatch');
+            ring.layer = Layers.Enum.UI_2D;
+            ring.setParent(slot);
+            ring.setPosition(0, 0, 3);
+            const g = ring.addComponent(Graphics);
+            g.lineWidth = 5;
+            g.strokeColor = new Color(255, 201, 40, 255);
+            g.roundRect(-39, -32, 78, 64, 14);
+            g.stroke();
+            const op = ring.addComponent(UIOpacity);
+            tween(op)
+                .repeat(2, tween(op).to(0.3, { opacity: 70 }).to(0.22, { opacity: 255 }))
+                .to(0.2, { opacity: 0 })
+                .call(() => ring.destroy())
+                .start();
+        }
+    }
+
+    /** 收集区上方的一句轻提示（残局提醒等）：不带遮罩、不打断操作，自己淡出。 */
+    toast(text: string) {
+        if (this.toastRoot?.isValid) this.toastRoot.destroy();
+        const root = new Node('toast');
+        this.toastRoot = root;
+        root.layer = Layers.Enum.UI_2D;
+        root.setParent(this.contentRoot);
+        root.setPosition(0, -this.contentUT.height / 2 + 336, 3);
+        const op = root.addComponent(UIOpacity);
+
+        const bar = this.makePanelChild(root, 520, 60, 22, new Color(46, 25, 14, 232), 0, 0,
+            new Color(214, 106, 48), 3);
+        this.addLabel(bar, text, 23, new Color(255, 226, 176), 0, 0, true);
+
+        root.setScale(0.85, 0.85, 1);
+        tween(root).to(0.18, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
+        tween(op).delay(1.9).to(0.4, { opacity: 0 }).call(() => root.destroy()).start();
     }
 
     /**
@@ -493,6 +622,21 @@ export class HudUI {
         return root;
     }
 
+    /**
+     * 关闭弹窗：缩小淡出后销毁，避免面板"啪"地消失。
+     * 调用方在调用后立刻把自己那个引用置空——淡出中的旧节点不该再被当成当前面板。
+     */
+    private dismissModal(root: Node | null) {
+        if (!root?.isValid) return;
+        Tween.stopAllByTarget(root);
+        const op = root.getComponent(UIOpacity);
+        if (op) tween(op).to(0.13, { opacity: 0 }).start();
+        tween(root)
+            .to(0.14, { scale: v3(0.86, 0.86, 1) }, { easing: 'quadIn' })
+            .call(() => root.destroy())
+            .start();
+    }
+
     /** 弹窗里的卡通立体按钮：深色投影 + 面板 + 按下缩放反馈。 */
     private makeButton(parent: Node, text: string, w: number, h: number, x: number, y: number,
         fill: Color, onTap: () => void, fontSize = 27): { node: Node; label: Label } {
@@ -572,7 +716,7 @@ export class HudUI {
     }
 
     hideHome() {
-        if (this.homeRoot?.isValid) this.homeRoot.destroy();
+        this.dismissModal(this.homeRoot);
         this.homeRoot = null;
     }
 
@@ -600,7 +744,7 @@ export class HudUI {
     }
 
     hidePauseMenu() {
-        if (this.pauseRoot?.isValid) this.pauseRoot.destroy();
+        this.dismissModal(this.pauseRoot);
         this.pauseRoot = null;
     }
 
@@ -612,7 +756,7 @@ export class HudUI {
         win: boolean; stars: number; progress: number; score: number;
         rewardCount: number; actionText: string; onAction: () => void;
         subtitle?: string; bestText?: string; newRecord?: boolean;
-        rescueText?: string; onRescue?: () => void;
+        timeBonus?: number; rescueText?: string; onRescue?: () => void;
     }) {
         this.hideResult();
         // 遮罩吞掉触摸,防止点到底下的 3D 区或道具按钮。
@@ -646,15 +790,27 @@ export class HudUI {
             }
         }
 
-        this.addLabel(panel, `完成度 ${opts.progress}%`, 28, new Color(102, 57, 28), 0, 8, true);
+        // 成绩区逐行下排：胜利局的完成度必然是 100%，写出来纯属占位，
+        // 把那一行让给「时间奖励」这类真正有信息量的内容。
+        let y = opts.win ? 16 : 8;
+        if (!opts.win) {
+            this.addLabel(panel, `完成度 ${opts.progress}%`, 28, new Color(102, 57, 28), 0, y, true);
+            y -= 42;
+        }
         // 得分是本局的主成绩,字号压过完成度,并做一次数字滚动强调。
-        const scoreShown = this.addLabel(panel, '得分 0', 36, new Color(240, 150, 26), 0, -34, true);
+        const scoreShown = this.addLabel(panel, '得分 0', 36, new Color(240, 150, 26), 0, y, true);
         this.countUpScore(scoreShown, opts.score);
+        y -= 42;
+        if (opts.timeBonus) {
+            this.addLabel(panel, `含时间奖励 +${opts.timeBonus}`, 21, new Color(214, 106, 48), 0, y, true);
+            y -= 32;
+        }
         if (opts.rewardCount > 0) {
-            this.addLabel(panel, `获得 ${opts.rewardCount} 件道具奖励`, 23, new Color(52, 148, 68), 0, -72, true);
+            this.addLabel(panel, `获得 ${opts.rewardCount} 件道具奖励`, 23, new Color(52, 148, 68), 0, y, true);
+            y -= 30;
         }
         if (opts.bestText) {
-            this.addLabel(panel, opts.bestText, 20, new Color(158, 122, 82), 0, -102, true);
+            this.addLabel(panel, opts.bestText, 20, new Color(158, 122, 82), 0, y, true);
         }
         if (opts.newRecord) {
             // 斜贴在星星右上角的"新纪录"角标。
@@ -695,7 +851,7 @@ export class HudUI {
     }
 
     hideResult() {
-        if (this.resultRoot?.isValid) this.resultRoot.destroy();
+        this.dismissModal(this.resultRoot);
         this.resultRoot = null;
     }
 
@@ -709,7 +865,7 @@ export class HudUI {
 
     private closeSkinPanel() {
         const wasOpen = !!this.skinRoot?.isValid;
-        if (this.skinRoot?.isValid) this.skinRoot.destroy();
+        this.dismissModal(this.skinRoot);
         this.skinRoot = null;
         if (wasOpen) this.onSkinPanelToggle?.(false);
     }
@@ -812,7 +968,6 @@ export class HudUI {
 
     /** 把 3D 模型的真实渲染缩略图飞入固定 2D 槽，避免手机多相机合成差异。 */
     captureModel(node: Node, screenPos: Vec3, index: number) {
-        const canvasPx = screen.windowSize;
         const iconNode = new Node(`tray-${node.name}`);
         iconNode.layer = Layers.Enum.UI_2D;
         iconNode.setParent(this.contentRoot);
@@ -825,11 +980,7 @@ export class HudUI {
         const visualUT = visualNode.addComponent(UITransform);
         const sprite = visualNode.addComponent(Sprite);
         sprite.sizeMode = Sprite.SizeMode.CUSTOM;
-        iconNode.setPosition(
-            (screenPos.x - canvasPx.width / 2) / this.uiScale,
-            (screenPos.y - canvasPx.height / 2) / this.uiScale,
-            1,
-        );
+        iconNode.setPosition(this.screenToContent(screenPos));
         iconNode.setScale(0.18, 0.18, 1);
         resources.load(`icons/${node.name}/texture`, Texture2D, (err, texture) => {
             if (!err && texture && iconNode.isValid) {

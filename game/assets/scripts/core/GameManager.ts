@@ -19,6 +19,9 @@ import { AudioMan } from './AudioMan';
 
 const { ccclass, property } = _decorator;
 
+/** 判负原因。'无解' = 盒中剩余物件配不出任何一组三消，继续点也只是等超时。 */
+type LoseReason = '' | '槽位已满' | '时间到' | '无解';
+
 /**
  * M1 核心玩法总控。
  * 场景要求（编辑器内手动搭）：
@@ -60,7 +63,7 @@ export class GameManager extends Component {
     private sceneRoot: Node | null = null;
     /** 每关每轮只能救一次,防止无限续命。 */
     private rescueUsed = false;
-    private loseReason: '槽位已满' | '时间到' | '' = '';
+    private loseReason: LoseReason = '';
     private dailyLeft = GameManager.DAILY_FREE;
     /** 判负缓冲和自动吸取期间锁住手动输入，保证槽位状态原子化。 */
     private interactionLocked = false;
@@ -80,6 +83,8 @@ export class GameManager extends Component {
     private static readonly COMBO_WINDOW = 4.5;
     /** 连击倍率上限,防止后期一路滚雪球。 */
     private static readonly COMBO_MAX_MULT = 5;
+    /** 胜利时每剩 1 秒折算的奖励分。让「快速通关」比「压哨通关」值钱,三星局之间也分得出高下。 */
+    private static readonly TIME_BONUS_PER_SEC = 2;
 
     // ===== 提示与紧迫感 =====
     /** 距上次有效操作的时间(秒);超过 HINT_IDLE 自动亮一组可消提示。 */
@@ -350,7 +355,17 @@ export class GameManager extends Component {
             this.showHint();
         }
         this.hud?.setTimeUrgent(this.timeLeft <= GameManager.URGENT_SEC);
+        this.updateCombo();
         this.updateHud();
+    }
+
+    /** 把连击窗口的剩余比例喂给 HUD 的连击牌；窗口走完即断连。 */
+    private updateCombo() {
+        if (this.combo <= 0) { this.hud?.setCombo(0, 0); return; }
+        const elapsed = performance.now() / 1000 - this.lastMatchAt;
+        const remain = 1 - elapsed / GameManager.COMBO_WINDOW;
+        if (remain <= 0) this.combo = 0;
+        this.hud?.setCombo(this.combo, Math.max(0, remain));
     }
 
     // ---------- 提示 ----------
@@ -397,6 +412,31 @@ export class GameManager extends Component {
             this.cam.worldToScreen(n.worldPosition, sp);
             return sp.clone();
         }));
+    }
+
+    /**
+     * 残局判定：把槽位余量和盒中存量算在一起，已经配不出任何一组三消。
+     * 此前这种局面只能靠玩家自己发现，然后要么把七格填满、要么干等倒计时归零——
+     * 两种结局都让人觉得是游戏卡住了，而不是自己输了。
+     */
+    private checkDeadlock() {
+        if (!this.playing || this.paused || this.interactionLocked) return;
+        if (this.removedCount >= this.totalCount) return;
+        if (this.findHintGroup().length > 0) return;
+        // 还有「移出」道具 = 这是解得开的残局，指一下就够，不替玩家判负。
+        if (this.propCounts.remove > 0) {
+            this.hud?.nudgeProp('remove');
+            this.hud?.toast('没有能凑齐的组合了，用「移出」腾格');
+            return;
+        }
+        this.gameOver(false, '无解');
+    }
+
+    /** 槽内该类物件刚好攒到 2 件 → 闪一下这两格（重算下标，避免连点后指错格）。 */
+    private flashNearMatch(id: string) {
+        const idx: number[] = [];
+        this.tray.entries.forEach((e, i) => { if (e.id === id) idx.push(i); });
+        if (idx.length === 2) this.hud?.markNearMatch(idx);
     }
 
     // ---------- 场景搭建 ----------
@@ -929,13 +969,16 @@ export class GameManager extends Component {
     private onTouch(e: EventTouch) {
         if (!this.playing || this.paused || this.interactionLocked || !this.cam) return;
         const p = e.getLocation();
+        // getLocation / screenPointToRay / worldToScreen 三者同为**帧缓冲物理像素**，
+        // 所以这里的阈值也必须用物理像素的 screen.windowSize（不是 view.getVisibleSize()）。
         if (p.y < screen.windowSize.height * 0.2) return; // 2D 收集区 + 道具栏，不穿透拾取
         const tag = this.hitTestAt(p.x, p.y);
         if (tag) this.pick(tag.node, tag);
     }
 
     /**
-     * 双通道命中检测（供 onTouch 与自动化测试共用）：
+     * 双通道命中检测（供 onTouch 与自动化测试共用）。入参为**帧缓冲物理像素**，
+     * 与 EventTouch.getLocation / camera.worldToScreen 同一套坐标。
      * 1) 穿透式物理射线，全命中里取最近的可拾取物件（隐形围栏不遮挡）
      * 2) 射线漏检时按屏幕距离就近吸附（物理体和渲染体错位/物件极薄时的兜底）
      */
@@ -1007,12 +1050,22 @@ export class GameManager extends Component {
                 this.addMatchScore();
                 this.reflowTray();
                 this.updateHud();
-                if (this.removedCount >= this.totalCount) this.gameOver(true, '全部消除！');
+                if (this.removedCount >= this.totalCount) {
+                    this.gameOver(true, '全部消除！');
+                    return;
+                }
+                this.checkDeadlock();
             }, 0.35);
         } else if (full) {
             // 数据层已经满 7 格，立即锁住输入；否则 0.4s 动画窗口内的连点会塞入第 8 格。
             this.interactionLocked = true;
             this.scheduleOnce(() => this.gameOver(false, '槽位已满'), 0.4);
+        } else {
+            // 图标飞完再闪那两格，否则玩家看到的是空框在亮。
+            if ((this.tray.countById().get(tag.id) ?? 0) === 2) {
+                this.scheduleOnce(() => this.flashNearMatch(tag.id), 0.3);
+            }
+            this.checkDeadlock();
         }
     }
 
@@ -1166,7 +1219,11 @@ export class GameManager extends Component {
         picks.forEach((t, i) => this.scheduleOnce(() => {
             if (this.playing && t.node.isValid && !t.picked) this.pick(t.node, t);
         }, i * 0.18));
-        this.scheduleOnce(() => { this.interactionLocked = false; }, picks.length * 0.18 + 0.4);
+        this.scheduleOnce(() => {
+            this.interactionLocked = false;
+            // 磁铁可能刚好吸走最后一组可消物件，事务解锁后补一次残局判定。
+            this.checkDeadlock();
+        }, picks.length * 0.18 + 0.4);
         return true;
     }
 
@@ -1215,17 +1272,27 @@ export class GameManager extends Component {
         return this.totalCount === 0 ? 0 : Math.round((this.removedCount / this.totalCount) * 100);
     }
 
-    private gameOver(win: boolean, reason: string) {
+    private gameOver(win: boolean, reason: LoseReason | '全部消除！') {
         if (!this.playing) return;
         this.playing = false;
         this.interactionLocked = false;
         this.paused = false;
+        this.combo = 0;
+        this.hud?.setCombo(0, 0);
         this.hud?.setPaused(false);
         this.hud?.hidePauseMenu();
         this.hud?.clearHint();
         this.hud?.setTimeUrgent(false);
-        this.loseReason = win ? '' : (reason === '槽位已满' ? '槽位已满' : '时间到');
+        this.loseReason = win ? '' : reason as LoseReason;
         this.audio?.play(win ? 'win' : 'lose');
+        // 通关此前只有一个弹窗弹出来，画面上没有任何「成了」的反馈；先撒金屑再结算。
+        if (win) this.hud?.winCelebrate();
+        // 剩余时间折成奖励分：结算面板会单列一行说明它的来源。
+        const timeBonus = win ? Math.round(this.timeLeft) * GameManager.TIME_BONUS_PER_SEC : 0;
+        if (timeBonus > 0) {
+            this.score += timeBonus;
+            this.hud?.setScore(this.score);
+        }
         const stars = this.progress >= 100 ? 3 : this.progress >= 70 ? 2 : this.progress >= 50 ? 1 : 0;
         // 星级奖励：一星+移出、二星再+凑齐、三星再+打乱（走统一发放入口）
         const reward: Partial<Record<PropKind, number>> = {};
@@ -1247,21 +1314,28 @@ export class GameManager extends Component {
             SaveData.setLevel(this.levelIndex);
         }
         const actionText = win ? (wasLast ? '再来一局' : '下一关') : '再试一次';
-        // 失败且本轮未救过 → 提供一次救场：槽满退 3 件 / 超时加 60 秒。
+        // 失败且本轮未救过 → 提供一次救场：槽满/残局退 3 件、超时加 60 秒。
         const canRescue = !win && !this.rescueUsed
             && (this.loseReason === '时间到' || this.tray.count >= 3);
+        const loseSubtitle: Record<Exclude<LoseReason, ''>, string> = {
+            '槽位已满': '七格被塞满了',
+            '时间到': '时间到了',
+            '无解': '剩下的物件配不出三个了',
+        };
+        const subtitle = win || this.loseReason === '' ? '' : loseSubtitle[this.loseReason];
         // 给消除动画/星星心理预期留 0.6 秒再弹结算。
         // 原地重置而不重载场景——loadScene 后自定义管线的主相机会停止渲染。
         this.scheduleOnce(() => {
             this.hud?.showResult({
                 win, stars, progress: this.progress, score: this.score, rewardCount: stars, actionText,
-                subtitle: win ? '' : (this.loseReason === '槽位已满' ? '七格被塞满了' : '时间到了'),
+                subtitle,
+                timeBonus,
                 bestText: prevBest
                     ? `历史最佳 ${'★'.repeat(prevBest.stars) || '—'} ${prevBest.progress}% · ${prevBest.score ?? 0} 分`
                     : '',
                 newRecord,
                 rescueText: canRescue
-                    ? (this.loseReason === '槽位已满' ? '救一下:退回 3 件' : '救一下:+60 秒') : '',
+                    ? (this.loseReason === '时间到' ? '救一下:+60 秒' : '救一下:退回 3 件') : '',
                 onRescue: canRescue ? () => this.rescue() : undefined,
                 onAction: () => this.resetLevel(),
             });
@@ -1270,7 +1344,7 @@ export class GameManager extends Component {
 
     /**
      * 失败救场(每轮一次)。MVP 直接生效;接入微信后此入口改为激励视频回调。
-     * 槽满:槽头 3 件退回堆里腾出空间;超时:加 60 秒。
+     * 超时:加 60 秒;槽满/残局:槽头 3 件退回堆里腾出空间(残局加时救不了,只有腾格才有意义)。
      */
     private rescue() {
         if (this.rescueUsed || this.playing) return;
@@ -1278,11 +1352,11 @@ export class GameManager extends Component {
         this.interactionLocked = false;
         this.hud?.hideResult();
         this.audio?.play('prop');
-        if (this.loseReason === '槽位已满') {
+        if (this.loseReason === '时间到') {
+            this.timeLeft += 60;
+        } else {
             const back = this.tray.takeFront(3);
             this.returnItemsToPile(back);
-        } else {
-            this.timeLeft += 60;
         }
         this.playing = true;
         this.updateHud();
