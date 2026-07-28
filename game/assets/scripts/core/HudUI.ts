@@ -123,30 +123,17 @@ export class HudUI {
 
         const cream = new Color(255, 247, 218);
         const warmBrown = new Color(102, 57, 28);
-        const darkBrown = new Color(73, 39, 24);
 
-        // 左上暂停键：棕色软糖质感，与参考图一致。
-        this.makePanel(70, 70, 20, new Color(92, 52, 31, 210), { top: 27 }, 0,
-            undefined, 0, { left: 23 });
-        const pauseBtn = this.makePanel(64, 64, 18, new Color(215, 158, 105), { top: 22 }, 0,
-            new Color(124, 75, 42), 4, { left: 26 });
-        this.pauseIcon = this.drawIcon(pauseBtn, 'pause', 31, cream, 0, 0);
-        pauseBtn.on(NodeEventType.TOUCH_END, () => onPause?.());
+        // 左上暂停键。与道具键同一套立体面，只是配色走暖棕。
+        const pause = this.makeDockButton(66, 66, 20, new Color(214, 152, 96),
+            { top: 24 }, { left: 24 }, () => onPause?.(), 4);
+        this.pauseIcon = this.drawIcon(pause.face, 'pause', 32, cream, 0, 0);
 
         // \u6362\u80a4\u952e\uff1a\u6682\u505c\u952e\u6b63\u4e0b\u65b9\uff0c\u540c\u6b3e\u68d5\u8272\u8f6f\u7cd6\u8d28\u611f\uff0c\u8c03\u8272\u76d8\u56fe\u6807\u3002
         if (this.onSelectSkin) {
-            this.makePanel(70, 70, 20, new Color(92, 52, 31, 210), { top: 105 }, 0,
-                undefined, 0, { left: 23 });
-            const skinBtn = this.makePanel(64, 64, 18, new Color(215, 158, 105), { top: 100 }, 0,
-                new Color(124, 75, 42), 4, { left: 26 });
-            this.drawIcon(skinBtn, 'palette', 28, cream, 0, 0);
-            skinBtn.on(NodeEventType.TOUCH_START, () => {
-                tween(skinBtn).stop();
-                tween(skinBtn).to(0.07, { scale: v3(0.95, 0.95, 1) }).start();
-            });
-            const releaseSkin = () => tween(skinBtn).to(0.09, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
-            skinBtn.on(NodeEventType.TOUCH_END, () => { releaseSkin(); this.toggleSkinPanel(); });
-            skinBtn.on(NodeEventType.TOUCH_CANCEL, releaseSkin);
+            const skin = this.makeDockButton(66, 66, 20, new Color(214, 152, 96),
+                { top: 100 }, { left: 24 }, () => this.toggleSkinPanel(), 4);
+            this.drawIcon(skin.face, 'palette', 32, cream, 0, 0);
         }
 
         // 计时牌和细进度条，缩小存在感，把视觉主舞台让给 3D 容器。
@@ -245,37 +232,28 @@ export class HudUI {
         this.makePanel(752, 120, 25, new Color(221, 150, 105, 245), { bottom: -12 }, 0,
             new Color(255, 215, 164), 4);
 
+        // 图标颜色改用「在黄面上压得住」的深色调：原先的亮绿/亮蓝/品红与 #FFCA30
+        // 明度太接近，远看只剩一团糊掉的色块，认不出画的是什么。
         const defs: Array<{
-            kind: PropKind; text: string; icon: string; color: Color; align: HorizontalAlign;
+            kind: PropKind; text: string; color: Color; align: HorizontalAlign;
         }> = [
-            { kind: 'remove', text: '移出', icon: '\uf0e2', color: new Color(48, 214, 33), align: { left: 24 } },
-            { kind: 'magnet', text: '凑齐', icon: '\uf076', color: new Color(39, 151, 239), align: { centerX: true } },
-            { kind: 'shuffle', text: '打乱', icon: '\uf863', color: new Color(205, 82, 237), align: { right: 24 } },
+            { kind: 'remove', text: '移出', color: new Color(24, 132, 60), align: { left: 24 } },
+            { kind: 'magnet', text: '凑齐', color: new Color(198, 52, 44), align: { centerX: true } },
+            { kind: 'shuffle', text: '打乱', color: new Color(84, 62, 198), align: { right: 24 } },
         ];
 
-        defs.forEach(({ kind, text, icon, color, align }) => {
-            // 深色投影 + 黄色面板形成参考图中的卡通立体按钮。
-            this.makePanel(188, 86, 20, new Color(104, 61, 25, 230), { bottom: 9 }, 0,
-                undefined, 0, align).setPosition(0, -5, 0);
-            const btn = this.makePanel(184, 80, 18, new Color(255, 207, 55), { bottom: 17 }, 0,
-                new Color(171, 118, 29), 5, align);
-            this.propOpacity[kind] = btn.addComponent(UIOpacity);
-            this.drawIcon(btn, kind, 38, color, 0, 12);
-            this.addLabel(btn, text, 22, warmBrown, 0, -24, true);
+        defs.forEach(({ kind, text, color, align }) => {
+            const { face } = this.makeDockButton(184, 80, 20, new Color(255, 202, 48),
+                { bottom: 20 }, align, () => onProp(kind));
+            this.propOpacity[kind] = face.addComponent(UIOpacity);
+            this.drawIcon(face, kind, 40, color, 0, 11);
+            this.addLabel(face, text, 22, warmBrown, 0, -25, true);
 
-            const badgeShadow = this.makePanelChild(btn, 40, 40, 20, new Color(79, 72, 65), 78, 38);
-            badgeShadow.setPosition(78, 36, 0);
-            const badge = this.makePanelChild(btn, 36, 36, 18, new Color(112, 110, 105), 78, 39,
-                new Color(246, 242, 225), 4);
-            this.propBadge[kind] = this.addLabel(badge, '0', 15, new Color(255, 255, 255), 0, 0, true);
-
-            btn.on(NodeEventType.TOUCH_START, () => {
-                tween(btn).stop();
-                tween(btn).to(0.07, { scale: v3(0.95, 0.95, 1) }).start();
-            });
-            const release = () => tween(btn).to(0.09, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
-            btn.on(NodeEventType.TOUCH_END, () => { release(); onProp(kind); });
-            btn.on(NodeEventType.TOUCH_CANCEL, release);
+            // 角标改成暖红圆牌：灰底白字看着像「已禁用」，可它表达的是「你还有几个」，
+            // 是条正向信息。数量为 0 时再由 setPropCount 转成灰调。
+            const badge = this.makePanelChild(face, 38, 38, 19, new Color(228, 74, 58), 78, 33,
+                new Color(255, 240, 214), 4);
+            this.propBadge[kind] = this.addLabel(badge, '0', 17, new Color(255, 255, 255), 0, 0, true);
         });
         } // if SHOW_PROPS
 
@@ -637,20 +615,39 @@ export class HudUI {
             .start();
     }
 
-    /** 弹窗里的卡通立体按钮：深色投影 + 面板 + 按下缩放反馈。 */
+    /**
+     * 弹窗里的卡通立体按钮：投影 + 立体面 + 按下压进投影。
+     * 结构与 makeDockButton 一致（hit 定位 / face 承载视觉），只是这里用绝对坐标而非 Widget。
+     */
     private makeButton(parent: Node, text: string, w: number, h: number, x: number, y: number,
         fill: Color, onTap: () => void, fontSize = 27): { node: Node; label: Label } {
-        this.makePanelChild(parent, w + 6, h + 4, 22, new Color(104, 61, 25, 235), x, y - 4);
-        const b = this.makePanelChild(parent, w, h, 20, fill, x, y, new Color(171, 118, 29), 5);
-        const label = this.addLabel(b, text, fontSize, new Color(102, 57, 28), 0, 0, true);
-        b.on(NodeEventType.TOUCH_START, () => {
-            tween(b).stop();
-            tween(b).to(0.07, { scale: v3(0.94, 0.94, 1) }).start();
-        });
-        const release = () => tween(b).to(0.08, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
-        b.on(NodeEventType.TOUCH_END, () => { release(); onTap(); });
-        b.on(NodeEventType.TOUCH_CANCEL, release);
-        return { node: b, label };
+        const sink = 6;
+        const hit = new Node('btn');
+        hit.layer = Layers.Enum.UI_2D;
+        hit.setParent(parent);
+        hit.setPosition(x, y, 0);
+        hit.addComponent(UITransform).setContentSize(w, h);
+
+        const shadow = new Node('shadow');
+        shadow.layer = Layers.Enum.UI_2D;
+        shadow.setParent(hit);
+        shadow.setPosition(0, -sink - 2, 0);
+        const sg = shadow.addComponent(Graphics);
+        sg.fillColor = HudUI.darken(fill, 0.62);
+        sg.roundRect(-w / 2, -h / 2, w, h, 20);
+        sg.fill();
+
+        const face = new Node('face');
+        face.layer = Layers.Enum.UI_2D;
+        face.setParent(hit);
+        face.addComponent(UITransform).setContentSize(w, h);
+        HudUI.paintFace(face.addComponent(Graphics), w, h, 20, fill);
+
+        // 文字跟着面一起下沉，否则按下时字会浮在按钮上方。
+        const label = this.addLabel(face, text, fontSize, HudUI.darken(fill, 0.68), 0, 0, true);
+        label.outlineColor = HudUI.lighten(fill, 0.55);
+        this.bindPress(hit, face, onTap, sink);
+        return { node: hit, label };
     }
 
     /** 轻量通知弹窗(每日次数用尽等):标题 + 正文 + 单按钮。 */
@@ -902,10 +899,10 @@ export class HudUI {
             // 左侧两条皮肤主色预览。
             this.makePanelChild(card, 54, 84, 12, skin.swatch[0], -71, 0, new Color(255, 255, 255, 120), 2);
             this.makePanelChild(card, 26, 84, 8, skin.swatch[1], -31, 0);
-            // 名称 + 状态。
-            this.addLabel(card, skin.name, 25, new Color(102, 57, 28), 34, 20, true);
+            // 名称 + 状态。四字皮肤名（翡翠青玉）在 25 号字下会顶到左侧色条，缩一号并右移让开。
+            this.addLabel(card, skin.name, 23, new Color(102, 57, 28), 38, 20, true);
             this.addLabel(card, selected ? '使用中' : '点击切换', 16,
-                selected ? new Color(52, 148, 68) : new Color(158, 122, 82), 34, -22, true);
+                selected ? new Color(52, 148, 68) : new Color(158, 122, 82), 38, -22, true);
 
             card.on(NodeEventType.TOUCH_START, () => {
                 tween(card).stop();
@@ -1069,6 +1066,105 @@ export class HudUI {
 
     setPaused(paused: boolean) {
         HudUI.drawGlyph(this.pauseIcon, paused ? 'play' : 'pause', 31, new Color(255, 247, 218));
+    }
+
+    // ---------- 卡通立体按钮 ----------
+
+    private static readonly WHITE = new Color(255, 255, 255);
+    private static readonly BLACK = new Color(0, 0, 0);
+
+    /** 两色插值。按钮的高光/暗部/描边全部由基色推出，保证一颗按钮的各层同源不脏。 */
+    private static mix(a: Color, b: Color, t: number): Color {
+        return new Color(
+            Math.round(a.r + (b.r - a.r) * t),
+            Math.round(a.g + (b.g - a.g) * t),
+            Math.round(a.b + (b.b - a.b) * t),
+            a.a,
+        );
+    }
+
+    private static lighten(c: Color, t: number): Color { return HudUI.mix(c, HudUI.WHITE, t); }
+    private static darken(c: Color, t: number): Color { return HudUI.mix(c, HudUI.BLACK, t); }
+
+    /**
+     * 画一张卡通立体按钮面：底色 + 底部暗带 + 顶部高光 + 深色描边。
+     * Graphics 没有渐变，只能用三层同源纯色叠出体积感——这是这套纯代码 UI
+     * 唯一能做出“厚度”的办法，也是此前所有按钮看着像一块贴纸的原因。
+     */
+    private static paintFace(g: Graphics, w: number, h: number, r: number, fill: Color) {
+        g.clear();
+        const hw = w / 2, hh = h / 2;
+        // 1) 整块底色
+        g.fillColor = fill;
+        g.roundRect(-hw, -hh, w, h, r);
+        g.fill();
+        // 2) 底部暗带：按钮下沿的厚度，让面看起来是压在投影上的。
+        //    只做薄薄一条：道具键的文字就压在这一带上，暗带一厚一深，字立刻糊成一团。
+        const bandH = Math.max(5, h * 0.15);
+        g.fillColor = HudUI.darken(fill, 0.14);
+        g.roundRect(-hw + 4, -hh + 4, w - 8, bandH, Math.min(r * 0.6, bandH / 2));
+        g.fill();
+        // 3) 顶部高光：略窄一圈的受光面
+        const glossH = Math.max(6, h * 0.38);
+        g.fillColor = HudUI.lighten(fill, 0.45);
+        g.roundRect(-hw + 7, hh - glossH - 5, w - 14, glossH, Math.min(r * 0.7, glossH / 2));
+        g.fill();
+        // 4) 深色描边：卡通风必须的一圈轮廓
+        g.lineWidth = Math.max(3, Math.min(w, h) * 0.06);
+        g.strokeColor = HudUI.darken(fill, 0.45);
+        g.roundRect(-hw, -hh, w, h, r);
+        g.stroke();
+    }
+
+    /**
+     * 按下反馈：按钮面往自己的投影里压下去，松手弹回。
+     * 只缩放的话手感像“图片被捏了一下”；位移 + 缩放才读得出“按进去了”。
+     * face 必须是不受 Widget 摆布的节点（Widget 每帧改写位置，位移会被顶掉）。
+     */
+    private bindPress(hit: Node, face: Node, onTap: () => void, sink: number) {
+        const restore = () => {
+            Tween.stopAllByTarget(face);
+            tween(face)
+                .to(0.12, { position: v3(0, 0, 0), scale: v3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        };
+        hit.on(NodeEventType.TOUCH_START, () => {
+            Tween.stopAllByTarget(face);
+            tween(face).to(0.06, { position: v3(0, -sink, 0), scale: v3(0.97, 0.97, 1) }).start();
+        });
+        hit.on(NodeEventType.TOUCH_END, () => { restore(); onTap(); });
+        hit.on(NodeEventType.TOUCH_CANCEL, restore);
+    }
+
+    /**
+     * 屏幕上固定位置的立体按钮（道具栏、左上角功能键）。
+     * 外层只做 Widget 定位与触摸命中，内层 face 承载可动的按钮面 —— 分层是必须的，
+     * 因为 Widget 的 ALWAYS 模式每帧重写外层位置，直接对外层做位移动画会被抹掉。
+     * 返回 face 供调用方挂图标、文字与角标。
+     */
+    private makeDockButton(w: number, h: number, r: number, fill: Color,
+        align: { top?: number; bottom?: number; centerY?: number }, halign: HorizontalAlign,
+        onTap: () => void, sink = 5): { hit: Node; face: Node } {
+        const hit = this.makePanel(w, h, r, new Color(0, 0, 0, 0), align, 0, undefined, 0, halign);
+
+        // 投影不跟着按：它是按钮落在台面上的影子，面压下去时影子才显得是“陷进去”。
+        const shadow = new Node('shadow');
+        shadow.layer = Layers.Enum.UI_2D;
+        shadow.setParent(hit);
+        shadow.setPosition(0, -sink - 2, 0);
+        const sg = shadow.addComponent(Graphics);
+        sg.fillColor = HudUI.darken(fill, 0.62);
+        sg.roundRect(-w / 2, -h / 2, w, h, r);
+        sg.fill();
+
+        const face = new Node('face');
+        face.layer = Layers.Enum.UI_2D;
+        face.setParent(hit);
+        face.addComponent(UITransform).setContentSize(w, h);
+        HudUI.paintFace(face.addComponent(Graphics), w, h, r, fill);
+
+        this.bindPress(hit, face, onTap, sink);
+        return { hit, face };
     }
 
     private makePanel(w: number, h: number, r: number, fill: Color,

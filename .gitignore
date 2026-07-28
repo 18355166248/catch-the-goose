@@ -21,3 +21,7 @@ assets-3d/*3d model.glb
 # 解压产物
 game-demo/ximalaya/
 game-demo/__MACOSX/
+
+# 本地视觉验证截图 / Playwright 产物
+.playwright-mcp/
+shot-*.png
