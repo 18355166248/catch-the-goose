@@ -83,9 +83,13 @@ export class SaveData {
         SaveData.write(SaveData.PROP, JSON.stringify(counts));
     }
 
-    /** 音效开关。未存过按开启处理（首次进入有声）。 */
+    /**
+     * 音效开关。未存过按关闭处理（首次进入静音）。
+     * 网页打开就外放是移动端浏览器最招人烦的行为之一，而且 iOS/Chrome 的自动播放策略
+     * 本就要求先有用户手势；默认静音后由玩家在暂停菜单里主动打开。
+     */
     static getSound(): boolean {
-        return SaveData.read(SaveData.SOUND) !== '0';
+        return SaveData.read(SaveData.SOUND) === '1';
     }
     static setSound(on: boolean): void {
         SaveData.write(SaveData.SOUND, on ? '1' : '0');
