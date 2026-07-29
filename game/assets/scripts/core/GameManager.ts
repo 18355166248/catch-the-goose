@@ -278,6 +278,9 @@ export class GameManager extends Component {
     /** 从首页进入本关：过次数门 → 生成物件 → 新手首局直接亮一次提示。 */
     private async beginRound() {
         if (!this.ensureDaily(() => void this.beginRound())) return;
+        // BGM 起播点必须挂在用户手势上（点「开始挑战」），否则被浏览器自动播放策略拦掉。
+        // 声音默认关闭，所以这里通常什么都不会响，直到玩家在暂停菜单里打开。
+        this.audio?.startBgm();
         await this.startInitialRound();
         if (SaveData.taught()) return;
         // 第一次玩：等堆叠落定后主动指一组可消的物件，比任何文字都直观。

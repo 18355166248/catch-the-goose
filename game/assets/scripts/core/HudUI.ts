@@ -731,7 +731,8 @@ export class HudUI {
             new Color(196, 130, 64), 6);
         this.addLabel(panel, '暂 停', 46, new Color(240, 150, 26), 0, H / 2 - 58, true);
 
-        const soundText = (on: boolean) => `音效  ${on ? '开' : '关'}`;
+        // 这个开关同时管音效与 BGM，写「音效」会让人以为背景音乐另有开关
+        const soundText = (on: boolean) => `声音  ${on ? '开' : '关'}`;
         this.makeButton(panel, '继续游戏', 320, 84, 0, 58, new Color(126, 217, 87), () => opts.onResume(), 30);
         this.makeButton(panel, '重开本关', 320, 80, 0, -42, new Color(255, 207, 55), () => opts.onRestart());
         const sound = this.makeButton(panel, soundText(opts.soundOn), 320, 72, 0, -136,
