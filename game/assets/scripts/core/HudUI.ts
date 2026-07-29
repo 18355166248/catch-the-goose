@@ -172,9 +172,11 @@ export class HudUI {
         this.progressFill.setAnchorPoint(0, 0.5);
         fillNode.setPosition(-W / 2 + 4, 0, 0);
         const fg = fillNode.addComponent(Graphics);
-        fg.fillColor = new Color(106, 205, 75, 255);
-        fg.roundRect(0, -8, W - 8, 16, 8);
-        fg.fill();
+        // 锚点在左端，所以渐变整体右移半个宽度对齐
+        const progFill = new Color(106, 205, 75, 255);
+        HudUI.fillVGradient(fg, W - 8, 16, 8,
+            HudUI.warm(HudUI.lighten(progFill, 0.34), 0.18),
+            HudUI.cool(HudUI.darken(progFill, 0.22), 0.12), 8, (W - 8) / 2, 0);
         fillNode.setScale(0, 1);
         // 星级刻度：50% / 70% 两道浅色竖线，让玩家随时看清离下一颗星还差多少。
         const tickNode = new Node('progressTicks');
@@ -1090,6 +1092,9 @@ export class HudUI {
 
     private static readonly WHITE = new Color(255, 255, 255);
     private static readonly BLACK = new Color(0, 0, 0);
+    /** 打光用的两个偏色端：暖白（受光）与红棕（背光）。 */
+    private static readonly SUN = new Color(255, 246, 214);
+    private static readonly SHADE = new Color(86, 38, 20);
 
     /** 两色插值。按钮的高光/暗部/描边全部由基色推出，保证一颗按钮的各层同源不脏。 */
     private static mix(a: Color, b: Color, t: number): Color {
@@ -1103,33 +1108,113 @@ export class HudUI {
 
     private static lighten(c: Color, t: number): Color { return HudUI.mix(c, HudUI.WHITE, t); }
     private static darken(c: Color, t: number): Color { return HudUI.mix(c, HudUI.BLACK, t); }
+    /** 变暖/变冷：受光面偏黄、背光面偏红棕，比单纯加白减黑更像被暖光照着的实物。 */
+    private static warm(c: Color, t: number): Color { return HudUI.mix(c, HudUI.SUN, t); }
+    private static cool(c: Color, t: number): Color { return HudUI.mix(c, HudUI.SHADE, t); }
 
     /**
-     * 画一张卡通立体按钮面：底色 + 底部暗带 + 顶部高光 + 深色描边。
-     * Graphics 没有渐变，只能用三层同源纯色叠出体积感——这是这套纯代码 UI
-     * 唯一能做出“厚度”的办法，也是此前所有按钮看着像一块贴纸的原因。
+     * 圆角矩形在高度 y 处的水平内缩量。用来把渐变条带裁进圆角轮廓里——
+     * Graphics 没有裁剪区，只能逐条带自己算该行有多宽。
+     */
+    private static roundInset(y: number, hh: number, r: number): number {
+        const d = Math.abs(y) - (hh - r);
+        if (d <= 0) return 0;
+        return r - Math.sqrt(Math.max(0, r * r - d * d));
+    }
+
+    /**
+     * 竖向渐变填充。Graphics 没有渐变 API，这里按行切成若干条带逐条上色，
+     * 条带宽度按圆角轮廓收缩，所以渐变不会溢出圆角。
+     *
+     * 底层先铺一整块 roundRect 保证外轮廓干净（条带边缘是逐行阶梯，靠得太近会毛），
+     * 条带再整体内缩半像素叠上去。
+     */
+    private static fillVGradient(g: Graphics, w: number, h: number, r: number,
+        top: Color, bottom: Color, steps?: number, cx = 0, cy = 0) {
+        const hw = w / 2, hh = h / 2;
+        g.fillColor = bottom;
+        g.roundRect(cx - hw, cy - hh, w, h, r);
+        g.fill();
+
+        const n = steps ?? Math.max(10, Math.min(48, Math.round(h / 2)));
+        const dy = h / n;
+        for (let i = 0; i < n; i++) {
+            const yTop = hh - i * dy, yBot = yTop - dy;
+            // 取上下沿里更靠外的那条算内缩，条带才不会探出圆角
+            const inset = Math.max(HudUI.roundInset(yTop, hh, r), HudUI.roundInset(yBot, hh, r)) + 0.5;
+            const bw = w - inset * 2;
+            if (bw <= 0) continue;
+            g.fillColor = HudUI.mix(top, bottom, i / (n - 1));
+            // 条带间多画半像素，消掉相邻条带之间的接缝
+            g.rect(cx - hw + inset, cy + yBot - 0.5, bw, dy + 1);
+            g.fill();
+        }
+    }
+
+    /**
+     * 画一张卡通立体按钮面。分五层，从下往上：
+     * 竖向渐变的面 → 底部内阴影（面自身的厚度）→ 顶部釉光 → 上沿亮线 → 一圈描边。
+     *
+     * 早先的版本是三块同源纯色硬叠，色阶断在两条水平线上，远看就是贴纸。
+     * 现在渐变由 fillVGradient 逐行铺，受光端往暖白偏、背光端往红棕偏
+     * （而不是简单加白减黑），糖果塑料的通透感基本来自这一步。
      */
     private static paintFace(g: Graphics, w: number, h: number, r: number, fill: Color) {
         g.clear();
         const hw = w / 2, hh = h / 2;
-        // 1) 整块底色
-        g.fillColor = fill;
-        g.roundRect(-hw, -hh, w, h, r);
-        g.fill();
-        // 2) 底部暗带：按钮下沿的厚度，让面看起来是压在投影上的。
-        //    只做薄薄一条：道具键的文字就压在这一带上，暗带一厚一深，字立刻糊成一团。
-        const bandH = Math.max(5, h * 0.15);
-        g.fillColor = HudUI.darken(fill, 0.14);
-        g.roundRect(-hw + 4, -hh + 4, w - 8, bandH, Math.min(r * 0.6, bandH / 2));
-        g.fill();
-        // 3) 顶部高光：略窄一圈的受光面
-        const glossH = Math.max(6, h * 0.38);
-        g.fillColor = HudUI.lighten(fill, 0.45);
-        g.roundRect(-hw + 7, hh - glossH - 5, w - 14, glossH, Math.min(r * 0.7, glossH / 2));
-        g.fill();
-        // 4) 深色描边：卡通风必须的一圈轮廓
-        g.lineWidth = Math.max(3, Math.min(w, h) * 0.06);
-        g.strokeColor = HudUI.darken(fill, 0.45);
+
+        // 1) 面：顶端受光偏暖白，底端背光偏红棕
+        HudUI.fillVGradient(g, w, h, r,
+            HudUI.warm(HudUI.lighten(fill, 0.30), 0.22),
+            HudUI.cool(HudUI.darken(fill, 0.16), 0.18));
+
+        // 2) 底部内阴影：面自己的厚度落在下沿。做窄做浅——道具键的文字压在这一带上，
+        //    暗带一厚字就糊。
+        //    做成 alpha 往上渐隐的暗雾，而不是一条实色带——实色带有明确上边界，
+        //    在下沿看着像嵌了个小托盘。结构与下面的釉光对称，只是方向相反。
+        const shadeH = Math.max(4, h * 0.18);
+        const shadeC = HudUI.cool(HudUI.darken(fill, 0.42), 0.35);
+        const sn = Math.max(8, Math.round(shadeH / 2));
+        for (let i = 0; i < sn; i++) {
+            const t = i / (sn - 1);                       // 0 = 贴着下沿
+            const yBot = -hh + (shadeH * i) / sn;
+            const yTop = yBot + shadeH / sn;
+            const inset = Math.max(HudUI.roundInset(yTop, hh, r),
+                HudUI.roundInset(yBot, hh, r)) + 1;
+            const bw = w - inset * 2;
+            if (bw <= 0) continue;
+            g.fillColor = new Color(shadeC.r, shadeC.g, shadeC.b,
+                Math.round(150 * (1 - t) * (1 - t)));
+            g.rect(-w / 2 + inset, yBot - 0.5, bw, shadeH / sn + 1);
+            g.fill();
+        }
+
+        // 3) 顶部釉光：贴着上沿的一层高光，往下迅速透明。
+        //    只做上沿、不绕圈——绕成一圈就成了「回」字白边，是塑料感的反面。
+        //    分段要密（每段 ~2px）且相邻段重叠 1px，否则 alpha 逐段跳会看出横条纹。
+        const glossH = Math.max(6, h * 0.42);
+        const gTop = HudUI.warm(HudUI.lighten(fill, 0.66), 0.35);
+        const gn = Math.max(12, Math.round(glossH / 2));
+        const pad = Math.max(3, r * 0.22);
+        for (let i = 0; i < gn; i++) {
+            const t = i / (gn - 1);
+            const yTop = hh - pad - (glossH * i) / gn;
+            const yBot = yTop - glossH / gn;
+            // 高光宽度跟着圆角收，且比面窄一圈，露出下面的底色当作边缘过渡
+            const inset = Math.max(HudUI.roundInset(yTop, hh, r),
+                HudUI.roundInset(yBot, hh, r)) + pad;
+            const bw = w - inset * 2;
+            if (bw <= 0) continue;
+            // 二次衰减：贴着上沿最亮，到一半就基本没了
+            g.fillColor = new Color(gTop.r, gTop.g, gTop.b, Math.round(165 * (1 - t) * (1 - t)));
+            g.roundRect(-w / 2 + inset, yBot - 0.5, bw, glossH / gn + 1,
+                i === 0 ? Math.min(r * 0.6, glossH / 4) : 0);
+            g.fill();
+        }
+
+        // 4) 外描边：卡通风必须的一圈轮廓，偏红棕而不是纯黑，才压得住暖色面
+        g.lineWidth = Math.max(3, Math.min(w, h) * 0.055);
+        g.strokeColor = HudUI.cool(HudUI.darken(fill, 0.42), 0.3);
         g.roundRect(-hw, -hh, w, h, r);
         g.stroke();
     }
@@ -1193,15 +1278,7 @@ export class HudUI {
         n.setParent(this.contentRoot);
         n.addComponent(UITransform).setContentSize(w, h);
         const g = n.addComponent(Graphics);
-        g.fillColor = fill;
-        g.roundRect(-w / 2, -h / 2, w, h, r);
-        g.fill();
-        if (stroke && strokeW > 0) {
-            g.lineWidth = strokeW;
-            g.strokeColor = stroke;
-            g.roundRect(-w / 2, -h / 2, w, h, r);
-            g.stroke();
-        }
+        HudUI.paintPanel(g, w, h, r, fill, stroke, strokeW);
         const wd = n.addComponent(Widget);
         wd.alignMode = Widget.AlignMode.ALWAYS;
         if (halign?.left !== undefined) { wd.isAlignLeft = true; wd.left = halign.left; }
@@ -1220,17 +1297,43 @@ export class HudUI {
         n.setParent(parent);
         n.addComponent(UITransform).setContentSize(w, h);
         n.setPosition(x, y, 0);
-        const g = n.addComponent(Graphics);
-        g.fillColor = fill;
-        g.roundRect(-w / 2, -h / 2, w, h, r);
-        g.fill();
+        HudUI.paintPanel(n.addComponent(Graphics), w, h, r, fill, stroke, strokeW);
+        return n;
+    }
+
+    /**
+     * 面板底：一层很浅的竖向渐变 + 上沿一道更亮的窄边。
+     *
+     * 按钮走 paintFace（强立体），面板只要「有厚度但不抢戏」——计时牌、进度槽、
+     * 收集槽、桃木台面都过这里，做重了整个 HUD 会全是反光。
+     * 全透明的 fill（dock 按钮的命中层用）直接跳过，别画出个看得见的框。
+     */
+    private static paintPanel(g: Graphics, w: number, h: number, r: number, fill: Color,
+        stroke?: Color, strokeW = 0) {
+        if (fill.a > 0) {
+            HudUI.fillVGradient(g, w, h, r,
+                HudUI.warm(HudUI.lighten(fill, 0.13), 0.10),
+                HudUI.cool(HudUI.darken(fill, 0.11), 0.10));
+            // 上沿高光：细条（进度条、连击条）加了显脏，整块大面板加了像贴了条胶带，
+            // 都跳过。强度还要随底色变亮而衰减——深色牌子上那道亮边是质感，
+            // 浅色底上同样一道就只是一片灰。
+            const luma = (fill.r * 0.299 + fill.g * 0.587 + fill.b * 0.114) / 255;
+            const k = Math.max(0, 0.62 - luma * 0.62);
+            if (h >= 26 && h <= 150 && k > 0.05) {
+                const hi = HudUI.warm(HudUI.lighten(fill, 0.34), 0.2);
+                g.fillColor = new Color(hi.r, hi.g, hi.b, Math.round(fill.a * k));
+                const inset = Math.max(2, r * 0.3);
+                g.roundRect(-w / 2 + inset, h / 2 - Math.max(2, h * 0.09) - 2,
+                    w - inset * 2, Math.max(2, h * 0.09), Math.max(1, r * 0.25));
+                g.fill();
+            }
+        }
         if (stroke && strokeW > 0) {
-            g.strokeColor = stroke;
             g.lineWidth = strokeW;
+            g.strokeColor = stroke;
             g.roundRect(-w / 2, -h / 2, w, h, r);
             g.stroke();
         }
-        return n;
     }
 
     /**
@@ -1284,25 +1387,33 @@ export class HudUI {
      * 用 Graphics 矢量绘制 UI 图标，取代 Font Awesome 图标字体。
      * 微信小游戏 canvas 对字体私有区(PUA)字形不渲染，字体图标在真机会整片消失，矢量则 100% 可靠。
      * 每个图标只用一次 fill 或一次 stroke（单色），与本文件既有 Graphics 用法一致，避免多色路径叠加。
+     *
+     * 全部图标画在同一套 24×24 网格上（U = size/24），视觉主体控制在 18×18 的内框里，
+     * 线宽只有 STROKE（主干）和 HAIR（细节）两级。此前每枚图标各用一套比例，
+     * 线宽从 0.06 到 0.19 不等，并排放在一行时轻重完全不匀。
      */
     private static drawGlyph(g: Graphics, kind: IconKind, size: number, color: Color): void {
         g.clear();
         const s = size;
+        const U = s / 24;
+        const STROKE = 3 * U, HAIR = 2 * U;
         g.fillColor = color;
         g.strokeColor = color;
         switch (kind) {
             case 'pause': {
-                const bw = s * 0.16, bh = s * 0.58, gap = s * 0.13;
-                g.roundRect(-gap - bw, -bh / 2, bw, bh, bw * 0.4);
-                g.roundRect(gap, -bh / 2, bw, bh, bw * 0.4);
+                // 两根 4×16 的竖条，间距 3——比原来的 0.16s 细，和其余图标的重量对齐
+                const bw = 4 * U, bh = 16 * U, gap = 1.5 * U;
+                g.roundRect(-gap - bw, -bh / 2, bw, bh, bw * 0.35);
+                g.roundRect(gap, -bh / 2, bw, bh, bw * 0.35);
                 g.fill();
                 break;
             }
             case 'play': {
-                const r = s * 0.4;
-                g.moveTo(-r * 0.72, r * 0.92);
-                g.lineTo(-r * 0.72, -r * 0.92);
-                g.lineTo(r, 0);
+                // 等高三角，视觉重心略右移，抵消三角形左重右轻的错觉
+                const hh = 8.5 * U, w = 15 * U;
+                g.moveTo(-w * 0.42, hh);
+                g.lineTo(-w * 0.42, -hh);
+                g.lineTo(w * 0.58, 0);
                 g.close();
                 g.fill();
                 break;
@@ -1311,8 +1422,8 @@ export class HudUI {
             case 'sound-off': {
                 // 喇叭：方形箱体 + 外扩喇叭口。声波和叉也画成实心多边形而不是描边，
                 // 整枚图标只走一次 fill——混用 fill/stroke 会把喇叭轮廓再描一遍。
-                const bw = s * 0.13, bh = s * 0.26, mw = s * 0.24, mh = s * 0.52;
-                const x0 = -s * 0.36;
+                const bw = 3 * U, bh = 6 * U, mw = 5.5 * U, mh = 13 * U;
+                const x0 = -9 * U;
                 g.moveTo(x0, -bh / 2);
                 g.lineTo(x0 + bw, -bh / 2);
                 g.lineTo(x0 + bw + mw, -mh / 2);
@@ -1320,13 +1431,13 @@ export class HudUI {
                 g.lineTo(x0 + bw, bh / 2);
                 g.lineTo(x0, bh / 2);
                 g.close();
-                const t = Math.max(2, s * 0.075);
+                const t = HAIR;
                 if (kind === 'sound-on') {
                     // 两道 ">" 形声波，外圈更大。用折线而不是 arc：这个尺寸下
                     // 圆弧端点容易毛糙，折线反而更干净。
-                    const d = s * 0.09;
-                    for (const [rx, ry] of [[0.12, 0.16], [0.26, 0.30]] as const) {
-                        const x = s * rx, y = s * ry;
+                    const d = 2.2 * U;
+                    for (const [rx, ry] of [[2.6, 3.6], [6.2, 7.2]] as const) {
+                        const x = rx * U, y = ry * U;
                         g.moveTo(x, -y);
                         g.lineTo(x + d, 0);
                         g.lineTo(x, y);
@@ -1338,7 +1449,7 @@ export class HudUI {
                 } else {
                     // 关闭态画一个叉，比「没有声波」更明确地表达静音。
                     // 两条 45° 斜杠各沿法线推半个线宽，凑成实心长方形。
-                    const cx = s * 0.24, r = s * 0.17, u = t / (2 * Math.SQRT2);
+                    const cx = 5.6 * U, r = 4 * U, u = t / (2 * Math.SQRT2);
                     for (const dir of [1, -1]) {
                         g.moveTo(cx - r + u * dir, -dir * r - u);
                         g.lineTo(cx + r + u * dir, dir * r - u);
@@ -1351,41 +1462,63 @@ export class HudUI {
                 break;
             }
             case 'palette': {
-                // 单色描边：盘身大圈 + 拇指孔 + 三个颜料点，读作调色盘。
-                g.lineWidth = Math.max(2, s * 0.07);
-                g.circle(0, 0, s * 0.4);
-                g.circle(s * 0.13, -s * 0.15, s * 0.1);
-                g.circle(-s * 0.16, s * 0.1, s * 0.055);
-                g.circle(s * 0.02, s * 0.2, s * 0.055);
-                g.circle(s * 0.19, s * 0.05, s * 0.055);
+                // 盘身大圈 + 拇指孔 + 三个颜料点，读作调色盘。
+                // 颜料点改成实心：描边小圆在 32px 下只剩一圈灰边，糊成一团。
+                g.lineWidth = STROKE;
+                g.circle(0, 0, 9 * U);
+                g.circle(3 * U, -3.4 * U, 2.4 * U);
                 g.stroke();
+                for (const [px, py] of [[-3.8, 2.4], [0.4, 4.8], [4.6, 1.2]] as const) {
+                    g.circle(px * U, py * U, 1.5 * U);
+                }
+                g.fill();
                 break;
             }
             case 'remove': {
-                // 向上顶出的箭头（把物件移出槽）。
-                g.moveTo(0, s * 0.5);
-                g.lineTo(-s * 0.33, s * 0.06);
-                g.lineTo(s * 0.33, s * 0.06);
+                // 向上顶出的箭头（把物件移出槽）。杆宽 5U，与 pause 竖条同一重量级。
+                g.moveTo(0, 9 * U);
+                g.lineTo(-6.8 * U, 1.2 * U);
+                g.lineTo(6.8 * U, 1.2 * U);
                 g.close();
-                g.roundRect(-s * 0.11, -s * 0.45, s * 0.22, s * 0.52, s * 0.05);
+                g.roundRect(-2.5 * U, -9 * U, 5 * U, 10.8 * U, 1.2 * U);
                 g.fill();
                 break;
             }
             case 'magnet': {
-                // U 形马蹄磁铁（开口朝上）。
-                const aw = s * 0.27, top = s * 0.36;
-                g.lineWidth = s * 0.19;
-                g.moveTo(-aw, top);
-                g.lineTo(-aw, 0);
-                g.arc(0, 0, aw, Math.PI, Math.PI * 2, false);
-                g.lineTo(aw, top);
-                g.stroke();
+                // U 形马蹄磁铁（开口朝上），两极各带一段极靴。
+                // 画成实心而不是粗描边：描边版在小尺寸下就是一个字母 U，读不出磁铁。
+                const ro = 8 * U, ri = 4 * U, top = 8 * U;
+                const seg = 18;
+                g.moveTo(-ro, top);
+                g.lineTo(-ro, 0);
+                for (let i = 0; i <= seg; i++) {          // 外弧，从左到右走下半圈
+                    const a = Math.PI + (Math.PI * i) / seg;
+                    g.lineTo(Math.cos(a) * ro, Math.sin(a) * ro);
+                }
+                g.lineTo(ro, top);
+                g.lineTo(ri, top);
+                g.lineTo(ri, 0);
+                for (let i = seg; i >= 0; i--) {          // 内弧原路折回
+                    const a = Math.PI + (Math.PI * i) / seg;
+                    g.lineTo(Math.cos(a) * ri, Math.sin(a) * ri);
+                }
+                g.lineTo(-ri, top);
+                g.close();
+                g.fill();
+                // 两极的极靴：磁铁之所以一眼是磁铁靠的就是这两块，必须比臂宽、
+                // 向两侧探出去，否则和臂完全重合，整枚图标就只是个字母 U。
+                const shoeW = (ro - ri) * 1.6, shoeH = 3.2 * U;
+                const armMid = (ro + ri) / 2;
+                for (const sx of [-armMid, armMid]) {
+                    g.roundRect(sx - shoeW / 2, top - shoeH, shoeW, shoeH, 0.8 * U);
+                }
+                g.fill();
                 break;
             }
             case 'shuffle': {
                 // 两条交叉箭头。
-                g.lineWidth = s * 0.1;
-                const R = s * 0.4, H = s * 0.26, a = s * 0.18;
+                g.lineWidth = STROKE;
+                const R = 9 * U, H = 6 * U, a = 4 * U;
                 g.moveTo(-R, -H); g.lineTo(R, H);
                 g.moveTo(-R, H); g.lineTo(R, -H);
                 g.moveTo(R, H); g.lineTo(R - a, H);
@@ -1396,7 +1529,7 @@ export class HudUI {
                 break;
             }
             case 'star': {
-                const R = s * 0.5, r = R * 0.44;
+                const R = 9.5 * U, r = R * 0.46;
                 for (let i = 0; i < 10; i++) {
                     const ang = Math.PI / 2 + i * Math.PI / 5;
                     const rad = i % 2 === 0 ? R : r;
