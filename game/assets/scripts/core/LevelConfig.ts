@@ -62,7 +62,7 @@ export const THEMES: Theme[] = [
          *   第 7~9 件同色系再加码，压轴放吉祥物大鹅。
          * 刻意排除两件：
          *   pingankou 与干扰物 rock 同为无彩灰（饱和度 0.02 / 0.01），只差明度，堆里易误拿；
-         *   jingling 是宝可梦商标件，见 resources/models/CREDITS.md，不得进入正式内容。
+         *   （jingling 曾是另一个候选，但属宝可梦商标件，已从仓库删除，见 CREDITS.md。）
          */
         family: ['yuanbao', 'bracelet', 'baicai', 'pixiu',
                  'tongqian', 'baoshi', 'yuzhuo', 'hulu', 'goose'],
