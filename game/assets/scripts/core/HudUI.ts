@@ -127,24 +127,37 @@ export class HudUI {
         const warmBrown = new Color(102, 57, 28);
 
         // 左上暂停键。与道具键同一套立体面，只是配色走暖棕。
-        const pause = this.makeDockButton(66, 66, 20, new Color(214, 152, 96),
+        // 配色从原先的奶茶色 (214,152,96) 压到深琥珀棕：一是那个浅色和奶白图标只差
+        // 四十来级明度，图标糊在面上认不出；二是 HUD 本来只有「深棕牌子 + 金黄道具」
+        // 两套色，多出来的浅肉色谁也不挨着，远看就是三张贴上去的贴纸。
+        //
+        // 三枚键还共用一块深色托板：各带各的投影散在那儿是三个孤立控件，
+        // 托到一起才读成一组，也和底部那条桃木台面对上。
+        const dockFill = new Color(176, 108, 62);
+        const dockCount = 1 + (onSelectSkin ? 1 : 0) + (onToggleSound ? 1 : 0);
+        const DOCK_STEP = 76, DOCK_PAD = 9;
+        this.makePanel(66 + DOCK_PAD * 2, DOCK_STEP * dockCount - 10 + DOCK_PAD * 2 + 6, 26,
+            new Color(64, 38, 24, 112), { top: 24 - DOCK_PAD }, 0,
+            new Color(150, 98, 58, 120), 2, { left: 24 - DOCK_PAD });
+
+        const pause = this.makeDockButton(66, 66, 20, dockFill,
             { top: 24 }, { left: 24 }, () => onPause?.(), 4);
-        this.pauseIcon = this.drawIcon(pause.face, 'pause', 32, cream, 0, 0);
+        this.pauseIcon = this.drawIcon(pause.face, 'pause', 33, cream, 0, 0);
 
         // \u6362\u80a4\u952e\uff1a\u6682\u505c\u952e\u6b63\u4e0b\u65b9\uff0c\u540c\u6b3e\u68d5\u8272\u8f6f\u7cd6\u8d28\u611f\uff0c\u8c03\u8272\u76d8\u56fe\u6807\u3002
         if (this.onSelectSkin) {
-            const skin = this.makeDockButton(66, 66, 20, new Color(214, 152, 96),
-                { top: 100 }, { left: 24 }, () => this.toggleSkinPanel(), 4);
-            this.drawIcon(skin.face, 'palette', 32, cream, 0, 0);
+            const skin = this.makeDockButton(66, 66, 20, dockFill,
+                { top: 24 + DOCK_STEP }, { left: 24 }, () => this.toggleSkinPanel(), 4);
+            this.drawIcon(skin.face, 'palette', 33, cream, 0, 0);
         }
 
         // 声音键：跟在换肤键后面排。默认是静音的，开关只放在暂停菜单里的话，
         // 多数玩家整局都不会知道这游戏有声音——所以主界面必须有个能看见的入口。
         if (onToggleSound) {
-            const sound = this.makeDockButton(66, 66, 20, new Color(214, 152, 96),
-                { top: this.onSelectSkin ? 176 : 100 }, { left: 24 },
+            const sound = this.makeDockButton(66, 66, 20, dockFill,
+                { top: 24 + DOCK_STEP * (this.onSelectSkin ? 2 : 1) }, { left: 24 },
                 () => this.setSoundOn(onToggleSound()), 4);
-            this.soundIcon = this.drawIcon(sound.face, 'sound-off', 32, cream, 0, 0);
+            this.soundIcon = this.drawIcon(sound.face, 'sound-off', 33, cream, 0, 0);
         }
 
         // 计时牌和细进度条，缩小存在感，把视觉主舞台让给 3D 容器。
@@ -264,8 +277,13 @@ export class HudUI {
 
             // 角标改成暖红圆牌：灰底白字看着像「已禁用」，可它表达的是「你还有几个」，
             // 是条正向信息。数量为 0 时再由 setPropCount 转成灰调。
-            const badge = this.makePanelChild(face, 38, 38, 19, new Color(228, 74, 58), 78, 33,
-                new Color(255, 240, 214), 4);
+            const badge = new Node('badge');
+            badge.layer = Layers.Enum.UI_2D;
+            badge.setParent(face);
+            badge.setPosition(75, 31, 0);
+            badge.addComponent(UITransform).setContentSize(38, 38);
+            HudUI.paintBadge(badge.addComponent(Graphics), 19,
+                new Color(228, 74, 58), new Color(255, 240, 214));
             this.propBadge[kind] = this.addLabel(badge, '0', 17, new Color(255, 255, 255), 0, 0, true);
         });
         } // if SHOW_PROPS
@@ -645,10 +663,7 @@ export class HudUI {
         shadow.layer = Layers.Enum.UI_2D;
         shadow.setParent(hit);
         shadow.setPosition(0, -sink - 2, 0);
-        const sg = shadow.addComponent(Graphics);
-        sg.fillColor = HudUI.darken(fill, 0.62);
-        sg.roundRect(-w / 2, -h / 2, w, h, 20);
-        sg.fill();
+        HudUI.paintShadow(shadow.addComponent(Graphics), w, h, 20, fill);
 
         const face = new Node('face');
         face.layer = Layers.Enum.UI_2D;
@@ -1079,13 +1094,13 @@ export class HudUI {
     }
 
     setPaused(paused: boolean) {
-        HudUI.drawGlyph(this.pauseIcon, paused ? 'play' : 'pause', 31, new Color(255, 247, 218));
+        HudUI.drawGlyph(this.pauseIcon, paused ? 'play' : 'pause', 33, new Color(255, 247, 218));
     }
 
     /** 同步声音键图标。暂停菜单里的开关也会改状态，两处必须一起刷。 */
     setSoundOn(on: boolean) {
         if (!this.soundIcon) return;
-        HudUI.drawGlyph(this.soundIcon, on ? 'sound-on' : 'sound-off', 32, new Color(255, 247, 218));
+        HudUI.drawGlyph(this.soundIcon, on ? 'sound-on' : 'sound-off', 33, new Color(255, 247, 218));
     }
 
     // ---------- 卡通立体按钮 ----------
@@ -1152,8 +1167,51 @@ export class HudUI {
     }
 
     /**
-     * 画一张卡通立体按钮面。分五层，从下往上：
-     * 竖向渐变的面 → 底部内阴影（面自身的厚度）→ 顶部釉光 → 上沿亮线 → 一圈描边。
+     * 沿圆角矩形轮廓铺一段折线路径（只铺路径，不 fill/stroke）。
+     * side='top' 走「左上圆角 → 顶边 → 右上圆角」，'bottom' 走下沿对应的一段。
+     *
+     * 用折线而不是 Graphics.arc：arc 的 counterclockwise 语义是照 canvas 的 y 轴向下定的，
+     * 搬到 y 轴向上的 UI 坐标里方向正好相反，两段 90° 弧逐点走反而不会画错边。
+     */
+    private static edgePath(g: Graphics, w: number, h: number, r: number, side: 'top' | 'bottom') {
+        const hw = w / 2, hh = h / 2;
+        const sy = side === 'top' ? 1 : -1;
+        const a0 = Math.PI;
+        const a1 = side === 'top' ? Math.PI / 2 : Math.PI * 1.5;
+        const a2 = side === 'top' ? 0 : Math.PI * 2;
+        const seg = 8;
+        let started = false;
+        const walk = (cx: number, from: number, to: number) => {
+            for (let i = 0; i <= seg; i++) {
+                const a = from + (to - from) * (i / seg);
+                const x = cx + r * Math.cos(a);
+                const y = sy * (hh - r) + r * Math.sin(a);
+                if (!started) { g.moveTo(x, y); started = true; } else { g.lineTo(x, y); }
+            }
+        };
+        walk(-hw + r, a0, a1);   // 左圆角
+        walk(hw - r, a1, a2);    // 顺带把横边连上，再走右圆角
+    }
+
+    /**
+     * 按钮落在台面上的软投影：一层实心 + 几层往外扩的淡边。
+     *
+     * 单块硬边纯色 roundRect 读作「同一张贴纸的重影」，怎么调面都救不回来立体感；
+     * 边缘一化开，按钮才算真正压在台面上。
+     */
+    private static paintShadow(g: Graphics, w: number, h: number, r: number, fill: Color) {
+        const c = HudUI.cool(HudUI.darken(fill, 0.68), 0.22);
+        for (let i = 3; i >= 0; i--) {
+            const sp = i * 1.8;
+            g.fillColor = new Color(c.r, c.g, c.b, i === 0 ? 225 : 42);
+            g.roundRect(-w / 2 - sp, -h / 2 - sp, w + sp * 2, h + sp * 2, r + sp);
+            g.fill();
+        }
+    }
+
+    /**
+     * 画一张卡通立体按钮面。从下往上：
+     * 竖向渐变的面 → 底部内阴影（面自身的厚度）→ 釉光 → 上沿亮线 + 下沿回光 → 一圈描边。
      *
      * 早先的版本是三块同源纯色硬叠，色阶断在两条水平线上，远看就是贴纸。
      * 现在渐变由 fillVGradient 逐行铺，受光端往暖白偏、背光端往红棕偏
@@ -1189,32 +1247,46 @@ export class HudUI {
             g.fill();
         }
 
-        // 3) 顶部釉光：贴着上沿的一层高光，往下迅速透明。
-        //    只做上沿、不绕圈——绕成一圈就成了「回」字白边，是塑料感的反面。
-        //    分段要密（每段 ~2px）且相邻段重叠 1px，否则 alpha 逐段跳会看出横条纹。
-        const glossH = Math.max(6, h * 0.42);
-        const gTop = HudUI.warm(HudUI.lighten(fill, 0.66), 0.35);
-        const gn = Math.max(12, Math.round(glossH / 2));
-        const pad = Math.max(3, r * 0.22);
-        for (let i = 0; i < gn; i++) {
-            const t = i / (gn - 1);
-            const yTop = hh - pad - (glossH * i) / gn;
-            const yBot = yTop - glossH / gn;
-            // 高光宽度跟着圆角收，且比面窄一圈，露出下面的底色当作边缘过渡
-            const inset = Math.max(HudUI.roundInset(yTop, hh, r),
-                HudUI.roundInset(yBot, hh, r)) + pad;
-            const bw = w - inset * 2;
-            if (bw <= 0) continue;
-            // 二次衰减：贴着上沿最亮，到一半就基本没了
-            g.fillColor = new Color(gTop.r, gTop.g, gTop.b, Math.round(165 * (1 - t) * (1 - t)));
-            g.roundRect(-w / 2 + inset, yBot - 0.5, bw, glossH / gn + 1,
-                i === 0 ? Math.min(r * 0.6, glossH / 4) : 0);
+        // 3) 釉光：上半部一枚圆角胶囊，由外到内逐层缩小、逐层叠亮，边缘因此是化开的。
+        //    上一版把它按行切成等宽横条，中段 alpha 还有四成却全宽平铺，
+        //    左右各留下一条笔直的竖界——那两条直边就是「贴纸」的来源。
+        //    内层同时往上顶一点，亮心才落在上沿附近而不是正中。
+        //    宽高比要按面自己的比例给：早先写成「宽度减两个圆角」，
+        //    66×66 的方键上只剩 20 宽 25 高，成了一枚竖着的蛋。
+        const glossW = w * 0.74;
+        const glossH = Math.min(h * 0.34, glossW * 0.52);
+        const glossCY = hh - Math.max(3.5, r * 0.3) - glossH / 2;
+        const gTop = HudUI.warm(HudUI.lighten(fill, 0.72), 0.34);
+        // 层数少了每层的 alpha 台阶就看得见，釉光上会浮出一圈圈同心的圆角轮廓，
+        // 像等高线；层薄一点多几层才化得开。
+        const layers = 11;
+        for (let i = 0; i < layers; i++) {
+            const k = 1 - i * 0.072;
+            const bw = glossW * k, bh = glossH * k;
+            if (bw <= 0 || bh <= 0) continue;
+            g.fillColor = new Color(gTop.r, gTop.g, gTop.b, 17);
+            g.roundRect(-bw / 2, glossCY - bh / 2 + (glossH - bh) * 0.42, bw, bh,
+                Math.min(bh / 2, r));
             g.fill();
         }
 
-        // 4) 外描边：卡通风必须的一圈轮廓，偏红棕而不是纯黑，才压得住暖色面
-        g.lineWidth = Math.max(3, Math.min(w, h) * 0.055);
-        g.strokeColor = HudUI.cool(HudUI.darken(fill, 0.42), 0.3);
+        // 4) 上沿亮线 + 下沿回光。两条都只走圆角轮廓的一段，不绕圈——
+        //    绕成一圈就是「回」字白边。下沿这条是台面反弹回来的光，压在内阴影之上，
+        //    强度只有上沿的一半，缺了它下边缘会直接黑到描边上，像被切掉一刀。
+        const rimIn = Math.max(2.5, Math.min(w, h) * 0.055);
+        g.lineWidth = Math.max(1.6, Math.min(w, h) * 0.028);
+        const rimTop = HudUI.warm(HudUI.lighten(fill, 0.85), 0.3);
+        g.strokeColor = new Color(rimTop.r, rimTop.g, rimTop.b, 195);
+        HudUI.edgePath(g, w - rimIn * 2, h - rimIn * 2, Math.max(1, r - rimIn), 'top');
+        g.stroke();
+        const rimBot = HudUI.warm(HudUI.lighten(fill, 0.4), 0.5);
+        g.strokeColor = new Color(rimBot.r, rimBot.g, rimBot.b, 95);
+        HudUI.edgePath(g, w - rimIn * 2, h - rimIn * 2, Math.max(1, r - rimIn), 'bottom');
+        g.stroke();
+
+        // 5) 外描边：卡通风必须的一圈轮廓，偏红棕而不是纯黑，才压得住暖色面
+        g.lineWidth = Math.max(2.6, Math.min(w, h) * 0.048);
+        g.strokeColor = HudUI.cool(HudUI.darken(fill, 0.52), 0.28);
         g.roundRect(-hw, -hh, w, h, r);
         g.stroke();
     }
@@ -1255,10 +1327,7 @@ export class HudUI {
         shadow.layer = Layers.Enum.UI_2D;
         shadow.setParent(hit);
         shadow.setPosition(0, -sink - 2, 0);
-        const sg = shadow.addComponent(Graphics);
-        sg.fillColor = HudUI.darken(fill, 0.62);
-        sg.roundRect(-w / 2, -h / 2, w, h, r);
-        sg.fill();
+        HudUI.paintShadow(shadow.addComponent(Graphics), w, h, r, fill);
 
         const face = new Node('face');
         face.layer = Layers.Enum.UI_2D;
@@ -1311,9 +1380,18 @@ export class HudUI {
     private static paintPanel(g: Graphics, w: number, h: number, r: number, fill: Color,
         stroke?: Color, strokeW = 0) {
         if (fill.a > 0) {
-            HudUI.fillVGradient(g, w, h, r,
-                HudUI.warm(HudUI.lighten(fill, 0.13), 0.10),
-                HudUI.cool(HudUI.darken(fill, 0.11), 0.10));
+            // 条带之间要压半像素才不留缝，可底色一透明，压住的那半像素就叠了两遍，
+            // 于是每条带边界都多出一道更实的横线——大面积半透明托板上一眼就是脏条纹。
+            // 这类板子本来就只是垫底，直接铺平色。
+            if (fill.a < 190) {
+                g.fillColor = fill;
+                g.roundRect(-w / 2, -h / 2, w, h, r);
+                g.fill();
+            } else {
+                HudUI.fillVGradient(g, w, h, r,
+                    HudUI.warm(HudUI.lighten(fill, 0.13), 0.10),
+                    HudUI.cool(HudUI.darken(fill, 0.11), 0.10));
+            }
             // 上沿高光：细条（进度条、连击条）加了显脏，整块大面板加了像贴了条胶带，
             // 都跳过。强度还要随底色变亮而衰减——深色牌子上那道亮边是质感，
             // 浅色底上同样一道就只是一片灰。
@@ -1334,6 +1412,37 @@ export class HudUI {
             g.roundRect(-w / 2, -h / 2, w, h, r);
             g.stroke();
         }
+    }
+
+    /**
+     * 道具角标圆牌：同心圆逐层缩小上移，做出球面受光，外面套一圈奶白环 + 一圈暗边。
+     *
+     * 不能走 paintPanel——那套渐变是逐行横条带，铺到直径 38 的圆上，
+     * 每条带的两端都停在自己那一行的圆弧上，边缘就成了一圈锯齿花边；
+     * 顶部那道高光又是按矩形宽度画的，在圆的上沿左右各探出一只小尖角。
+     */
+    private static paintBadge(g: Graphics, r: number, fill: Color, ring: Color) {
+        const dark = HudUI.darken(fill, 0.14);
+        const lit = HudUI.warm(HudUI.lighten(fill, 0.5), 0.25);
+        const n = 14;
+        for (let i = 0; i < n; i++) {
+            const t = i / (n - 1);
+            // 半径线性收，颜色要到很靠里才亮起来。均匀插值时整枚牌被提亮成灰粉色，
+            // 比原来那块纯色还闷——高光只该占顶上一小点，其余留在本色附近。
+            g.fillColor = HudUI.mix(dark, lit, Math.pow(t, 2.4));
+            g.circle(0, r * 0.34 * t, r * (1 - t * 0.88));
+            g.fill();
+        }
+        g.lineWidth = Math.max(2.5, r * 0.2);
+        g.strokeColor = ring;
+        g.circle(0, 0, r - g.lineWidth / 2);
+        g.stroke();
+        // 外侧一圈暗边：奶白环直接压在金黄面上时两者明度太近，角标会糊进按钮里
+        g.lineWidth = 2;
+        const edge = HudUI.cool(HudUI.darken(fill, 0.5), 0.25);
+        g.strokeColor = new Color(edge.r, edge.g, edge.b, 170);
+        g.circle(0, 0, r);
+        g.stroke();
     }
 
     /**
