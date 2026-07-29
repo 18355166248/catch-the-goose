@@ -203,11 +203,14 @@ export class GameManager extends Component {
         this.forceLayer(this.node);
         // HUD（纯代码占位版）
         this.hud = new HudUI(this.node.scene, kind => this.useProp(kind), () => this.togglePause(),
-            id => this.applySkin(id), () => this.skinId, open => this.setOverlayPause(open));
+            id => this.applySkin(id), () => this.skinId, open => this.setOverlayPause(open),
+            () => this.toggleSound());
         this.timerLabel = this.hud.timerLabel;
         this.progressLabel = this.hud.progressLabel;
         this.msgLabel = this.hud.msgLabel;
         this.audio = new AudioMan(this.node.scene);
+        // AudioMan 晚于 HUD 建，声音键先按静音画；这里用存档里的真实状态补一次。
+        this.hud.setSoundOn(this.audio.soundOn);
         this.loadProps();
         this.grantDailyPropGift();
         // 关卡进度本地存储:上次通到第几关,这次直接从那关开始。
@@ -1436,8 +1439,15 @@ export class GameManager extends Component {
                 this.resumeFromPause();
                 void this.resetLevel();
             },
-            onToggleSound: () => this.audio?.toggleSound() ?? false,
+            onToggleSound: () => this.toggleSound(),
         });
+    }
+
+    /** 声音开关的唯一入口：HUD 声音键和暂停菜单都走这里，图标才不会和实际状态脱节。 */
+    private toggleSound(): boolean {
+        const on = this.audio?.toggleSound() ?? false;
+        this.hud?.setSoundOn(on);
+        return on;
     }
 
     private resumeFromPause() {

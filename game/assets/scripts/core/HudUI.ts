@@ -8,7 +8,7 @@ import { SKINS } from './SceneSkin';
 export type PropKind = 'remove' | 'magnet' | 'shuffle';
 
 /** UI 矢量图标种类（不依赖字体，见 HudUI.drawGlyph）。 */
-type IconKind = PropKind | 'pause' | 'play' | 'palette' | 'star';
+type IconKind = PropKind | 'pause' | 'play' | 'palette' | 'star' | 'sound-on' | 'sound-off';
 
 type HorizontalAlign = { left?: number; right?: number; centerX?: boolean };
 
@@ -52,6 +52,8 @@ export class HudUI {
     private trayDangerGlow!: Node;
     private trayDangerOpacity!: UIOpacity;
     private pauseIcon!: Graphics;
+    /** 声音键图标；未传 onToggleSound 时不建按钮，保持 null。 */
+    private soundIcon: Graphics | null = null;
     /** 道具栏总开关（关闭则完全隐藏道具 UI）。 */
     private static readonly SHOW_PROPS = true;
     private static readonly PROGRESS_W = 252;
@@ -89,7 +91,7 @@ export class HudUI {
 
     constructor(scene: Scene, onProp: (kind: PropKind) => void, onPause?: () => void,
         onSelectSkin?: (id: string) => void, getSkinId?: () => string,
-        onSkinPanelToggle?: (open: boolean) => void) {
+        onSkinPanelToggle?: (open: boolean) => void, onToggleSound?: () => boolean) {
         this.onSelectSkin = onSelectSkin;
         this.getSkinId = getSkinId;
         this.onSkinPanelToggle = onSkinPanelToggle;
@@ -134,6 +136,15 @@ export class HudUI {
             const skin = this.makeDockButton(66, 66, 20, new Color(214, 152, 96),
                 { top: 100 }, { left: 24 }, () => this.toggleSkinPanel(), 4);
             this.drawIcon(skin.face, 'palette', 32, cream, 0, 0);
+        }
+
+        // 声音键：跟在换肤键后面排。默认是静音的，开关只放在暂停菜单里的话，
+        // 多数玩家整局都不会知道这游戏有声音——所以主界面必须有个能看见的入口。
+        if (onToggleSound) {
+            const sound = this.makeDockButton(66, 66, 20, new Color(214, 152, 96),
+                { top: this.onSelectSkin ? 176 : 100 }, { left: 24 },
+                () => this.setSoundOn(onToggleSound()), 4);
+            this.soundIcon = this.drawIcon(sound.face, 'sound-off', 32, cream, 0, 0);
         }
 
         // 计时牌和细进度条，缩小存在感，把视觉主舞台让给 3D 容器。
@@ -1069,6 +1080,12 @@ export class HudUI {
         HudUI.drawGlyph(this.pauseIcon, paused ? 'play' : 'pause', 31, new Color(255, 247, 218));
     }
 
+    /** 同步声音键图标。暂停菜单里的开关也会改状态，两处必须一起刷。 */
+    setSoundOn(on: boolean) {
+        if (!this.soundIcon) return;
+        HudUI.drawGlyph(this.soundIcon, on ? 'sound-on' : 'sound-off', 32, new Color(255, 247, 218));
+    }
+
     // ---------- 卡通立体按钮 ----------
 
     private static readonly WHITE = new Color(255, 255, 255);
@@ -1287,6 +1304,49 @@ export class HudUI {
                 g.lineTo(-r * 0.72, -r * 0.92);
                 g.lineTo(r, 0);
                 g.close();
+                g.fill();
+                break;
+            }
+            case 'sound-on':
+            case 'sound-off': {
+                // 喇叭：方形箱体 + 外扩喇叭口。声波和叉也画成实心多边形而不是描边，
+                // 整枚图标只走一次 fill——混用 fill/stroke 会把喇叭轮廓再描一遍。
+                const bw = s * 0.13, bh = s * 0.26, mw = s * 0.24, mh = s * 0.52;
+                const x0 = -s * 0.36;
+                g.moveTo(x0, -bh / 2);
+                g.lineTo(x0 + bw, -bh / 2);
+                g.lineTo(x0 + bw + mw, -mh / 2);
+                g.lineTo(x0 + bw + mw, mh / 2);
+                g.lineTo(x0 + bw, bh / 2);
+                g.lineTo(x0, bh / 2);
+                g.close();
+                const t = Math.max(2, s * 0.075);
+                if (kind === 'sound-on') {
+                    // 两道 ">" 形声波，外圈更大。用折线而不是 arc：这个尺寸下
+                    // 圆弧端点容易毛糙，折线反而更干净。
+                    const d = s * 0.09;
+                    for (const [rx, ry] of [[0.12, 0.16], [0.26, 0.30]] as const) {
+                        const x = s * rx, y = s * ry;
+                        g.moveTo(x, -y);
+                        g.lineTo(x + d, 0);
+                        g.lineTo(x, y);
+                        g.lineTo(x - t, y);
+                        g.lineTo(x + d - t, 0);
+                        g.lineTo(x - t, -y);
+                        g.close();
+                    }
+                } else {
+                    // 关闭态画一个叉，比「没有声波」更明确地表达静音。
+                    // 两条 45° 斜杠各沿法线推半个线宽，凑成实心长方形。
+                    const cx = s * 0.24, r = s * 0.17, u = t / (2 * Math.SQRT2);
+                    for (const dir of [1, -1]) {
+                        g.moveTo(cx - r + u * dir, -dir * r - u);
+                        g.lineTo(cx + r + u * dir, dir * r - u);
+                        g.lineTo(cx + r - u * dir, dir * r + u);
+                        g.lineTo(cx - r - u * dir, -dir * r + u);
+                        g.close();
+                    }
+                }
                 g.fill();
                 break;
             }
