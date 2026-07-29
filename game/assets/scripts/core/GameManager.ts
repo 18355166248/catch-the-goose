@@ -224,6 +224,9 @@ export class GameManager extends Component {
         this.updateHud();
         // 开局停在首页：交代今天的场景、关卡与玩法，玩家点「开始挑战」才扣次数、倒物件。
         this.showHome();
+        // 首屏加载页到此撤除：首页已经画完且可点。物件模型不在这一步加载——
+        // 它们等玩家点「开始挑战」才按关卡拉取（startInitialRound），不该拖长首屏。
+        (globalThis as any).__gooseBoot?.done();
     }
 
     /** 首页：今日场景 + 本关信息 + 玩法一句话 + 成绩，点开始才真正入局。 */

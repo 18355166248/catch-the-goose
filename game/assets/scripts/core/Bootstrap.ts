@@ -93,6 +93,10 @@ if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
         console.warn('[Bootstrap] 光照全局设置失败', e);
     }
 
+    // 首屏加载页的第二个里程碑：场景骨架（相机/灯光/阴影）已就位。
+    // 加载页由 build-templates/web-mobile/index.html 提供，仅 web 平台存在，故做存在性判断。
+    (globalThis as any).__gooseBoot?.to(72, '正在布置场景…');
+
     const root = new Node('GameRoot');
     root.setParent(scene);
     const gm = root.addComponent(GameManager);
