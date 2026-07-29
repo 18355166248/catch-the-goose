@@ -257,12 +257,13 @@ export class GameManager extends Component {
 
     /**
      * 每日次数门：有次数返回 true；没有则弹补充入口，玩家确认后重跑 next。
-     * MVP 直接发放；接入微信后把 onAction 换成激励视频的 onClose(isEnded) 回调。
+     * H5 无激励视频，这里是无门槛续次——次数只当节奏提示，不当付费墙。
+     * 此入口的位置为将来接广告预留：届时只需把 onAction 换成广告回调。
      */
     private ensureDaily(next: () => void): boolean {
         if (this.dailyLeft > 0) return true;
-        this.hud?.showNotice('今日次数用完', '每天可免费挑战 3 次\n看段广告补充 1 次吧',
-            '看广告 +1', () => {
+        this.hud?.showNotice('今日次数用完', '每天可免费挑战 3 次\n想接着玩就再续一次吧',
+            '再续一次', () => {
                 this.dailyLeft++;
                 this.saveDaily();
                 this.hud?.hideResult();
@@ -1097,7 +1098,7 @@ export class GameManager extends Component {
 
     // ---------- 道具 ----------
 
-    // 道具默认 0，不再白送；改为靠获取途径累积（通关奖励 / 看广告等，见 grantProps）。
+    // 道具默认 0，不再白送；改为靠获取途径累积（通关星级奖励 / 每日礼包 / 用尽补充，见 grantProps）。
     private propCounts: Record<PropKind, number> = { remove: 0, magnet: 0, shuffle: 0 };
     private static readonly PROP_NAMES: Record<PropKind, string> = { remove: '移出', magnet: '凑齐', shuffle: '打乱' };
 
@@ -1111,7 +1112,7 @@ export class GameManager extends Component {
         this.refreshPropHud();
     }
 
-    /** 统一的道具发放入口：通关星级奖励、每日登录、看广告补充都走这里。 */
+    /** 统一的道具发放入口：通关星级奖励、每日礼包、用尽补充都走这里。 */
     private grantProps(delta: Partial<Record<PropKind, number>>) {
         for (const k of ['remove', 'magnet', 'shuffle'] as PropKind[]) {
             this.propCounts[k] += delta[k] ?? 0;
@@ -1127,13 +1128,13 @@ export class GameManager extends Component {
     }
 
     /**
-     * 道具用尽时点击 → 看激励视频补 1 次。
-     * MVP 占位：确认即发放；接入微信后把 onAction 换成 wx.createRewardedVideoAd 的 onClose(isEnded) 回调。
+     * 道具用尽时点击 → 无门槛补 1 个（H5 无激励视频，同 ensureDaily 的口径）。
+     * 此入口的位置为将来接广告预留：届时只需把 onAction 换成广告回调。
      */
-    private offerAdForProp(kind: PropKind) {
+    private offerPropRefill(kind: PropKind) {
         if (this.paused) return;
-        this.hud?.showNotice(`${GameManager.PROP_NAMES[kind]}用完了`, '看段广告补充 1 个吧',
-            '看广告 +1', () => {
+        this.hud?.showNotice(`${GameManager.PROP_NAMES[kind]}用完了`, '补 1 个接着用吧',
+            '补 1 个', () => {
                 const delta: Partial<Record<PropKind, number>> = {};
                 delta[kind] = 1;
                 this.grantProps(delta);
@@ -1153,7 +1154,7 @@ export class GameManager extends Component {
         if (!this.playing || this.paused || this.interactionLocked) return;
         this.idleTime = 0;
         this.hud?.clearHint();
-        if (this.propCounts[kind] <= 0) { this.offerAdForProp(kind); return; }
+        if (this.propCounts[kind] <= 0) { this.offerPropRefill(kind); return; }
         let used = false;
         if (kind === 'remove') used = this.propRemove();
         else if (kind === 'magnet') used = this.propMagnet();
@@ -1355,7 +1356,7 @@ export class GameManager extends Component {
     }
 
     /**
-     * 失败救场(每轮一次)。MVP 直接生效;接入微信后此入口改为激励视频回调。
+     * 失败救场(每轮一次)。H5 直接生效;此入口的位置为将来接广告预留。
      * 超时:加 60 秒;槽满/残局:槽头 3 件退回堆里腾出空间(残局加时救不了,只有腾格才有意义)。
      */
     private rescue() {

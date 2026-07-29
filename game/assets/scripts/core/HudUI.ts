@@ -225,7 +225,7 @@ export class HudUI {
             this.slotNodes.push(slot);
         }
 
-        // 道具栏默认隐藏（见 SHOW_PROPS）；将来接微信激励视频变现时再打开。
+        // 道具栏受 SHOW_PROPS 总开关控制，当前开启。
         if (HudUI.SHOW_PROPS) {
         // 底部桃木控制台，覆盖整宽并保留圆润顶沿。
         this.makePanel(760, 128, 28, new Color(116, 65, 43, 215), { bottom: -18 }, 0);
