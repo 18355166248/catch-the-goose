@@ -1,0 +1,11 @@
+2026-7-29 15:42:59 - log: Project definition file not found. Possible project corruption. Check whether the project is normal.
+2026-7-29 15:42:59 - error: /Users/xmly/Swell/code/catch-the-goose/game/assets/game/package.json: ENOENT: no such file or directory, open '/Users/xmly/Swell/code/catch-the-goose/game/assets/game/package.json'Error: /Users/xmly/Swell/code/catch-the-goose/game/assets/game/package.json: ENOENT: no such file or directory, open '/Users/xmly/Swell/code/catch-the-goose/game/assets/game/package.json'
+    at Object.openSync (node:fs:573:18)
+    at Object.func [as openSync] (node:electron/js2c/node_init:2:2559)
+    at Object.readFileSync (node:fs:452:35)
+    at t.readFileSync (node:electron/js2c/node_init:2:10245)
+    at readFileSync (/Applications/Cocos/Creator/3.8.8/CocosCreator.app/Contents/Resources/app.asar/node_modules/fs-extra/node_modules/jsonfile/index.js:50:22)
+    at init (/Applications/Cocos/Creator/3.8.8/CocosCreator.app/Contents/Resources/app.asar/node_modules/@editor/creator/dist/project/protected/browser/index.ccc:1:1663)
+    at async Object.manager (/Applications/Cocos/Creator/3.8.8/CocosCreator.app/Contents/Resources/app.asar/node_modules/@editor/creator/dist/startup/protected/browser/index.ccc:1:1509)
+    at async launch (/Applications/Cocos/Creator/3.8.8/CocosCreator.app/Contents/Resources/app.asar/launch/dist/launch.js:1:869)
+    at async /Applications/Cocos/Creator/3.8.8/CocosCreator.app/Contents/Resources/app.asar/launch/dist/index.js:1:1208
