@@ -42,8 +42,8 @@ export interface Theme {
 }
 
 /**
- * 全部场景主题。目前先上「水果摊」，甜品店/池塘农场待模型就绪后按同结构追加，
- * 追加即自动进入每日轮播，无需改玩法层。
+ * 全部场景主题。追加一个主题即自动进入每日轮播，无需改玩法层。
+ * 池塘农场/甜品店待模型就绪后按同结构继续追加。
  */
 export const THEMES: Theme[] = [
     {
@@ -51,6 +51,21 @@ export const THEMES: Theme[] = [
         // slice(0,4)=红/黄/紫/橙 四色分明；后段草莓(红)柠檬(黄)与前段同色系，靠形状区分。
         family: ['apple', 'banana', 'grape', 'orange',
                  'strawberry', 'lemon', 'pear', 'cherry', 'goose'],
+    },
+    {
+        id: 'antique', name: '古玩铺', skinId: 'jade',
+        /**
+         * 古玩件天生同色——13 件候选里 7 件的色相都挤在 132~151° 的翡翠绿，
+         * 所以这一族靠「明度 + 形状」拉开，而不是靠色相：
+         *   slice(0,4) 金(45°) / 紫(273°) / 浅绿高明度(94°) / 深绿兽形(151°) 仍两两分明；
+         *   第 5~6 件各自与前段同色系但形状迥异（薄圆片 vs 元宝堆、尖锥 vs 兽形）；
+         *   第 7~9 件同色系再加码，压轴放吉祥物大鹅。
+         * 刻意排除两件：
+         *   pingankou 与干扰物 rock 同为无彩灰（饱和度 0.02 / 0.01），只差明度，堆里易误拿；
+         *   jingling 是宝可梦商标件，见 resources/models/CREDITS.md，不得进入正式内容。
+         */
+        family: ['yuanbao', 'bracelet', 'baicai', 'pixiu',
+                 'tongqian', 'baoshi', 'yuzhuo', 'hulu', 'goose'],
     },
 ];
 

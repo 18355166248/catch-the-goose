@@ -52,7 +52,10 @@ export const SKINS: SceneSkin[] = [
     {
         id: 'jade', name: '翡翠青玉',
         swatch: [new Color(120, 178, 150), new Color(214, 178, 98)],
-        backdrop: WHITE(),
+        // 唯一一个不用纯白 backdrop 的皮肤：bg_jade 画的是满屏翡翠件（弥勒/玉镯/葫芦），
+        // 与古玩铺主题的物件同色同形，原亮度下背景里的装饰件看着就像能点的目标。
+        // 压到 55% 亮度把背景推到后景，前景物件由 3D 光照亮，对比自然拉开。
+        backdrop: new Color(140, 145, 142),
         backdropTex: 'bg_jade',
         containerModel: 'bowl_jade',
         // 圆碗必须用圆边界：套默认矩形围栏时，矩形 4 角会把物件顶到碗壁外侧 = 穿模。
