@@ -37,16 +37,33 @@ const TRAY_ICON_LAYOUT: Record<string, TrayIconLayout> = {
  */
 export class HudUI {
     /**
-     * 道具键配色：深红木面 + 暖金图标/文字/描边。
+     * 全 HUD 统一配色：深墨绿面 + 细亮金边 + 近白文字（按设计稿）。
      *
-     * 定成一组具名常量而不是散在构建代码里，是因为这四个值必须**一起**改：
-     * 面色一变，金的明度就得跟着调，否则要么糊在一起要么刺眼。
-     * 金色统一取低饱和的旧金(饱和度约 0.4)，不是纯黄——纯黄在深木上会跳成霓虹。
+     * 定成一组具名常量而不是散在构建代码里，是因为这几个值必须**一起**改：
+     * 面色一变，金边和文字的明度都得跟着调，否则要么糊在一起要么刺眼。
+     *
+     * 为什么是墨绿而不是之前那版红木棕：红木面和背景（红木桌面 / 藤筐 / 野餐布）
+     * 同色系，控件边界靠明度硬撑，换个皮肤就糊掉；墨绿近乎中性，压在任何背景上
+     * 都退得干净，金边一挑就把控件轮廓立起来——这也是设计稿两张图（野餐布绿底、
+     * 红木桌深底）能共用同一套 HUD 的原因。
+     * 金取低饱和旧金而不是纯黄：纯黄在深墨上会跳成霓虹。
      */
-    private static readonly PROP_FACE = new Color(108, 63, 45);
-    private static readonly PROP_GOLD = new Color(226, 194, 138);
-    private static readonly PROP_GOLD_TEXT = new Color(233, 205, 154);
-    private static readonly PROP_GOLD_EDGE = new Color(205, 168, 110);
+    private static readonly INK_FACE = new Color(31, 38, 33);
+    private static readonly INK_DEEP = new Color(20, 25, 21);
+    private static readonly GOLD_EDGE = new Color(214, 181, 112);
+    private static readonly INK_TEXT = new Color(240, 237, 226);
+    private static readonly GOLD_TEXT = new Color(219, 188, 122);
+
+    /**
+     * 三枚道具键的图标色，按设计稿**保留三色**、不统一成金。
+     *
+     * 上一版把它们统一成金色，整排是安静了，但三个功能只剩轮廓可辨——道具是
+     * 低频且要快速命中的操作，颜色是最快的索引。设计稿的做法是：面/边/字统一，
+     * 只有图标留彩色，既不花又能一眼分辨。饱和度压到能在墨绿上站住又不刺眼。
+     */
+    private static readonly ICON_REMOVE = new Color(122, 198, 108);
+    private static readonly ICON_MAGNET = new Color(233, 170, 66);
+    private static readonly ICON_SHUFFLE = new Color(141, 126, 226);
 
     timerLabel!: Label;
     progressLabel!: Label;
@@ -136,28 +153,21 @@ export class HudUI {
 
         const cream = new Color(255, 247, 218);
 
-        // 左上暂停键。与道具键同一套立体面，只是配色走暖棕。
-        // 配色从原先的奶茶色 (214,152,96) 压到深琥珀棕：一是那个浅色和奶白图标只差
-        // 四十来级明度，图标糊在面上认不出；二是 HUD 本来只有「深棕牌子 + 金黄道具」
-        // 两套色，多出来的浅肉色谁也不挨着，远看就是三张贴上去的贴纸。
-        //
-        // 三枚键还共用一块深色托板：各带各的投影散在那儿是三个孤立控件，
-        // 托到一起才读成一组，也和底部那条桃木台面对上。
-        const dockFill = new Color(176, 108, 62);
-        const dockCount = 1 + (onSelectSkin ? 1 : 0) + (onToggleSound ? 1 : 0);
-        const DOCK_STEP = 76, DOCK_PAD = 9;
-        this.makePanel(66 + DOCK_PAD * 2, DOCK_STEP * dockCount - 10 + DOCK_PAD * 2 + 6, 26,
-            new Color(64, 38, 24, 112), { top: 24 - DOCK_PAD }, 0,
-            new Color(150, 98, 58, 120), 2, { left: 24 - DOCK_PAD });
+        // 左上三键：与道具键同一套墨绿面 + 细金边，图标近白。
+        // 不再加共用托板——底部台面去掉后，这块半透明托板成了画面里唯一的"底板"，
+        // 反而显脏；三枚键竖排本身已经读成一组。
+        const dockFill = HudUI.INK_FACE;
+        const DOCK_STEP = 76;
 
         const pause = this.makeDockButton(66, 66, 20, dockFill,
-            { top: 24 }, { left: 24 }, () => onPause?.(), 4);
+            { top: 24 }, { left: 24 }, () => onPause?.(), 4, 0.34, HudUI.GOLD_EDGE);
         this.pauseIcon = this.drawIcon(pause.face, 'pause', 33, cream, 0, 0);
 
         // \u6362\u80a4\u952e\uff1a\u6682\u505c\u952e\u6b63\u4e0b\u65b9\uff0c\u540c\u6b3e\u68d5\u8272\u8f6f\u7cd6\u8d28\u611f\uff0c\u8c03\u8272\u76d8\u56fe\u6807\u3002
         if (this.onSelectSkin) {
             const skin = this.makeDockButton(66, 66, 20, dockFill,
-                { top: 24 + DOCK_STEP }, { left: 24 }, () => this.toggleSkinPanel(), 4);
+                { top: 24 + DOCK_STEP }, { left: 24 }, () => this.toggleSkinPanel(), 4,
+                0.34, HudUI.GOLD_EDGE);
             this.drawIcon(skin.face, 'palette', 33, cream, 0, 0);
         }
 
@@ -166,28 +176,31 @@ export class HudUI {
         if (onToggleSound) {
             const sound = this.makeDockButton(66, 66, 20, dockFill,
                 { top: 24 + DOCK_STEP * (this.onSelectSkin ? 2 : 1) }, { left: 24 },
-                () => this.setSoundOn(onToggleSound()), 4);
+                () => this.setSoundOn(onToggleSound()), 4, 0.34, HudUI.GOLD_EDGE);
             this.soundIcon = this.drawIcon(sound.face, 'sound-off', 33, cream, 0, 0);
         }
 
         // 计时牌和细进度条，缩小存在感，把视觉主舞台让给 3D 容器。
-        const timerShadow = this.makePanel(166, 58, 27, new Color(32, 20, 16, 180), { top: 25 }, 0);
+        const timerShadow = this.makePanel(166, 58, 27, new Color(14, 19, 16, 185), { top: 25 }, 0);
         timerShadow.setPosition(0, -5, 0);
-        const timerPanel = this.makePanel(160, 54, 25, new Color(62, 36, 24, 232), { top: 22 }, 0,
-            new Color(168, 108, 57), 3);
+        const timerPanel = this.makePanel(160, 54, 25,
+            new Color(HudUI.INK_FACE.r, HudUI.INK_FACE.g, HudUI.INK_FACE.b, 236), { top: 22 }, 0,
+            HudUI.GOLD_EDGE, 2);
         this.timerPanel = timerPanel;
-        this.timerLabel = this.addLabel(timerPanel, '0:00', 34, new Color(255, 220, 87), 0, 0, true);
+        this.timerLabel = this.addLabel(timerPanel, '0:00', 34, HudUI.INK_TEXT, 0, 0, true);
 
         // 右上关卡标牌,与左上暂停键对称。
-        const levelPanel = this.makePanel(112, 52, 16, new Color(62, 36, 24, 232), { top: 28 }, 0,
-            new Color(168, 108, 57), 3, { right: 23 });
-        this.levelLabel = this.addLabel(levelPanel, '第 1 关', 24, cream, 0, 0, true);
+        const levelPanel = this.makePanel(112, 52, 16,
+            new Color(HudUI.INK_FACE.r, HudUI.INK_FACE.g, HudUI.INK_FACE.b, 236), { top: 28 }, 0,
+            HudUI.GOLD_EDGE, 2, { right: 23 });
+        this.levelLabel = this.addLabel(levelPanel, '第 1 关', 24, HudUI.INK_TEXT, 0, 0, true);
         // 关卡标牌下的每日剩余次数。
-        this.dailyLabel = this.addLabel(levelPanel, '今日 3/3', 16, new Color(233, 200, 156), 0, -42, true);
+        this.dailyLabel = this.addLabel(levelPanel, '今日 3/3', 16, HudUI.GOLD_TEXT, 0, -42, true);
 
         const W = HudUI.PROGRESS_W;
-        const progPanel = this.makePanel(W, 24, 12, new Color(45, 29, 21, 205), { top: 88 }, 0,
-            new Color(118, 78, 46), 2);
+        const progPanel = this.makePanel(W, 24, 12,
+            new Color(HudUI.INK_DEEP.r, HudUI.INK_DEEP.g, HudUI.INK_DEEP.b, 212), { top: 88 }, 0,
+            new Color(HudUI.GOLD_EDGE.r, HudUI.GOLD_EDGE.g, HudUI.GOLD_EDGE.b, 150), 1);
         const fillNode = new Node('progressFill');
         fillNode.layer = Layers.Enum.UI_2D;
         fillNode.setParent(progPanel);
@@ -217,15 +230,17 @@ export class HudUI {
         this.progressLabel = this.addLabel(progPanel, '0%', 17, cream, 0, 0, true);
 
         // 得分牌：与进度条同一行，贴在它左侧的空白带里（不与左上两枚圆键重叠）。
-        const scorePanel = this.makePanel(130, 30, 15, new Color(45, 29, 21, 205), { top: 85 }, 0,
-            new Color(118, 78, 46), 2, { left: 96 });
-        this.scoreLabel = this.addLabel(scorePanel, '得分 0', 19, new Color(255, 220, 87), 0, 0, true);
+        const scorePanel = this.makePanel(130, 30, 15,
+            new Color(HudUI.INK_DEEP.r, HudUI.INK_DEEP.g, HudUI.INK_DEEP.b, 212), { top: 85 }, 0,
+            new Color(HudUI.GOLD_EDGE.r, HudUI.GOLD_EDGE.g, HudUI.GOLD_EDGE.b, 150), 1, { left: 96 });
+        this.scoreLabel = this.addLabel(scorePanel, '得分 0', 19, HudUI.GOLD_TEXT, 0, 0, true);
 
         // 连击牌：贴在得分牌正下方，倍率 + 一条走完即断连的倒计条。
         // 连击是本作唯一的加分放大器，此前只在飘字里闪一下就没了，
         // 玩家既不知道自己正连着，也不知道还剩多久——等于把核心爽点藏起来了。
-        this.comboPill = this.makePanel(130, 26, 13, new Color(84, 34, 18, 226), { top: 120 }, 0,
-            new Color(255, 146, 62), 2, { left: 96 });
+        // 连击牌保留暖橙描边：它是限时状态，需要从这套冷墨里跳出来才看得见。
+        this.comboPill = this.makePanel(130, 26, 13, new Color(46, 26, 16, 230), { top: 120 }, 0,
+            new Color(240, 150, 66), 2, { left: 96 });
         this.comboPillOpacity = this.comboPill.addComponent(UIOpacity);
         this.comboPillOpacity.opacity = 0;
         this.comboLabel = this.addLabel(this.comboPill, '连击 ×2', 15, new Color(255, 214, 76), 0, 3, true);
@@ -257,24 +272,23 @@ export class HudUI {
         // 最抢眼的东西——道具键再怎么收敛，视线也先被这条白带拽走，"高级感"无从谈起。
         // 槽位语义是**凹进去**的格子，所以比托盘面更深；深槽同时衬得住放进来的
         // 亮色物件缩略图（槽内柔光见 addSlotLight），对比比浅槽更强。
-        this.makePanel(670, 90, 20, new Color(38, 22, 16, 228), { bottom: HudUI.TRAY_BOTTOM - 5 }, 0);
-        const trayPanel = this.makePanel(654, 82, 18, new Color(88, 52, 37),
-            { bottom: HudUI.TRAY_BOTTOM }, 0, HudUI.PROP_GOLD_EDGE, 2);
+        this.makePanel(670, 90, 20, new Color(12, 16, 14, 230), { bottom: HudUI.TRAY_BOTTOM - 5 }, 0);
+        const trayPanel = this.makePanel(654, 82, 18, HudUI.INK_FACE,
+            { bottom: HudUI.TRAY_BOTTOM }, 0, HudUI.GOLD_EDGE, 2);
         for (let i = 0; i < 7; i++) {
-            const slot = this.makePanelChild(trayPanel, 78, 64, 14, new Color(50, 29, 21),
-                (i - 3) * HudUI.SLOT_STEP, 0, new Color(150, 116, 74, 210), 2);
+            // 槽比托盘面更深，且**不描金边**：七道金框排一行会把托盘切成七块、
+            // 抢掉外框那一圈金线的主次。只用一道极淡的亮边提示格子上沿。
+            const slot = this.makePanelChild(trayPanel, 78, 64, 14, HudUI.INK_DEEP,
+                (i - 3) * HudUI.SLOT_STEP, 0, new Color(150, 168, 152, 60), 1);
             this.addSlotLight(slot);
             this.slotNodes.push(slot);
         }
 
         // 道具栏受 SHOW_PROPS 总开关控制，当前开启。
         if (HudUI.SHOW_PROPS) {
-        // 底部控制台：两层深红木。上层刻意比按钮面**浅**一档，按钮压在它上面才浮得起来；
-        // 描边从 4px 亮米色(255,215,164) 收成 2px 暗金细线——大面积高明度粗描边是
-        // 「卡通贴纸」观感最主要的来源，收细并压暗之后边缘才读作镶嵌的金线。
-        this.makePanel(760, 128, 28, new Color(52, 30, 22, 224), { bottom: -18 }, 0);
-        this.makePanel(752, 120, 25, new Color(86, 50, 35, 246), { bottom: -12 }, 0,
-            HudUI.PROP_GOLD_EDGE, 2);
+        // 不再铺底部台面板。设计稿里三枚道具键与收集槽是**各自独立**的控件，
+        // 直接浮在背景上（键之间看得到桌面/野餐布），靠各自的金边和投影立轮廓。
+        // 原先那条横贯全宽的台面把三枚键焊成一整块灰绿色板，正是"底部糊成一片"的来源。
 
         // 三枚道具键统一「深红木面 + 暖金图标」，靠**形状**区分功能，不靠颜色。
         //
@@ -283,20 +297,22 @@ export class HudUI {
         // 翡翠古玩的底子完全脱节。现在整排同色同材质，只有轮廓不同，安静下来才显贵。
         // paintFace 的渐变/釉光/沿光全部由 fill 派生（lighten/warm(fill)），
         // 所以面色一换深，那套「糖果塑料通透感」自动跟着压暗成木器的哑光。
-        const defs: Array<{ kind: PropKind; text: string; align: HorizontalAlign }> = [
-            { kind: 'remove', text: '移出', align: { left: 24 } },
-            { kind: 'magnet', text: '凑齐', align: { centerX: true } },
-            { kind: 'shuffle', text: '打乱', align: { right: 24 } },
+        const defs: Array<{
+            kind: PropKind; text: string; color: Color; align: HorizontalAlign;
+        }> = [
+            { kind: 'remove', text: '移出', color: HudUI.ICON_REMOVE, align: { left: 24 } },
+            { kind: 'magnet', text: '凑齐', color: HudUI.ICON_MAGNET, align: { centerX: true } },
+            { kind: 'shuffle', text: '打乱', color: HudUI.ICON_SHUFFLE, align: { right: 24 } },
         ];
 
-        defs.forEach(({ kind, text, align }) => {
+        defs.forEach(({ kind, text, color, align }) => {
             // gloss 0.30：釉光是给糖果塑料面做的，留在深木上就是一片假反光；
             // 压到三成只当木器的哑光反射，再高上半部就浮出一块塑料亮斑。
-            const { face } = this.makeDockButton(184, 80, 20, HudUI.PROP_FACE,
-                { bottom: 20 }, align, () => onProp(kind), 5, 0.30, HudUI.PROP_GOLD_EDGE);
+            const { face } = this.makeDockButton(184, 80, 20, HudUI.INK_FACE,
+                { bottom: 20 }, align, () => onProp(kind), 5, 0.30, HudUI.GOLD_EDGE);
             this.propOpacity[kind] = face.addComponent(UIOpacity);
-            this.drawIcon(face, kind, 40, HudUI.PROP_GOLD, 0, 11);
-            this.addLabel(face, text, 22, HudUI.PROP_GOLD_TEXT, 0, -25, true);
+            this.drawIcon(face, kind, 40, color, 0, 11);
+            this.addLabel(face, text, 22, HudUI.INK_TEXT, 0, -25, true);
 
             // 角标：原先是暖红圆牌 + 奶白环，那抹高饱和红是整块 HUD 里最抢眼的东西，
             // 而它只承载「你还有几个」这条次要信息。改成墨底金环，退回信息该有的层级。
@@ -304,11 +320,14 @@ export class HudUI {
             const badge = new Node('badge');
             badge.layer = Layers.Enum.UI_2D;
             badge.setParent(face);
-            badge.setPosition(75, 31, 0);
-            badge.addComponent(UITransform).setContentSize(38, 38);
-            HudUI.paintBadge(badge.addComponent(Graphics), 19,
-                new Color(60, 34, 25), HudUI.PROP_GOLD_EDGE);
-            this.propBadge[kind] = this.addLabel(badge, '0', 17, HudUI.PROP_GOLD_TEXT, 0, 0, true);
+            badge.setPosition(77, 33, 0);
+            badge.addComponent(UITransform).setContentSize(32, 32);
+            // 红底白字（按设计稿）：墨绿面上唯一的暖色高饱和点，恰好落在角标这个
+            // 「还剩几个」的读数上。环用更深的红而不是白——白环在墨面上会晃眼，
+            // 且会和金边抢那一圈亮线。
+            HudUI.paintBadge(badge.addComponent(Graphics), 16,
+                new Color(212, 62, 52), new Color(138, 32, 26));
+            this.propBadge[kind] = this.addLabel(badge, '0', 16, new Color(255, 252, 246), 0, 0, true);
         });
         } // if SHOW_PROPS
 
@@ -1113,7 +1132,7 @@ export class HudUI {
         const usable = count > 0;
         // 角标标清剩余次数；0 次时数字转红 + 按钮明显置灰，直观表达「不可用 / 需获取」。
         this.propBadge[kind].string = `${count}`;
-        this.propBadge[kind].color = usable ? HudUI.PROP_GOLD_TEXT : new Color(150, 116, 96);
+        this.propBadge[kind].color = usable ? new Color(255, 252, 246) : new Color(186, 176, 168);
         this.propOpacity[kind].opacity = usable ? 255 : 120;
     }
 
@@ -1246,9 +1265,11 @@ export class HudUI {
         g.clear();
         const hw = w / 2, hh = h / 2;
 
-        // 1) 面：顶端受光偏暖白，底端背光偏红棕
+        // 1) 面：顶端受光偏暖白，底端背光偏红棕。
+        //    渐变幅度跟 gloss 走：深墨面上 lighten 0.30 会把顶部提到灰绿(约 98,103,99)，
+        //    整枚键读作"塑料灰"而不是墨玉。gloss 低时几乎平涂，只留一点点受光暗示。
         HudUI.fillVGradient(g, w, h, r,
-            HudUI.warm(HudUI.lighten(fill, 0.30), 0.22),
+            HudUI.warm(HudUI.lighten(fill, 0.06 + 0.24 * gloss), 0.22 * gloss),
             HudUI.cool(HudUI.darken(fill, 0.16), 0.18));
 
         // 2) 底部内阴影：面自己的厚度落在下沿。做窄做浅——道具键的文字压在这一带上，
@@ -1300,12 +1321,14 @@ export class HudUI {
         //    强度只有上沿的一半，缺了它下边缘会直接黑到描边上，像被切掉一刀。
         const rimIn = Math.max(2.5, Math.min(w, h) * 0.055);
         g.lineWidth = Math.max(1.6, Math.min(w, h) * 0.028);
+        // 亮线强度同样跟 gloss 走：在深墨面上 lighten 0.85 是一道**灰白**线，
+        // 它压在外圈金边的左上段上，把"镶金"那一圈直接盖断（放大截图可见）。
         const rimTop = HudUI.warm(HudUI.lighten(fill, 0.85), 0.3);
-        g.strokeColor = new Color(rimTop.r, rimTop.g, rimTop.b, 195);
+        g.strokeColor = new Color(rimTop.r, rimTop.g, rimTop.b, Math.round(195 * gloss));
         HudUI.edgePath(g, w - rimIn * 2, h - rimIn * 2, Math.max(1, r - rimIn), 'top');
         g.stroke();
         const rimBot = HudUI.warm(HudUI.lighten(fill, 0.4), 0.5);
-        g.strokeColor = new Color(rimBot.r, rimBot.g, rimBot.b, 95);
+        g.strokeColor = new Color(rimBot.r, rimBot.g, rimBot.b, Math.round(95 * gloss));
         HudUI.edgePath(g, w - rimIn * 2, h - rimIn * 2, Math.max(1, r - rimIn), 'bottom');
         g.stroke();
 
@@ -1313,9 +1336,15 @@ export class HudUI {
         //    传 edge 则改画一道细金线——深木面配暗棕边时按钮边界糊在台面里，
         //    "镶金木牌"这个观感全靠这条线立起来，所以它要细（1.8px）而不是粗描边。
         if (edge) {
-            g.lineWidth = 1.8;
+            // 2.6px：1.8 在 dpr2 上被抗锯齿吃掉大半，远看那圈金线就没了。
+            // 先压一道暗底边再叠金线，金色才不会直接虚在背景上（双层描边）。
+            g.lineWidth = 2.6;
+            g.strokeColor = new Color(10, 13, 11, 190);
+            g.roundRect(-hw + 0.6, -hh + 0.6, w - 1.2, h - 1.2, r);
+            g.stroke();
+            g.lineWidth = 2.2;
             g.strokeColor = edge;
-            g.roundRect(-hw + 0.9, -hh + 0.9, w - 1.8, h - 1.8, r);
+            g.roundRect(-hw + 1.5, -hh + 1.5, w - 3, h - 3, Math.max(1, r - 1));
             g.stroke();
         } else {
             g.lineWidth = Math.max(2.6, Math.min(w, h) * 0.048);
@@ -1489,11 +1518,10 @@ export class HudUI {
         n.setParent(slot);
         n.setPosition(0, 5, 0);
         const g = n.addComponent(Graphics);
-        // 暖金而不是暖白：白光在深红木槽上是一枚灰白斑（读作脏污），
-        // 金光则融进木色里。alpha 42 → 22 同步压薄，只留"垫亮"的作用。
-        const radii = [32, 25, 19, 13];
-        for (const r of radii) {
-            g.fillColor = new Color(226, 186, 128, 22);
+        // 极淡的冷白，且只有两层：暖金光在墨绿槽上会显出一圈圈同心的灰绿轮廓
+        // （读作脏污/霉点），而槽里马上要放物件缩略图，柔光只需垫一点点。
+        for (const [r, a] of [[30, 13], [18, 13]] as const) {
+            g.fillColor = new Color(206, 214, 206, a);
             g.circle(0, 0, r);
             g.fill();
         }
