@@ -1,4 +1,4 @@
-import { _decorator, Component } from 'cc';
+import { _decorator, Component, Quat, Vec3 } from 'cc';
 
 const { ccclass } = _decorator;
 
@@ -19,4 +19,13 @@ export class ItemTag extends Component {
     anchorX = 0;
     anchorY = -99;
     anchorZ = 0;
+    /**
+     * 装饰性晃动（GameManager.jiggleAround）进行中时的静止位姿。
+     *
+     * 连点两次时第二次晃动会在第一次的中途启动，若直接读当前 transform 当基准，
+     * 记下的就是个偏移位，来回几次堆会整体走形。所以一旦开晃就把静止位姿钉在这里，
+     * 后续晃动一律从它出发，晃完再清空。null = 当前没有晃动在飞。
+     */
+    restPos: Vec3 | null = null;
+    restRot: Quat | null = null;
 }

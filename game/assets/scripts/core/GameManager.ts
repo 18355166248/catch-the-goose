@@ -128,11 +128,17 @@ export class GameManager extends Component {
     // ===== 堆叠投放旋钮(具名化,便于后续调参) =====
     /** 基准物件缩放(对应满关 66 件)。调大 = 模型整体更大更饱满。 */
     private static readonly PILE_ITEM_BASE = 0.65;
-    /** 少件关卡放大后的上限,防止超出容器。与 BASE 同向调。 */
-    private static readonly PILE_ITEM_MAX = 0.78;
+    /** 少件关卡放大后的上限,防止超出容器。与 BASE 同向调。
+     *  0.78→1.0:上限原先正好卡死在第 1、2 关(公式想要 0.911/0.796,全被削到 0.78),
+     *  于是"件少就放大"这条补偿恰恰在最需要它的两关失效,24 件摊在半径 1.65 的碗里
+     *  只够铺薄薄一层、中间还留洞。放宽后 54 件及以上仍由公式主导,不受影响。 */
+    private static readonly PILE_ITEM_MAX = 1.0;
     /** 投放盘扩张半径系数:越小物件越往中心落、越易相互穿插。
-     *  0.58→0.72:向外铺开,降低中央堆叠的初始深插——这是穿插与落定抖动的共同根源。 */
-    private static readonly PILE_SPREAD = 0.72;
+     *  0.58→0.72:向外铺开,降低中央堆叠的初始深插——这是穿插与落定抖动的共同根源。
+     *  0.72→0.62:件放大后同样的盘会摊得更开,底盘要同步收窄才不顶到碗沿。 */
+    private static readonly PILE_SPREAD = 0.62;
+    /** 锥堆拐点:投放进度到此比例前铺底盘,之后半径回收、往内圈叠第二层。见 pileSeedRadius。 */
+    private static readonly PILE_CONE_KNEE = 0.70;
     /** 逐件投放间隔(秒/件):越小灌入越快、总时长越短,但同时在场刚体更多、穿插更深。
      *  0.03→0.05:同帧在场的动态刚体更少,求解器有余量把相邻件分开,少锁死互插。 */
     private static readonly SPAWN_INTERVAL = 0.05;
@@ -635,6 +641,29 @@ export class GameManager extends Component {
 
     // ---------- 物件加载与生成 ----------
 
+    /**
+     * 投放种子盘半径（投放与"打乱"共用，两处必须同形，否则打乱一次堆形就变了）。
+     *
+     * 旧式是 sqrt(u) 单调外扩，那是**均匀铺满圆盘**的采样：每件各占一块地板落下，
+     * 谁也不压谁，落定就是稀疏单层加几个洞——实测第 1 关 24 件正是如此。
+     * 改成两段：前 PILE_CONE_KNEE 比例照旧铺底盘，之后半径回收，后段落在底盘内侧
+     * 的一圈上、砸在已铺好的底上叠出第二层，整体是个中间隆起的锥堆。
+     *
+     * 回收幅度只留 35%（半径收到约 0.5），**不能再深**：收到 0.24 时后段全部落进一个
+     * 比单件还小的圆里，件件砸同一点，而每件 spawn 后 0.9s 就硬冻、不许滚开，
+     * 于是柱子一路长到投放高度——实测中位 y 冲到 3.71（地板顶面 y=0）。
+     * 正交俯视相机下高度不改变投影大小，这根悬空的柱子在截图上和正常堆一模一样，
+     * 只有读坐标才看得出来。改这个函数务必同时量 y 分布。
+     */
+    private pileSeedRadius(index: number, total: number): number {
+        const u = index / Math.max(1, total - 1);
+        const knee = GameManager.PILE_CONE_KNEE;
+        const spread = u <= knee
+            ? Math.sqrt(u / knee) * GameManager.PILE_SPREAD
+            : GameManager.PILE_SPREAD * (1 - 0.35 * Math.pow((u - knee) / (1 - knee), 0.75));
+        return (0.1 + spread) * this.boundary.seedScale();
+    }
+
     private spawnItems() {
         this.levelRandomState = this.level.seed >>> 0 || 1;
         const queue: string[] = [];
@@ -670,11 +699,9 @@ export class GameManager extends Component {
                 // 从篮筐中央上方连续落下：先堆中心，再由真实碰撞向四周摊开。
                 // 低差异圆盘采样避免完全同轴，也不会像黄金螺旋预铺那样显得人工整齐。
                 const angle = idx * 2.399963 + (this.levelRandom() - 0.5) * 0.3;
-                // 半径随投放进度连续扩大：视觉上仍是从中心长出一堆，
-                // 但后续物件会自然填满篮底，不会永远压在后半区。
+                // 半径先扩后收（见 pileSeedRadius）：前段铺满篮底，后段回到中心叠成锥堆。
                 // 种子盘按容器内切半径缩放：矩形为 1（行为不变），更小的圆容器自动收窄。
-                const radius = (0.1 + Math.sqrt(index / Math.max(1, queue.length - 1)) * GameManager.PILE_SPREAD)
-                    * this.boundary.seedScale();
+                const radius = this.pileSeedRadius(index, queue.length);
                 // 生成点抬到可视区外的高处：物件是"倒进来"的，而不是在画面里凭空出现。
                 n.setPosition(
                     this.boundary.centerX + Math.cos(angle) * radius + (this.levelRandom() - 0.5) * 0.12,
@@ -877,7 +904,8 @@ export class GameManager extends Component {
      * 这里不用重新启用动态物理：密集堆中一个动态刚体会把接触链逐层唤醒，表现为整堆抖动。
      * 三段式位移模拟“下落 → 轻微接触回弹 → 停稳”，既保留重量感，也保证远处物件绝对静止。
      */
-    private settleNearRemoved(center: Vec3) {
+    private settleNearRemoved(center: Vec3): Set<Node> {
+        const handled = new Set<Node>();
         const candidates = this.node.getComponentsInChildren(ItemTag)
             .filter(t => !t.picked && t.node.isValid)
             .map(t => {
@@ -912,6 +940,7 @@ export class GameManager extends Component {
             if (stillSupported) continue;
 
             Tween.stopAllByTarget(n);
+            handled.add(n);
             rb.clearState();
             rb.type = RigidBody.Type.KINEMATIC;
 
@@ -939,6 +968,96 @@ export class GameManager extends Component {
                     if (!n.isValid || candidate.t.picked) return;
                     this.patrol.constrainVisualInside(n);
                     rb.clearState();
+                })
+                .start();
+        }
+        return handled;
+    }
+
+    /**
+     * 拿走一件后，邻近几件跟着轻晃两下——纯装饰，不动物理。
+     *
+     * settleNearRemoved 只处理"真失去支撑"的 1~2 件，而它的 stillSupported 守卫
+     * 在密堆里几乎恒为真（正下方 0.6 内有任何一件就跳过），于是绝大多数点击整堆纹丝不动，
+     * 手感像在点一张贴图。这里补的是反馈而不是物理：附近几件做一次阻尼衰减的小幅摆动，
+     * 幅度按距离衰减，最大位移 1.8cm、倾角 2°，0.28s 内收敛回原位。
+     *
+     * 全程 KINEMATIC + tween，不重新启用动态刚体——一旦有一件转回动态，
+     * 接触链会被逐层唤醒，整堆抖起来（这正是 settleNearRemoved 当初绕开的坑）。
+     */
+    private jiggleAround(center: Vec3, exclude: Set<Node>) {
+        // 取**最近 K 件**而不是固定半径内的所有件。堆的疏密会随关卡件数和投放参数变，
+        // 固定半径下同一个数字在稀疏堆里只罩得住一件、在密堆里又会罩住一大片变成地震；
+        // 取 K 近邻则密度无关。实测第 1 关最近邻中位距 0.54，硬上限 1.2 足够宽松。
+        const K = 5, MAX_D = 1.2;
+        const near: { t: ItemTag; d: number }[] = [];
+        for (const t of this.node.getComponentsInChildren(ItemTag)) {
+            if (t.picked || !t.node.isValid || exclude.has(t.node)) continue;
+            const p = t.node.worldPosition;
+            const dx = p.x - center.x, dy = p.y - center.y, dz = p.z - center.z;
+            // 竖向差按 0.6 折算：上方压着的和同层挨着的都该有反应，隔了两层的不该。
+            const d = Math.sqrt(dx * dx + dz * dz + dy * dy * 0.36);
+            if (d > MAX_D) continue;
+            near.push({ t, d });
+        }
+        near.sort((a, b) => a.d - b.d);
+        const chosen = near.slice(0, K);
+        // 幅度按"在这批近邻里排多远"归一，而不是按绝对距离——同样密度无关。
+        // 系数留到 0.65 而不是 1，最远那件也还剩三成幅度，不至于白挑进来。
+        const span = chosen.length ? chosen[chosen.length - 1].d || 1 : 1;
+
+        for (const [i, { t, d }] of chosen.entries()) {
+            const falloff = 1 - 0.65 * (d / span);
+            const n = t.node;
+            // 已在晃的：先停掉并退回钉住的静止位姿，否则第二次晃动会以偏移位为基准，
+            // 连点几次堆就整体走形了。
+            Tween.stopAllByTarget(n);
+            if (t.restPos && t.restRot) {
+                n.setPosition(t.restPos);
+                n.setRotation(t.restRot);
+            } else {
+                t.restPos = n.position.clone();
+                t.restRot = n.rotation.clone();
+            }
+            const rest = t.restPos!;
+            const restRot = t.restRot!;
+
+            // 方向取"背离被拿走那件"的水平法向：读作被让开的一下，而不是随机抽搐。
+            const ox = n.position.x - center.x, oz = n.position.z - center.z;
+            const len = Math.hypot(ox, oz) || 1;
+            const amp = (0.009 + falloff * 0.013);
+            const ux = (ox / len) * amp, uz = (oz / len) * amp;
+
+            const swing = (k: number) => v3(rest.x + ux * k, rest.y - amp * 0.35 * Math.abs(k),
+                rest.z + uz * k);
+            // 绕水平轴的小倾角，符号按 uuid 定死：同一件每次晃的方向一致，不会看着乱抽。
+            const sign = (n.uuid.charCodeAt(n.uuid.length - 1) & 1) ? 1 : -1;
+            const tilt = (q: Quat, k: number) => {
+                const d = new Quat();
+                Quat.fromEuler(d, sign * 2.0 * falloff * k, 0, -sign * 1.4 * falloff * k);
+                Quat.multiply(q, restRot, d);
+                return q;
+            };
+
+            tween(n)
+                // 错峰起振：同时起跳会读作整块地板在动
+                .delay(i * 0.012)
+                .to(0.08, { position: swing(1), rotation: tilt(new Quat(), 1) },
+                    { easing: 'quadOut' })
+                .to(0.09, { position: swing(-0.45), rotation: tilt(new Quat(), -0.45) },
+                    { easing: 'sineInOut' })
+                .to(0.11, { position: rest.clone(), rotation: restRot.clone() },
+                    { easing: 'sineOut' })
+                .call(() => {
+                    if (!n.isValid) return;
+                    // 钉回静止位姿并交还锚点：巡检那边靠 anchor 判静止，位姿变了要同步，
+                    // 否则下一拍会以为它在动。
+                    n.setPosition(rest);
+                    n.setRotation(restRot);
+                    t.restPos = null;
+                    t.restRot = null;
+                    const wp = n.worldPosition;
+                    t.anchorX = wp.x; t.anchorY = wp.y; t.anchorZ = wp.z;
                 })
                 .start();
         }
@@ -1050,7 +1169,8 @@ export class GameManager extends Component {
         }
         this.hud?.captureModel(node, screenPos, index);
         this.reflowTray();
-        this.settleNearRemoved(removedPos);
+        // 先让真失去支撑的 1~2 件沉降，剩下的邻居只做装饰性轻晃（别晃已在沉降的那几件）。
+        this.jiggleAround(removedPos, this.settleNearRemoved(removedPos));
         this.scheduleOnce(() => this.audio?.play('drop', 0.5), 0.3);
 
         if (matched) {
@@ -1257,8 +1377,7 @@ export class GameManager extends Component {
         for (const [i, t] of boxItems.entries()) {
             // 重洗也沿用中央灌入，保证容器变化后仍自然向边缘摊开。种子盘随边界缩放。
             const angle = (i + 1) * 2.399963;
-            const radius = (0.1 + Math.sqrt(i / Math.max(1, boxItems.length - 1)) * GameManager.PILE_SPREAD)
-                * this.boundary.seedScale();
+            const radius = this.pileSeedRadius(i, boxItems.length);
             t.node.setWorldPosition(
                 this.boundary.centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 0.1,
                 1.55 + (i % 6) * 0.1,
