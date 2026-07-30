@@ -33,6 +33,15 @@ export interface LevelDef {
      * 这正是"藏"的含义。第 1 关是教学关，不放。
      */
     goldenGoose?: boolean;
+    /**
+     * 初始**冰封**的件数。默认 0。冰封件点不动，要靠完成三消逐个化开。
+     *
+     * 两条硬性约束保证它**不可能造成死局**（否则就是把随机挫败塞给玩家）：
+     *   1. 每种物件最多冰封 1 个 —— 任何一组都至少留 2 个可拿，不会整组锁死；
+     *   2. checkDeadlock 发现无解时优先把冰层全化开，而不是判负（见 GameManager）。
+     * 石头与金鹅不参与冰封：前者本来就是负担，后者是奖励，冻上都只会添堵。
+     */
+    frozen?: number;
 }
 
 /** 障碍物 id（对应 resources/models/rock.glb）；跨主题通用，不属于任何物件族。 */
@@ -112,10 +121,10 @@ export function buildLevels(family: string[]): LevelDef[] {
         { items: pick(4), groupsPerItem: 3, timeSec: 255, seed: 104729 },
         // 第 2 关·正常：6 种 × 2 组 = 36 件 / 200s（~5.6s/件），引入同色系 + 1 块石头
         { items: pick(6), groupsPerItem: 2, timeSec: 200, seed: 130363, distractors: 1,
-          goldenGoose: true },
+          goldenGoose: true, frozen: 3 },
         // 第 3 关·地狱：9 种 × 2 组 = 54 件 / 165s（~3.1s/件），手速+决策双压 + 2 块石头
         { items: pick(9), groupsPerItem: 2, timeSec: 165, seed: 155921, distractors: 2,
-          goldenGoose: true },
+          goldenGoose: true, frozen: 5 },
     ];
 }
 

@@ -69,6 +69,8 @@ export class GameManager extends Component {
     private interactionLocked = false;
     /** 各关历史最佳:{ [levelIndex]: { stars, progress, score } } */
     private best: Record<number, BestRecord> = {};
+    /** 本局是否已经提示过冰封机制。同石头，只说一次。 */
+    private frozenWarned = false;
     /** 本局是否已经提示过石头。石头是唯一「拿了就亏」的物件,但只提示一次,别唠叨。 */
     private rockWarned = false;
 
@@ -213,6 +215,18 @@ export class GameManager extends Component {
     private static readonly GOLDEN_BONUS_SEC = 20;
     /** 金鹅奖励：加分。与一次 3 连击的量级相当，让"挖到"这件事值回挖它花的时间。 */
     private static readonly GOLDEN_BONUS_SCORE = 300;
+    /**
+     * 冰封外观：**压暗的 albedo + 主导性的冷自发光**。
+     *
+     * 不能只把 albedo 染成冰蓝：它是与贴图**相乘**的，红苹果乘冰蓝会变紫、
+     * 橙子变蓝——每件冻结后颜色都不一样，读作"另一种水果"而不是"同一种状态"。
+     * 所以反过来：albedo 压到暗蓝把原色**压下去**，视觉主体交给 emissive，
+     * 于是所有冰封件都呈现同一种蓝白冷光，一眼可辨。
+     */
+    private static readonly FROZEN_TINT = new Color(64, 96, 122);
+    private static readonly FROZEN_GLOW = new Color(104, 170, 214);
+    /** 每完成一次三消化开几件。1 件 = 冰封 5 件需 5 次三消，正好摊在一关里。 */
+    private static readonly THAW_PER_MATCH = 1;
     /** 逐件投放间隔(秒/件):越小灌入越快、总时长越短,但同时在场刚体更多、穿插更深。
      *  0.03→0.05:同帧在场的动态刚体更少,求解器有余量把相邻件分开,少锁死互插。 */
     private static readonly SPAWN_INTERVAL = 0.05;
@@ -476,8 +490,9 @@ export class GameManager extends Component {
      * 其次退回盒中任意凑得出 3 个的类别。石头不参与（它永远配不齐）。
      */
     private findHintGroup(): Node[] {
+        // 冰封件点不动，不能算进"可用"，否则会指出一组玩家根本拿不到的件。
         const boxItems = this.node.getComponentsInChildren(ItemTag)
-            .filter(t => !t.picked && t.node.isValid && t.id !== DISTRACTOR_ID);
+            .filter(t => !t.picked && t.node.isValid && t.id !== DISTRACTOR_ID && !t.frozen);
         const availOf = (id: string) => boxItems.filter(t => t.id === id).length;
         const free = TRAY_CAPACITY - this.tray.count;
 
@@ -524,6 +539,14 @@ export class GameManager extends Component {
         if (!this.playing || this.paused || this.interactionLocked) return;
         if (this.removedCount >= this.totalCount) return;
         if (this.findHintGroup().length > 0) return;
+        // 冰封件挡住了所有可消组 → 全部化开，而不是判负。
+        // 这是"冰封绝不制造死局"的最后一道保险：解冻本身依赖三消，
+        // 一旦玩家凑不出任何一组就再也化不开冰，那才是真锁死。
+        const thawed = this.thawAll();
+        if (thawed > 0) {
+            this.hud?.toast(`冰层化开了 ${thawed} 件`);
+            return;
+        }
         // 还有「移出」道具 = 这是解得开的残局，指一下就够，不替玩家判负。
         if (this.propCounts.remove > 0) {
             this.hud?.nudgeProp('remove');
@@ -814,6 +837,30 @@ export class GameManager extends Component {
             Math.sqrt(GameManager.PILE_TARGET_LAYERS * this.boundary.usableArea(0)
                 / Math.max(1, queue.length)) / GameManager.PILE_ITEM_SPAN_K));
 
+        // 选出要冰封的件：**每种物件最多 1 个**，从每种里各取一个候选再随机挑 N 种。
+        // 这条约束就是"冰封不会锁死任何一组"的来源——每组至少还剩 2 个可拿。
+        // 石头（本来就是负担）与金鹅（是奖励）都不参与。
+        const frozenIdx = new Set<number>();
+        const nFrozen = this.level.frozen ?? 0;
+        if (nFrozen > 0) {
+            // 每种取**最后**一次出现的位置，而不是第一次：queue 的下标就是投放顺序，
+            // 前部落在堆底。取第一次出现会把冰封件全埋进底层，玩家整局看不到几个蓝的，
+            // 机制就没了体感。取最后一次 → 落在上层 → 开局就看得见"有几件冻着"。
+            const lastIdx = new Map<string, number>();
+            queue.forEach((id, i) => {
+                if (id === DISTRACTOR_ID || (wantGolden && i === 0)) return;
+                lastIdx.set(id, i);
+            });
+            // 用 forEach 收集而不是 [...lastIdx.values()]：本项目的 TS 编译目标会把
+            // 展开运算符降级成 [].concat(iterator)，而 concat **不展开迭代器**——
+            // 它把整个 MapIterator 当成单个元素塞进数组，于是 cands 里是个对象而不是
+            // 下标，frozenIdx.has(index) 永远 false，冰封**静默**失效且不报错。
+            const cands: number[] = [];
+            lastIdx.forEach(i => cands.push(i));
+            this.shuffleInPlace(cands, () => this.levelRandom());
+            for (const i of cands.slice(0, nFrozen)) frozenIdx.add(i);
+        }
+
         queue.forEach((id, index) => {
             const prefab = this.prefabs.get(id)!;
             const idx = index + 1;
@@ -845,6 +892,9 @@ export class GameManager extends Component {
                 if (wantGolden && index === 0) {
                     tag.golden = true;
                     GameManager.paintGolden(n);
+                } else if (frozenIdx.has(index)) {
+                    tag.frozen = true;
+                    GameManager.paintFrozen(n, tag);
                 }
                 const rb = n.addComponent(RigidBody);
                 rb.mass = 0.85 + (idx % 3) * 0.1;
@@ -1216,6 +1266,84 @@ export class GameManager extends Component {
         root.setScale(s.x * 1.18, s.y * 1.18, s.z * 1.18);
     }
 
+    /**
+     * 冰封外观：albedo 转冰蓝 + 一点冷自发光，并把原 albedo 存进 tag 以便解冻写回。
+     *
+     * 只染 albedo 不够——它是与贴图**相乘**的，深色件（紫葡萄、深绿貔貅）乘上冰蓝
+     * 只会更暗，看着像"脏了"而不是"结冰"。补一层冷调 emissive 把它整体提亮，
+     * 冰感主要来自这一步。
+     */
+    private static paintFrozen(root: Node, tag: ItemTag) {
+        const saved: unknown[] = [];
+        for (const mr of root.getComponentsInChildren(MeshRenderer)) {
+            const count = mr.sharedMaterials.length || 1;
+            for (let i = 0; i < count; i++) {
+                const mat = mr.getMaterialInstance(i);
+                if (!mat) { saved.push(null); continue; }
+                let prev: unknown = null;
+                try { prev = mat.getProperty('albedo'); } catch { /* 无此属性 */ }
+                saved.push(prev);
+                for (const prop of ['albedo', 'mainColor', 'diffuseColor']) {
+                    try { mat.setProperty(prop, GameManager.FROZEN_TINT); } catch { /* 同上 */ }
+                }
+                try { mat.setProperty('emissive', GameManager.FROZEN_GLOW); } catch { /* 同上 */ }
+            }
+        }
+        tag.thawColors = saved;
+    }
+
+    /** 解冻单件：写回冰封前的 albedo、灭掉自发光，并弹一下表示"化开了"。 */
+    private thawItem(tag: ItemTag) {
+        if (!tag.frozen || !tag.node.isValid) return;
+        tag.frozen = false;
+        const saved = tag.thawColors ?? [];
+        let k = 0;
+        const black = new Color(0, 0, 0);
+        for (const mr of tag.node.getComponentsInChildren(MeshRenderer)) {
+            const count = mr.sharedMaterials.length || 1;
+            for (let i = 0; i < count; i++, k++) {
+                const mat = mr.getMaterialInstance(i);
+                if (!mat) continue;
+                const prev = saved[k];
+                for (const prop of ['albedo', 'mainColor', 'diffuseColor']) {
+                    // 存过原值就写回原值；没存到（该 shader 无 albedo）退回纯白——
+                    // albedo 与贴图相乘，白色即"不改色"。
+                    try { mat.setProperty(prop, (prev as Color) ?? new Color(255, 255, 255)); }
+                    catch { /* 无此属性 */ }
+                }
+                try { mat.setProperty('emissive', black); } catch { /* 同上 */ }
+            }
+        }
+        tag.thawColors = null;
+        const s = tag.node.scale.clone();
+        Tween.stopAllByTarget(tag.node);
+        tween(tag.node)
+            .to(0.12, { scale: v3(s.x * 1.22, s.y * 1.22, s.z * 1.22) }, { easing: 'quadOut' })
+            .to(0.14, { scale: s }, { easing: 'backOut' })
+            .start();
+    }
+
+    /** 化开离 center 最近的 n 件冰封物件；返回实际化开的数量。 */
+    private thawNearest(center: Vec3, n: number): number {
+        const frozen = this.node.getComponentsInChildren(ItemTag)
+            .filter(t => t.frozen && !t.picked && t.node.isValid);
+        if (!frozen.length) return 0;
+        frozen.sort((a, b) =>
+            Vec3.squaredDistance(a.node.worldPosition, center)
+            - Vec3.squaredDistance(b.node.worldPosition, center));
+        const hit = frozen.slice(0, n);
+        for (const t of hit) this.thawItem(t);
+        return hit.length;
+    }
+
+    /** 化开场上全部冰封件；返回数量。残局保险用（见 checkDeadlock）。 */
+    private thawAll(): number {
+        const frozen = this.node.getComponentsInChildren(ItemTag)
+            .filter(t => t.frozen && !t.picked && t.node.isValid);
+        for (const t of frozen) this.thawItem(t);
+        return frozen.length;
+    }
+
     /** 限制初始倾斜，避免钱币/玉环直立后高速翻滚造成旋转穿透。 */
     private setNaturalRotation(node: Node, id: string, random: () => number = Math.random) {
         const flat = id === 'banzhi' || id === 'bracelet' || id === 'pingankou'
@@ -1298,6 +1426,22 @@ export class GameManager extends Component {
     }
 
     private pick(node: Node, tag: ItemTag) {
+        // 冰封件点不动。拦截必须在 tag.picked = true **之前**——一旦置位，
+        // 这件就被后续所有查询（可消组、残局检测、胜利判定）当成已拿走了。
+        if (tag.frozen) {
+            this.audio?.play('drop', 0.4);
+            const s = node.scale.clone();
+            Tween.stopAllByTarget(node);
+            tween(node)
+                .to(0.07, { scale: v3(s.x * 0.9, s.y * 0.9, s.z * 0.9) }, { easing: 'quadOut' })
+                .to(0.1, { scale: s }, { easing: 'backOut' })
+                .start();
+            if (!this.frozenWarned) {
+                this.frozenWarned = true;
+                this.hud?.toast('冰封的物件要消除一组才能化开');
+            }
+            return;
+        }
         tag.picked = true;
         // 有操作就重新计发呆时长，并撤掉还亮着的提示环。
         this.idleTime = 0;
@@ -1347,6 +1491,8 @@ export class GameManager extends Component {
                 }
                 this.removedCount += 3;
                 this.addMatchScore();
+                // 每消一组化开最近的一件：解冻速度与推进速度挂钩，玩家能预期。
+                this.thawNearest(removedPos, GameManager.THAW_PER_MATCH);
                 // 音量随连击递增：引擎的 playOneShot 不支持变调，用响度给「连着消」一个听得见的正反馈。
                 // 放在 addMatchScore 之后，this.combo 才是这一次消除后的连击数。
                 this.audio?.play('match', Math.min(1, 0.72 + this.combo * 0.07));
@@ -1706,6 +1852,7 @@ export class GameManager extends Component {
         this.rescueUsed = false;
         this.loseReason = '';
         this.rockWarned = false;
+        this.frozenWarned = false;
         this.interactionLocked = false;
         this.hud?.hideResult();
         this.hud?.hidePauseMenu();

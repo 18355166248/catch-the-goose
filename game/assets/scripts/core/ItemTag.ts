@@ -12,6 +12,15 @@ export class ItemTag extends Component {
      * 拾取路径对它完全另走一套：不进暂存槽、不计入胜利判定、即时结算奖励。
      */
     golden = false;
+    /** 冰封中：点不动，要靠三消化开（见 GameManager.thawNearest）。 */
+    frozen = false;
+    /**
+     * 冰封前各 MeshRenderer 的 albedo 原值，解冻时按序写回。
+     *
+     * 不能假定原色是纯白再"恢复成白"：albedo 是与贴图**相乘**的，
+     * 模型本身可能就带非白 albedo，写错整件颜色会失真。
+     */
+    thawColors: unknown[] | null = null;
     /**
      * 连续"困在锚点小 blob 内"的巡检周期计数:达到阈值即判定已停在原位、直接冻结。
      * 这是精简后**唯一**的逐件冻结判据(取代旧的 slow/rattle/pin/trail 多套启发式):
