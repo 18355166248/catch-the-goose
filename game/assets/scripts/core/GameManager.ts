@@ -2,7 +2,7 @@ import {
     _decorator, Component, Node, Camera, Label, instantiate,
     RigidBody, BoxCollider, Collider, CylinderCollider, EAxisDirection, MeshRenderer,
     PhysicsSystem, input, Input, EventTouch, tween, Tween, v3, Vec3, Quat, Mat4, geometry, screen,
-    Layers, PhysicsMaterial, Color,
+    Layers, PhysicsMaterial, Color, Material, utils, primitives,
 } from 'cc';
 import { DebugViz } from './DebugViz';
 import { LEVELS, LevelDef, getActiveTheme, DISTRACTOR_ID } from './LevelConfig';
@@ -215,16 +215,6 @@ export class GameManager extends Component {
     private static readonly GOLDEN_BONUS_SEC = 20;
     /** 金鹅奖励：加分。与一次 3 连击的量级相当，让"挖到"这件事值回挖它花的时间。 */
     private static readonly GOLDEN_BONUS_SCORE = 300;
-    /**
-     * 冰封外观：**压暗的 albedo + 主导性的冷自发光**。
-     *
-     * 不能只把 albedo 染成冰蓝：它是与贴图**相乘**的，红苹果乘冰蓝会变紫、
-     * 橙子变蓝——每件冻结后颜色都不一样，读作"另一种水果"而不是"同一种状态"。
-     * 所以反过来：albedo 压到暗蓝把原色**压下去**，视觉主体交给 emissive，
-     * 于是所有冰封件都呈现同一种蓝白冷光，一眼可辨。
-     */
-    private static readonly FROZEN_TINT = new Color(64, 96, 122);
-    private static readonly FROZEN_GLOW = new Color(104, 170, 214);
     /** 每完成一次三消化开几件。1 件 = 冰封 5 件需 5 次三消，正好摊在一关里。 */
     private static readonly THAW_PER_MATCH = 1;
     /** 逐件投放间隔(秒/件):越小灌入越快、总时长越短,但同时在场刚体更多、穿插更深。
@@ -893,8 +883,7 @@ export class GameManager extends Component {
                     tag.golden = true;
                     GameManager.paintGolden(n);
                 } else if (frozenIdx.has(index)) {
-                    tag.frozen = true;
-                    GameManager.paintFrozen(n, tag);
+                    tag.frozen = true;   // 冰壳在碰撞体设定之后再加，见下方
                 }
                 const rb = n.addComponent(RigidBody);
                 rb.mass = 0.85 + (idx % 3) * 0.1;
@@ -910,6 +899,10 @@ export class GameManager extends Component {
                     : n.addComponent(BoxCollider);
                 col.sharedMaterial = this.pileMaterial;
                 this.centerVisualAndFitCollider(n, col);
+                // 冰壳必须加在 centerVisualAndFitCollider **之后**：它是子节点上的
+                // MeshRenderer，而碰撞体正是按 measureLocalAabb 量出的渲染包围盒生成的，
+                // 先加壳会把碰撞体一起撑大 18%，冰封件之间凭空多出一圈间隙。
+                if (tag.frozen) this.addIceShell(n, tag);
                 this.setNaturalRotation(n, id, () => this.levelRandom());
                 rb.setLinearVelocity(v3(
                     (this.levelRandom() - 0.5) * 0.2,
@@ -1267,54 +1260,96 @@ export class GameManager extends Component {
     }
 
     /**
-     * 冰封外观：albedo 转冰蓝 + 一点冷自发光，并把原 albedo 存进 tag 以便解冻写回。
+     * 冰封外观：**物件保持原色**，外面套一层半透明冰块 + 几粒霜晶。
      *
-     * 只染 albedo 不够——它是与贴图**相乘**的，深色件（紫葡萄、深绿貔貅）乘上冰蓝
-     * 只会更暗，看着像"脏了"而不是"结冰"。补一层冷调 emissive 把它整体提亮，
-     * 冰感主要来自这一步。
+     * 上一版是把物件本身染成冰蓝，那条路走不通：albedo 与贴图**相乘**，
+     * 红苹果乘冰蓝变紫、橙子变蓝，每件冻结后颜色都不一样，读作"另一种水果"
+     * 而不是"同一种状态"；而且认不出被冻的原本是什么，玩家没法规划先消哪组。
+     * 套壳则两全：里面还是原来那颗，外面统一是冰。
+     *
+     * 透明材质沿用 DebugViz 那套（builtin-unlit + technique 1 + 带 alpha 的
+     * mainColor）——那是本仓已验证可用的唯一透明渲染路径，不必再赌别的 effect
+     * 在引擎裁剪后还在不在。
      */
-    private static paintFrozen(root: Node, tag: ItemTag) {
-        const saved: unknown[] = [];
-        for (const mr of root.getComponentsInChildren(MeshRenderer)) {
-            const count = mr.sharedMaterials.length || 1;
-            for (let i = 0; i < count; i++) {
-                const mat = mr.getMaterialInstance(i);
-                if (!mat) { saved.push(null); continue; }
-                let prev: unknown = null;
-                try { prev = mat.getProperty('albedo'); } catch { /* 无此属性 */ }
-                saved.push(prev);
-                for (const prop of ['albedo', 'mainColor', 'diffuseColor']) {
-                    try { mat.setProperty(prop, GameManager.FROZEN_TINT); } catch { /* 同上 */ }
-                }
-                try { mat.setProperty('emissive', GameManager.FROZEN_GLOW); } catch { /* 同上 */ }
-            }
-        }
-        tag.thawColors = saved;
+    private addIceShell(root: Node, tag: ItemTag) {
+        const b = this.measureLocalAabb(root);
+        if (!b) return;
+        // 用**球**而不是立方体：俯视 45° 下立方体的大平面读作"包装盒"，还把物件挡住了；
+        // 球贴合物件轮廓、边缘圆润，半透明时更像裹了一层冰。
+        // 半径按包围盒最长边的一半略放，保证细长件（香蕉、玉镯）也整个裹进去。
+        const r = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z) * 0.5 * 1.12;
+        const ice = new Node('ice');
+        ice.setParent(root);
+        ice.layer = root.layer;          // 与物件同层，否则相机剔除掉、整块壳看不见
+        ice.setPosition((b.min.x + b.max.x) / 2, (b.min.y + b.max.y) / 2, (b.min.z + b.max.z) / 2);
+        const mr = ice.addComponent(MeshRenderer);
+        mr.mesh = utils.createMesh(primitives.sphere(r, { segments: 16 }));
+        mr.setSharedMaterial(GameManager.iceMat(), 0);
+        mr.shadowCastingMode = MeshRenderer.ShadowCastingMode.OFF;
+
+        // 内层高光核：比外壳小、更实的一颗，两层叠加后边缘处 alpha 累积，
+        // 自然形成一圈更亮的轮廓——这是在无描边能力下让球读作"冰壳"而非"雾气"的办法。
+        // （试过在球面插小八面体当冰棱，实际尺寸下一律读作噪点/贴纸，已去掉。）
+        const core = new Node('iceCore');
+        core.setParent(ice);
+        core.layer = root.layer;
+        const cr = core.addComponent(MeshRenderer);
+        cr.mesh = utils.createMesh(primitives.sphere(r * 0.82, { segments: 16 }));
+        cr.setSharedMaterial(GameManager.frostMat(), 0);
+        cr.shadowCastingMode = MeshRenderer.ShadowCastingMode.OFF;
+
+        tag.iceNode = ice;
     }
 
-    /** 解冻单件：写回冰封前的 albedo、灭掉自发光，并弹一下表示"化开了"。 */
+    /**
+     * 冰壳材质：builtin-standard 的 transparent technique。
+     *
+     * 不用 DebugViz 那套 builtin-unlit——unlit 无光照，渲出来是一片**平的白雾**，
+     * 读作"蒙了层塑料膜"而不是冰。冰的识别几乎全靠高光，所以必须要 PBR：
+     * roughness 压到 0.10 得到锐利高光，metallic 给 0.25 让它有点"硬"，
+     * 一点点冷 emissive 让背光面也不至于死黑。
+     * （已实测 builtin-standard technique 1 在本项目的引擎裁剪下可用。）
+     */
+    private static _iceMat: Material | null = null;
+    private static iceMat(): Material {
+        if (!GameManager._iceMat) {
+            const m = new Material();
+            m.initialize({ effectName: 'builtin-standard', technique: 1 });
+            m.setProperty('albedo', new Color(118, 190, 240, 128));
+            try { m.setProperty('roughness', 0.10); } catch { /* 属性名随版本 */ }
+            try { m.setProperty('metallic', 0.25); } catch { /* 同上 */ }
+            try { m.setProperty('emissive', new Color(26, 62, 92)); } catch { /* 同上 */ }
+            GameManager._iceMat = m;
+        }
+        return GameManager._iceMat;
+    }
+
+    /** 霜晶材质：更实更亮的冰渣，压在冰壳棱上提供颗粒感。 */
+    private static _frostMat: Material | null = null;
+    private static frostMat(): Material {
+        if (!GameManager._frostMat) {
+            const m = new Material();
+            m.initialize({ effectName: 'builtin-standard', technique: 1 });
+            m.setProperty('albedo', new Color(196, 234, 255, 92));
+            try { m.setProperty('roughness', 0.08); } catch { /* 同上 */ }
+            try { m.setProperty('metallic', 0.15); } catch { /* 同上 */ }
+            GameManager._frostMat = m;
+        }
+        return GameManager._frostMat;
+    }
+
+    /** 解冻单件：冰壳缩没并销毁，物件本身不用动（它一直是原色）。 */
     private thawItem(tag: ItemTag) {
         if (!tag.frozen || !tag.node.isValid) return;
         tag.frozen = false;
-        const saved = tag.thawColors ?? [];
-        let k = 0;
-        const black = new Color(0, 0, 0);
-        for (const mr of tag.node.getComponentsInChildren(MeshRenderer)) {
-            const count = mr.sharedMaterials.length || 1;
-            for (let i = 0; i < count; i++, k++) {
-                const mat = mr.getMaterialInstance(i);
-                if (!mat) continue;
-                const prev = saved[k];
-                for (const prop of ['albedo', 'mainColor', 'diffuseColor']) {
-                    // 存过原值就写回原值；没存到（该 shader 无 albedo）退回纯白——
-                    // albedo 与贴图相乘，白色即"不改色"。
-                    try { mat.setProperty(prop, (prev as Color) ?? new Color(255, 255, 255)); }
-                    catch { /* 无此属性 */ }
-                }
-                try { mat.setProperty('emissive', black); } catch { /* 同上 */ }
-            }
+        const ice = tag.iceNode;
+        tag.iceNode = null;
+        if (ice && ice.isValid) {
+            tween(ice)
+                .to(0.18, { scale: v3(0.01, 0.01, 0.01) }, { easing: 'backIn' })
+                .call(() => ice.isValid && ice.destroy())
+                .start();
         }
-        tag.thawColors = null;
         const s = tag.node.scale.clone();
         Tween.stopAllByTarget(tag.node);
         tween(tag.node)

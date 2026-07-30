@@ -1,4 +1,4 @@
-import { _decorator, Component, Quat, Vec3 } from 'cc';
+import { _decorator, Component, Node, Quat, Vec3 } from 'cc';
 
 const { ccclass } = _decorator;
 
@@ -15,12 +15,10 @@ export class ItemTag extends Component {
     /** 冰封中：点不动，要靠三消化开（见 GameManager.thawNearest）。 */
     frozen = false;
     /**
-     * 冰封前各 MeshRenderer 的 albedo 原值，解冻时按序写回。
-     *
-     * 不能假定原色是纯白再"恢复成白"：albedo 是与贴图**相乘**的，
-     * 模型本身可能就带非白 albedo，写错整件颜色会失真。
+     * 冰壳节点（半透明冰块 + 霜晶，见 GameManager.addIceShell）。
+     * 物件本身保持原色，冻/化只是加上或销毁这个子节点。
      */
-    thawColors: unknown[] | null = null;
+    iceNode: Node | null = null;
     /**
      * 连续"困在锚点小 blob 内"的巡检周期计数:达到阈值即判定已停在原位、直接冻结。
      * 这是精简后**唯一**的逐件冻结判据(取代旧的 slow/rattle/pin/trail 多套启发式):
