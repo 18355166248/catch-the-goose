@@ -12,7 +12,7 @@ import { v3, Vec3 } from 'cc';
  *   2. isEscaped      —— 巡检逃逸判定（质心越界或掉出底面）；
  *   3. respawn        —— 逃逸回收落点（容器中心偏上重新倒入）；
  *   4. clampAabb      —— 视觉外轮廓兜底（把渲染 AABB 拉回形状内）。
- * 再加投放/打乱的种子盘缩放 seedScale，小容器自动收窄。
+ * 再加投放/打乱的铺点 seedPoint + 底面积 usableArea，件的大小与落点都随容器自适应。
  *
  * 新增一种造型只需在此实现对应分支，四个环节自动生效——这就是“通用边界”。
  */
@@ -41,17 +41,9 @@ export interface BoundaryDef {
     clamp: BoundaryShape;
 }
 
-/** 形状内切半径：矩形取较短半边，圆形即半径。用于种子盘缩放。 */
-function innerRadius(s: BoundaryShape): number {
-    return s.kind === 'rect' ? Math.min(s.halfX, s.halfZ) : s.radius;
-}
-
 export class ContainerBoundary {
     readonly wall: BoundaryShape;
     readonly clamp: BoundaryShape;
-
-    /** 默认矩形对应的内切半径，用来把其它容器的种子盘按比例收窄。 */
-    private static readonly REF_INNER = 1.35;
 
     constructor(def: BoundaryDef) {
         this.wall = def.wall;
@@ -61,9 +53,35 @@ export class ContainerBoundary {
     get centerX(): number { return this.wall.cx; }
     get centerZ(): number { return this.wall.cz; }
 
-    /** 投放/打乱种子盘缩放：默认矩形为 1，更小的容器自动收窄避免一开局就溢出。 */
-    seedScale(): number {
-        return Math.min(1, innerRadius(this.wall) / ContainerBoundary.REF_INNER);
+    /**
+     * 形状内的均匀铺点：把两个 [0,1) 的低差异样本映射到「墙内收 inset」的区域里。
+     *
+     * 这是「铺满筐底」与「堆成一根柱子」的分界。历史实现是极坐标小圆盘，
+     * 矩形容器的四角永远撒不到点，物件只能往中间摞——2.70×2.84 的筐底配上
+     * 半径 0.72 的种子盘，24 件就能叠到 y=4.7（筐沿 ~1.0）。
+     * 矩形分支直接线性映射（四角也能落到），圆形分支的半径必须过 sqrt，
+     * 否则面积不等概率、点全挤在圆心。
+     */
+    seedPoint(u1: number, u2: number, inset: number): { x: number; z: number } {
+        const s = this.wall;
+        if (s.kind === 'rect') {
+            const hx = Math.max(0.05, s.halfX - inset);
+            const hz = Math.max(0.05, s.halfZ - inset);
+            return { x: s.cx + (u1 * 2 - 1) * hx, z: s.cz + (u2 * 2 - 1) * hz };
+        }
+        const r = Math.max(0.05, s.radius - inset) * Math.sqrt(u1);
+        const a = u2 * Math.PI * 2;
+        return { x: s.cx + Math.cos(a) * r, z: s.cz + Math.sin(a) * r };
+    }
+
+    /** 墙内收 inset 后的可用底面积。投放侧用它估「一层放得下几件」。 */
+    usableArea(inset: number): number {
+        const s = this.wall;
+        if (s.kind === 'rect') {
+            return Math.max(0.01, (s.halfX - inset) * 2) * Math.max(0.01, (s.halfZ - inset) * 2);
+        }
+        const r = Math.max(0.01, s.radius - inset);
+        return Math.PI * r * r;
     }
 
     /**

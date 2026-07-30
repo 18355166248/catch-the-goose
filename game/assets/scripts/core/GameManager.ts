@@ -126,19 +126,47 @@ export class GameManager extends Component {
     private itemScale = 0.46;
 
     // ===== 堆叠投放旋钮(具名化,便于后续调参) =====
-    /** 基准物件缩放(对应满关 66 件)。调大 = 模型整体更大更饱满。 */
-    private static readonly PILE_ITEM_BASE = 0.65;
-    /** 少件关卡放大后的上限,防止超出容器。与 BASE 同向调。
-     *  0.78→1.0:上限原先正好卡死在第 1、2 关(公式想要 0.911/0.796,全被削到 0.78),
-     *  于是"件少就放大"这条补偿恰恰在最需要它的两关失效,24 件摊在半径 1.65 的碗里
-     *  只够铺薄薄一层、中间还留洞。放宽后 54 件及以上仍由公式主导,不受影响。 */
-    private static readonly PILE_ITEM_MAX = 1.0;
-    /** 投放盘扩张半径系数:越小物件越往中心落、越易相互穿插。
-     *  0.58→0.72:向外铺开,降低中央堆叠的初始深插——这是穿插与落定抖动的共同根源。
-     *  0.72→0.62:件放大后同样的盘会摊得更开,底盘要同步收窄才不顶到碗沿。 */
-    private static readonly PILE_SPREAD = 0.62;
-    /** 锥堆拐点:投放进度到此比例前铺底盘,之后半径回收、往内圈叠第二层。见 pileSeedRadius。 */
-    private static readonly PILE_CONE_KNEE = 0.70;
+    /**
+     * 目标堆叠层数——**整套堆形参数里唯一需要凭观感调的旋钮**。
+     *
+     * 1 = 恰好铺满筐底一层、件不重叠;2 = 铺满两层。件的大小由它连同件数和筐底面积
+     * 反解(见 spawnItems),所以每一关落定后的"满度"一致,难度只由件数与种类体现。
+     *
+     * 旧实现是反过来的:先拍一个基准缩放,再按 cbrt(66/N) 补偿件数。指数就是错的——
+     * 要填满的是**面积**,缩放该随 1/sqrt(N) 走而不是 1/cbrt(N);且基准值定得过大,
+     * 第 1 关单件外接盒宽 1.16、筐内宽才 2.70,一层只放得下两三件,24 件必然摞成
+     * 四五层的塔(实测堆顶 y 到 5.16,筐沿约 1.0),只有十来件露在外面。
+     *
+     * 取 1.9:实测筐内像素覆盖率随层数上升到约 55% 就**饱和**了(1.9 层 55%、2.4 层
+     * 也是 55%)——再放大件只是把件互相埋掉,盖不住更多筐底。1.9 正在这个拐点上,
+     * 即"用最小的件拿到最高的覆盖"。
+     */
+    private static readonly PILE_TARGET_LAYERS = 1.9;
+    /**
+     * 缩放兜底区间。MAX 是**观感闸门**,不是防溢出:件数少的关卡反解会要求很大的件
+     * (第 1 关 24 件要 0.76,外接盒宽 1.00 = 筐内宽的 37%),满是满了,但一眼看去是
+     * "几个大球摞着"而不是"一堆水果",而且 24 件里有一半被埋着点不到。
+     * 压到 0.62 后第 1 关是薄薄一层、覆盖率降到 42%,但件的大小与第 2、3 关一致。
+     * 注:第 2、3 关反解得 0.615 / 0.500,都在闸门以下,不受影响。
+     * 真要让第 1 关又满又不臃肿,只能加件数——24 件填不满 2.70×2.84 的筐底。
+     */
+    private static readonly PILE_ITEM_MIN = 0.30;
+    private static readonly PILE_ITEM_MAX = 0.62;
+    /** 单件外接盒宽 ÷ itemScale。实测五档缩放下比值稳定在 1.24~1.31,取中值。
+     *  用来定铺点内缩量(inset),保证外接盒不越过筐壁。 */
+    private static readonly PILE_ITEM_WIDTH_K = 1.28;
+    /**
+     * 单件**实际占地**宽 ÷ itemScale:碰撞盒尺度,决定一层塞得下几件。
+     *
+     * 比外接盒宽(1.28)小,因为外接盒是轴对齐外框,件随机朝向时外框比件本身胖约四分之一。
+     * 注意别拿"俯视像素占地"来标定这个值——那个数(约 0.70)算的是**可见轮廓**,
+     * 而挡住彼此的是碰撞盒;按可见轮廓算会把每层容量高估一倍多,堆照样长成柱子。
+     */
+    private static readonly PILE_ITEM_SPAN_K = 1.02;
+    /** 一层的堆积效率:方格铺满是 1,实际有间隙与朝向差异,取 0.85。调大 = 每层塞更多件、堆更矮更挤。 */
+    private static readonly PILE_PACK = 0.85;
+    /** 每往上一层,铺点区域向内收这么多。给堆一个自然坡度,也防上层件顺着筐壁滑出。 */
+    private static readonly PILE_LAYER_INSET = 0.18;
     /** 逐件投放间隔(秒/件):越小灌入越快、总时长越短,但同时在场刚体更多、穿插更深。
      *  0.03→0.05:同帧在场的动态刚体更少,求解器有余量把相邻件分开,少锁死互插。 */
     private static readonly SPAWN_INTERVAL = 0.05;
@@ -641,27 +669,64 @@ export class GameManager extends Component {
 
     // ---------- 物件加载与生成 ----------
 
+    /** 整数散列 → [0,1)。给铺点做确定性抖动：同一 index 永远同一个值，
+     *  所以投放与「打乱」两条路径互不干扰，也不吃 levelRandom 的调用顺序。 */
+    private static hash01(n: number): number {
+        let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+        h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+        return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+    }
+
+    private static gcd(a: number, b: number): number {
+        while (b) { const t = a % b; a = b; b = t; }
+        return a;
+    }
+
     /**
-     * 投放种子盘半径（投放与"打乱"共用，两处必须同形，否则打乱一次堆形就变了）。
+     * 投放落点（投放与"打乱"共用，两处必须同形，否则打乱一次堆形就变了）。
      *
-     * 旧式是 sqrt(u) 单调外扩，那是**均匀铺满圆盘**的采样：每件各占一块地板落下，
-     * 谁也不压谁，落定就是稀疏单层加几个洞——实测第 1 关 24 件正是如此。
-     * 改成两段：前 PILE_CONE_KNEE 比例照旧铺底盘，之后半径回收，后段落在底盘内侧
-     * 的一圈上、砸在已铺好的底上叠出第二层，整体是个中间隆起的锥堆。
+     * 历史实现是「极坐标小圆盘 + 半径随进度扩大」，两个毛病叠在一起：
+     * 盘是圆的而筐底是方的（四角撒不到点）、盘还只有半径 0.72 而筐内半宽 1.35。
+     * 结果所有件都往中间同一小片地方落，而每件 spawn 后 0.9s 就硬冻、来不及滚开，
+     * 于是必然长成一根柱子——实测第 1 关 24 件顶到 y=4.65、第 3 关 56 件顶到 y=5.53
+     * （筐沿 y≈1.0），筐的外圈整整一圈是空的。
+     * 正交俯视相机下高度不改变投影大小，柱子在截图上和摊平的堆长得一样，
+     * 只有读 y 坐标才看得出来。**改这个函数务必同时量 y 分布与筐内像素覆盖率。**
      *
-     * 回收幅度只留 35%（半径收到约 0.5），**不能再深**：收到 0.24 时后段全部落进一个
-     * 比单件还小的圆里，件件砸同一点，而每件 spawn 后 0.9s 就硬冻、不许滚开，
-     * 于是柱子一路长到投放高度——实测中位 y 冲到 3.71（地板顶面 y=0）。
-     * 正交俯视相机下高度不改变投影大小，这根悬空的柱子在截图上和正常堆一模一样，
-     * 只有读坐标才看得出来。改这个函数务必同时量 y 分布。
+     * 现在按「一层一层铺」：先按单件占地算出一层放得下几件，同层的点按分格抖动
+     * 铺满整个容器形状（矩形连四角都铺到），下一层错半格、并向内收 PILE_LAYER_INSET
+     * 形成自然坡度。件数少就只铺一层，多了自然叠高。
+     *
+     * 层内用「分格 + 格内抖动」而不是低差异序列：一层只有十来个点，Halton 那种
+     * 序列在这个量级上仍会留下整片空斑（实测第 2 关有一块 1791 采样格的裸底）；
+     * 分格采样对固定点数给出硬保证——每格必有一点，空斑不可能大过一格。
      */
-    private pileSeedRadius(index: number, total: number): number {
-        const u = index / Math.max(1, total - 1);
-        const knee = GameManager.PILE_CONE_KNEE;
-        const spread = u <= knee
-            ? Math.sqrt(u / knee) * GameManager.PILE_SPREAD
-            : GameManager.PILE_SPREAD * (1 - 0.35 * Math.pow((u - knee) / (1 - knee), 0.75));
-        return (0.1 + spread) * this.boundary.seedScale();
+    private pileSeedPoint(index: number): { x: number; z: number } {
+        // 内缩按外接盒（别让件探出筐壁），层容量按实际占地（别把层数算多了）。
+        const w = this.itemScale * GameManager.PILE_ITEM_WIDTH_K;
+        const span = this.itemScale * GameManager.PILE_ITEM_SPAN_K;
+        const perLayer = Math.max(4, Math.floor(
+            this.boundary.usableArea(0) / (span * span) * GameManager.PILE_PACK));
+        const layer = Math.floor(index / perLayer);
+        const j = index % perLayer;
+
+        // 网格按容器长宽比开方，格子尽量接近正方形（细长格会让件排成行列）。
+        const s = this.boundary.wall;
+        const aspect = s.kind === 'rect' ? s.halfX / Math.max(0.01, s.halfZ) : 1;
+        const cols = Math.max(1, Math.round(Math.sqrt(perLayer * aspect)));
+        const rows = Math.max(1, Math.ceil(perLayer / cols));
+        // 格子数常比点数多，多出来的空格必须**散开**：按与格数互质的步长跳着取，
+        // 否则空格永远集中在最后一行，那一侧就固定裸着一条。
+        const cells = rows * cols;
+        let stride = Math.max(1, Math.round(cells * 0.618));
+        while (GameManager.gcd(stride, cells) !== 1) stride++;
+        const cell = (j * stride + layer * 3) % cells;
+        // 上层整体错半格：件落进下层的凹处（砌砖式），既不叠成柱，也少悬空。
+        const half = layer % 2 ? 0.5 : 0;
+        const u1 = ((cell % cols) + 0.15 + 0.7 * GameManager.hash01(index * 2 + 1) + half) / cols;
+        const u2 = (Math.floor(cell / cols) + 0.15 + 0.7 * GameManager.hash01(index * 2 + 2)) / rows;
+        return this.boundary.seedPoint(u1 % 1, u2 % 1,
+            w * 0.5 + layer * GameManager.PILE_LAYER_INSET);
     }
 
     private spawnItems() {
@@ -683,9 +748,12 @@ export class GameManager extends Component {
             for (let i = 0; i < nRock; i++) queue.push(DISTRACTOR_ID);
             this.shuffleInPlace(queue, () => this.levelRandom());
         }
-        // 66 件对应 BASE;件数减少按体积等比放大,上限 MAX 防止超出容器。
-        this.itemScale = Math.min(GameManager.PILE_ITEM_MAX,
-            GameManager.PILE_ITEM_BASE * Math.cbrt(66 / Math.max(1, queue.length)));
+        // 件的大小由「铺满筐底 PILE_TARGET_LAYERS 层」反解：N 件均分筐底面积，
+        // 每件分到 area/N × 层数，开方即占地宽，除以占地宽系数得缩放。
+        // 于是换容器（圆碗 vs 方筐）、改件数都不用再手调缩放，满度自动一致。
+        this.itemScale = Math.min(GameManager.PILE_ITEM_MAX, Math.max(GameManager.PILE_ITEM_MIN,
+            Math.sqrt(GameManager.PILE_TARGET_LAYERS * this.boundary.usableArea(0)
+                / Math.max(1, queue.length)) / GameManager.PILE_ITEM_SPAN_K));
 
         queue.forEach((id, index) => {
             const prefab = this.prefabs.get(id)!;
@@ -698,17 +766,13 @@ export class GameManager extends Component {
                 this.forceLayer(n);
                 // 从篮筐中央上方连续落下：先堆中心，再由真实碰撞向四周摊开。
                 // 低差异圆盘采样避免完全同轴，也不会像黄金螺旋预铺那样显得人工整齐。
-                const angle = idx * 2.399963 + (this.levelRandom() - 0.5) * 0.3;
-                // 半径先扩后收（见 pileSeedRadius）：前段铺满篮底，后段回到中心叠成锥堆。
-                // 种子盘按容器内切半径缩放：矩形为 1（行为不变），更小的圆容器自动收窄。
-                const radius = this.pileSeedRadius(index, queue.length);
+                // 落点按容器形状分层铺满（见 pileSeedPoint），不再是中央小圆盘。
+                const seed = this.pileSeedPoint(index);
                 // 生成点抬到可视区外的高处：物件是"倒进来"的，而不是在画面里凭空出现。
                 n.setPosition(
-                    this.boundary.centerX + Math.cos(angle) * radius + (this.levelRandom() - 0.5) * 0.12,
+                    seed.x + (this.levelRandom() - 0.5) * 0.12,
                     4.2 + (idx % 5) * 0.22,
-                    this.boundary.centerZ + 0.1
-                        + Math.sin(angle) * radius * 0.72
-                        + (this.levelRandom() - 0.5) * 0.08,
+                    seed.z + (this.levelRandom() - 0.5) * 0.08,
                 );
                 // 参考录屏中单件约为篮宽的 1/6；66 件时形成紧凑但不过高的堆。
                 const scale = this.itemScale + (idx % 4) * 0.012;
@@ -1375,15 +1439,13 @@ export class GameManager extends Component {
         if (boxItems.length === 0) return false;
         this.shuffleInPlace(boxItems);
         for (const [i, t] of boxItems.entries()) {
-            // 重洗也沿用中央灌入，保证容器变化后仍自然向边缘摊开。种子盘随边界缩放。
-            const angle = (i + 1) * 2.399963;
-            const radius = this.pileSeedRadius(i, boxItems.length);
+            // 重洗与投放共用落点函数，打乱后堆形与开局同构（否则用一次道具堆就变样）。
+            // 已消掉一些件时 boxItems 变少，层数自动跟着降，不会在半空留出悬着的上层。
+            const seed = this.pileSeedPoint(i);
             t.node.setWorldPosition(
-                this.boundary.centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 0.1,
+                seed.x + (Math.random() - 0.5) * 0.1,
                 1.55 + (i % 6) * 0.1,
-                this.boundary.centerZ + 0.1
-                    + Math.sin(angle) * radius * 0.72
-                    + (Math.random() - 0.5) * 0.06);
+                seed.z + (Math.random() - 0.5) * 0.06);
             this.setNaturalRotation(t.node, t.id);
             t.stillTicks = 0;
             t.anchorY = -99;
