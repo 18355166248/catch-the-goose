@@ -20,7 +20,6 @@ type TrayIconLayout = { offsetX: number; offsetY: number; contentW: number; cont
  * offsetY 使用图片坐标（向下为正），应用到 Cocos 节点时会反向换算。
  */
 const TRAY_ICON_LAYOUT: Record<string, TrayIconLayout> = {
-    baicai: { offsetX: 7, offsetY: 1.5, contentW: 103, contentH: 104 },
     banzhi: { offsetX: -0.5, offsetY: -0.5, contentW: 118, contentH: 108 },
     bracelet: { offsetX: -0.5, offsetY: -0.5, contentW: 118, contentH: 72 },
     goose: { offsetX: -10.5, offsetY: 12.5, contentW: 94, contentH: 102 },

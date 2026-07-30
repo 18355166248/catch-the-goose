@@ -33,7 +33,7 @@
       "name": "meshes[0].mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 5000
+        "triangleCount": 2500
       },
       "ver": "1.1.1",
       "imported": true,

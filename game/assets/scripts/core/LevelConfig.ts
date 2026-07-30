@@ -59,13 +59,19 @@ export const THEMES: Theme[] = [
          * 所以这一族靠「明度 + 形状」拉开，而不是靠色相：
          *   slice(0,4) 金(45°) / 紫(273°) / 浅绿高明度(94°) / 深绿兽形(151°) 仍两两分明；
          *   第 5~6 件各自与前段同色系但形状迥异（薄圆片 vs 元宝堆、尖锥 vs 兽形）；
-         *   第 7~9 件同色系再加码，压轴放吉祥物大鹅。
-         * 刻意排除两件：
+         *   后段同色系再加码，压轴放吉祥物大鹅。
+         * 刻意排除三件：
          *   pingankou 与干扰物 rock 同为无彩灰（饱和度 0.02 / 0.01），只差明度，堆里易误拿；
          *   （jingling 曾是另一个候选，但属宝可梦商标件，已从仓库删除，见 CREDITS.md。）
+         *   baicai 的网格是一堆互不相连的叶片碎片（5000 面却有 8633 顶点），没有共享边可塌，
+         *   减面只能整片删三角形、直接穿洞，而原版本身也只是团碎绿片、从来没成形——
+         *   减不了也救不回，已连模型带图标一并删除。它原先占 slice(0,4) 的浅绿高明度位，
+         *   现由 yuzhuo（浅绿玉镯）从后段提上来补位，四色分明的设计不变。
+         * 因此本族只有 8 件：第 3 关 pick(9) 实际取满 8 种 × 2 组 = 48 件（原 54 件）。
+         * 若要补回第 9 件，从 assets/models-pool/ 提候选（mile / yushi / banzhi）。
          */
-        family: ['yuanbao', 'bracelet', 'baicai', 'pixiu',
-                 'tongqian', 'baoshi', 'yuzhuo', 'hulu', 'goose'],
+        family: ['yuanbao', 'bracelet', 'yuzhuo', 'pixiu',
+                 'tongqian', 'baoshi', 'hulu', 'goose'],
     },
 ];
 

@@ -10,7 +10,6 @@
  * 不在打包范围内（resources/ 才全量打包），登记了也加载不到，故不列入。
  */
 export const MODEL_PREFAB_UUID: Record<string, string> = {
-    baicai: '3b67ff3a-fbff-4dd5-bc23-f71757a9dbc5@d8820',
     bracelet: 'ac6876d0-1eaa-425a-9859-d2251403e912@858f2',
     goose: '7c43be91-cccc-4976-b9ee-4422807168ec@438ee',
     hulu: '2c80e844-c110-422e-8b97-50c13e042c0f@8c7e8',
