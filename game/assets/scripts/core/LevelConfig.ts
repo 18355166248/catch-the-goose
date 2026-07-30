@@ -87,8 +87,12 @@ export function getActiveTheme(): Theme {
 export function buildLevels(family: string[]): LevelDef[] {
     const pick = (n: number) => family.slice(0, Math.min(n, family.length));
     return [
-        // 第 1 关·送温暖：4 种强对比 × 2 组 = 24 件 / 255s（~10.6s/件），教学关不添堵（无障碍物）
-        { items: pick(4), groupsPerItem: 2, timeSec: 255, seed: 104729 },
+        // 第 1 关·送温暖：4 种强对比 × 3 组 = 36 件 / 255s（~7.1s/件），教学关不添堵（无障碍物）
+        // 3 组而非 2 组是**观感**要求：24 件铺不满 2.70×2.84 的筐底（实测筐内覆盖率仅
+        // 46%，薄薄一层、露出大半藤编），而件的大小已按容器反解、不能再靠放大来凑
+        // （放大到能填满时单件宽达筐宽的 37%，读作"几个大球"）。36 件覆盖率 53%、
+        // 堆顶中位 1.38 仍在筐内。种类仍是 4 种，每件仍有 7 秒余量，难度基本不变。
+        { items: pick(4), groupsPerItem: 3, timeSec: 255, seed: 104729 },
         // 第 2 关·正常：6 种 × 2 组 = 36 件 / 200s（~5.6s/件），引入同色系 + 1 块石头
         { items: pick(6), groupsPerItem: 2, timeSec: 200, seed: 130363, distractors: 1 },
         // 第 3 关·地狱：9 种 × 2 组 = 54 件 / 165s（~3.1s/件），手速+决策双压 + 2 块石头
