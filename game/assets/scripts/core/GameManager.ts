@@ -207,6 +207,12 @@ export class GameManager extends Component {
      * 再低则件几乎在堆顶生成、直接架上去。存在最优区间,2.6 在里面。
      */
     private static readonly PILE_SPAWN_Y = 2.6;
+    /** 金鹅彩蛋复用大鹅模型，只改材质与尺寸（见 paintGolden）。 */
+    private static readonly GOLDEN_ID = 'goose';
+    /** 金鹅奖励：加时（秒）。取 20——够抢救一次开局失速，又不足以把一关白送。 */
+    private static readonly GOLDEN_BONUS_SEC = 20;
+    /** 金鹅奖励：加分。与一次 3 连击的量级相当，让"挖到"这件事值回挖它花的时间。 */
+    private static readonly GOLDEN_BONUS_SCORE = 300;
     /** 逐件投放间隔(秒/件):越小灌入越快、总时长越短,但同时在场刚体更多、穿插更深。
      *  0.03→0.05:同帧在场的动态刚体更少,求解器有余量把相邻件分开,少锁死互插。 */
     private static readonly SPAWN_INTERVAL = 0.05;
@@ -365,9 +371,16 @@ export class GameManager extends Component {
         this.scheduleOnce(() => this.showHint(), 2.2);
     }
 
-    /** 本关需加载的 prefab id：物件族 +（本关有障碍物时）石头。 */
+    /** 本关需加载的 prefab id：物件族 +（有障碍物时）石头 +（有彩蛋时）金鹅。 */
     private levelPrefabIds(): string[] {
-        return this.level.distractors ? [...this.level.items, DISTRACTOR_ID] : this.level.items;
+        const ids = this.level.distractors ? [...this.level.items, DISTRACTOR_ID] : [...this.level.items];
+        // 金鹅用的 goose 模型不一定在本关的 items 里——水果族的 goose 排在第 9 位，
+        // 只有第 3 关 pick(9) 才含它。不显式补进来，第 2 关的 prefabs.get('goose')
+        // 就是 undefined，金鹅会**静默**不生成（没有报错，只是彩蛋消失）。
+        if (this.level.goldenGoose && !ids.includes(GameManager.GOLDEN_ID)) {
+            ids.push(GameManager.GOLDEN_ID);
+        }
+        return ids;
     }
 
     /** 首次进入关卡的统一入口：确认有次数后再扣减、加载和生成。 */
@@ -788,6 +801,12 @@ export class GameManager extends Component {
             for (let i = 0; i < nRock; i++) queue.push(DISTRACTOR_ID);
             this.shuffleInPlace(queue, () => this.levelRandom());
         }
+        // 金鹅彩蛋：**unshift 而不是 push**，它必须第一个投放才会落在堆的最底层
+        // （pileSeedPoint 按 index 分层，index 0 就是第 0 层）。放在这里而不是更早，
+        // 是为了不被上面那次 shuffle 打散位置，也不影响已定好的 totalCount——
+        // 金鹅不计入胜利判定，挖不到它照样能通关。
+        const wantGolden = !!this.level.goldenGoose && !!this.prefabs.get(GameManager.GOLDEN_ID);
+        if (wantGolden) queue.unshift(GameManager.GOLDEN_ID);
         // 件的大小由「铺满筐底 PILE_TARGET_LAYERS 层」反解：N 件均分筐底面积，
         // 每件分到 area/N × 层数，开方即占地宽，除以占地宽系数得缩放。
         // 于是换容器（圆碗 vs 方筐）、改件数都不用再手调缩放，满度自动一致。
@@ -822,6 +841,11 @@ export class GameManager extends Component {
 
                 const tag = n.addComponent(ItemTag);
                 tag.id = id;
+                // 队首那一只（且本关开了彩蛋）就是金鹅：染金 + 略放大，挖出来时一眼认得出。
+                if (wantGolden && index === 0) {
+                    tag.golden = true;
+                    GameManager.paintGolden(n);
+                }
                 const rb = n.addComponent(RigidBody);
                 rb.mass = 0.85 + (idx % 3) * 0.1;
                 // 低阻尼 = 真实自由落体。旧值 0.92/0.97 像掉进糖浆，
@@ -1167,6 +1191,31 @@ export class GameManager extends Component {
         }
     }
 
+    /**
+     * 把一只普通大鹅染成金鹅：材质转金 + 略放大。
+     *
+     * 必须走 materialInstance（`mr.material` 的 getter 会自动实例化）而不是
+     * sharedMaterial——glb 里同一份材质被这一关所有大鹅共用，改 shared 会把
+     * 普通鹅一起染金。属性名按 builtin-standard / builtin-unlit 两套都试一遍：
+     * 不同 glb 导出的 shader 不一定相同，试错比假定安全。
+     */
+    private static paintGolden(root: Node) {
+        const gold = new Color(255, 205, 74);
+        for (const mr of root.getComponentsInChildren(MeshRenderer)) {
+            const count = mr.sharedMaterials.length || 1;
+            for (let i = 0; i < count; i++) {
+                const mat = mr.getMaterialInstance(i);
+                if (!mat) continue;
+                for (const prop of ['albedo', 'mainColor', 'diffuseColor']) {
+                    try { mat.setProperty(prop, gold); } catch { /* 该 shader 无此属性 */ }
+                }
+                try { mat.setProperty('emissive', new Color(120, 82, 12)); } catch { /* 同上 */ }
+            }
+        }
+        const s = root.scale;
+        root.setScale(s.x * 1.18, s.y * 1.18, s.z * 1.18);
+    }
+
     /** 限制初始倾斜，避免钱币/玉环直立后高速翻滚造成旋转穿透。 */
     private setNaturalRotation(node: Node, id: string, random: () => number = Math.random) {
         const flat = id === 'banzhi' || id === 'bracelet' || id === 'pingankou'
@@ -1260,6 +1309,13 @@ export class GameManager extends Component {
         node.getComponent(RigidBody)!.enabled = false;
         node.getComponent(Collider)!.enabled = false;
 
+        // 金鹅走完全另一条路：不进暂存槽、不参与三消、不计完成度，就地结算奖励后消失。
+        // 进槽是绝对不能做的——它只有一只，永远配不齐，彩蛋会变成"占掉一格"的惩罚。
+        if (tag.golden) {
+            this.collectGolden(node, removedPos, screenPos);
+            return;
+        }
+
         const { matched, full, index } = this.tray.add(tag.id, node);
         this.audio?.play(tag.id === 'goose' ? 'honk' : 'pick');
         this.hud?.pickBurst(screenPos);
@@ -1313,6 +1369,37 @@ export class GameManager extends Component {
             }
             this.checkDeadlock();
         }
+    }
+
+    /**
+     * 金鹅结算：加时 + 加分 + 一件随机道具，物件原地放大消失。
+     *
+     * 三样奖励都给而不是只给一样，是因为这只鹅平均要挖掉大半堆才见得到——
+     * 到手时通常已是后半局，单给分数感知太弱，单给道具又可能是玩家不缺的那个。
+     * 加时最直接（救回挖它花掉的时间），分数兑现"值得挖"，道具留作下一关的余量。
+     */
+    private collectGolden(node: Node, worldPos: Vec3, screenPos: Vec3) {
+        this.timeLeft += GameManager.GOLDEN_BONUS_SEC;
+        this.score += GameManager.GOLDEN_BONUS_SCORE;
+        const kinds: PropKind[] = ['remove', 'magnet', 'shuffle'];
+        this.grantProps({ [kinds[Math.floor(Math.random() * kinds.length)]]: 1 });
+
+        this.audio?.play('honk');
+        this.hud?.pickBurst(screenPos);
+        this.hud?.speechPop(screenPos, '金鹅！+20 秒');
+        this.hud?.toast(`挖到金鹅：+${GameManager.GOLDEN_BONUS_SEC} 秒 +${GameManager.GOLDEN_BONUS_SCORE} 分 +1 道具`);
+        this.updateHud();
+
+        // 原地放大再消失（而不是飞向槽位）——它没有归宿，视觉上必须和"收进槽"区分开。
+        tween(node)
+            .to(0.22, { scale: v3(node.scale.x * 1.5, node.scale.y * 1.5, node.scale.z * 1.5) },
+                { easing: 'backOut' })
+            .to(0.16, { scale: v3(0.05, 0.05, 0.05) }, { easing: 'quadIn' })
+            .call(() => node.isValid && node.destroy())
+            .start();
+
+        // 它原先垫在堆底，拿走后上面那摞要跟着塌一下。
+        this.jiggleAround(worldPos, this.settleNearRemoved(worldPos));
     }
 
     /**

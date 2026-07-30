@@ -8,6 +8,11 @@ export class ItemTag extends Component {
     id = '';
     picked = false;
     /**
+     * 金鹅彩蛋（见 LevelConfig.LevelDef.goldenGoose）。
+     * 拾取路径对它完全另走一套：不进暂存槽、不计入胜利判定、即时结算奖励。
+     */
+    golden = false;
+    /**
      * 连续"困在锚点小 blob 内"的巡检周期计数:达到阈值即判定已停在原位、直接冻结。
      * 这是精简后**唯一**的逐件冻结判据(取代旧的 slow/rattle/pin/trail 多套启发式):
      * 用**锚点振幅**而非逐周期净位移——无论真静止还是被夹缝原地振荡(每拍抖几毫米、

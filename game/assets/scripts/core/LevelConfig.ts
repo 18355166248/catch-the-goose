@@ -22,6 +22,17 @@ export interface LevelDef {
      * 不计入胜利判定 → 误拿即长期占格，只能靠「移出」道具清掉，制造真实残局/爆槽风险。
      */
     distractors?: number;
+    /**
+     * 是否在堆底藏一只**金鹅**（彩蛋）。默认 false。
+     *
+     * 它不参与三消、不计入胜利判定、点到也不占暂存格——直接消失并即时给奖励。
+     * 这三条是设计上的硬要求：金鹅只有一只，若进了槽就永远配不齐，
+     * 彩蛋反而变成占格惩罚，玩家学会的会是"别碰那只鹅"。
+     *
+     * 投放时插在队列最前 → 落在堆的最底层，要挖开上面的件才见得到，
+     * 这正是"藏"的含义。第 1 关是教学关，不放。
+     */
+    goldenGoose?: boolean;
 }
 
 /** 障碍物 id（对应 resources/models/rock.glb）；跨主题通用，不属于任何物件族。 */
@@ -100,9 +111,11 @@ export function buildLevels(family: string[]): LevelDef[] {
         // 堆顶中位 1.38 仍在筐内。种类仍是 4 种，每件仍有 7 秒余量，难度基本不变。
         { items: pick(4), groupsPerItem: 3, timeSec: 255, seed: 104729 },
         // 第 2 关·正常：6 种 × 2 组 = 36 件 / 200s（~5.6s/件），引入同色系 + 1 块石头
-        { items: pick(6), groupsPerItem: 2, timeSec: 200, seed: 130363, distractors: 1 },
+        { items: pick(6), groupsPerItem: 2, timeSec: 200, seed: 130363, distractors: 1,
+          goldenGoose: true },
         // 第 3 关·地狱：9 种 × 2 组 = 54 件 / 165s（~3.1s/件），手速+决策双压 + 2 块石头
-        { items: pick(9), groupsPerItem: 2, timeSec: 165, seed: 155921, distractors: 2 },
+        { items: pick(9), groupsPerItem: 2, timeSec: 165, seed: 155921, distractors: 2,
+          goldenGoose: true },
     ];
 }
 
