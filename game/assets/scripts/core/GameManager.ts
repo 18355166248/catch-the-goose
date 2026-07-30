@@ -1298,17 +1298,10 @@ export class GameManager extends Component {
         mr.setSharedMaterial(GameManager.iceMat(), 0);
         mr.shadowCastingMode = MeshRenderer.ShadowCastingMode.OFF;
 
-        // 内层高光核：比外壳小、更实的一颗，两层叠加后边缘处 alpha 累积，
-        // 自然形成一圈更亮的轮廓——这是在无描边能力下让球读作"冰壳"而非"雾气"的办法。
-        // （试过在球面插小八面体当冰棱，实际尺寸下一律读作噪点/贴纸，已去掉。）
-        const core = new Node('iceCore');
-        core.setParent(ice);
-        core.layer = root.layer;
-        const cr = core.addComponent(MeshRenderer);
-        cr.mesh = utils.createMesh(primitives.sphere(r * 0.82, { segments: 16 }));
-        cr.setSharedMaterial(GameManager.frostMat(), 0);
-        cr.shadowCastingMode = MeshRenderer.ShadowCastingMode.OFF;
-
+        // 曾经在里面再套一颗 0.82 倍的实心球做边缘轮廓，效果是有，但两层 alpha
+        // 叠起来有效不透明度接近 0.7，物件被盖得认不出是什么——而"认得出被冻的是啥"
+        // 恰恰是玩家规划先消哪组的前提。识别度现在交给 HUD 的雪花标记，
+        // 冰壳只保留一层很淡的体积暗示。
         tag.iceNode = ice;
     }
 
@@ -1326,7 +1319,7 @@ export class GameManager extends Component {
         if (!GameManager._iceMat) {
             const m = new Material();
             m.initialize({ effectName: 'builtin-standard', technique: 1 });
-            m.setProperty('albedo', new Color(118, 190, 240, 128));
+            m.setProperty('albedo', new Color(150, 208, 245, 58));
             try { m.setProperty('roughness', 0.10); } catch { /* 属性名随版本 */ }
             try { m.setProperty('metallic', 0.25); } catch { /* 同上 */ }
             try { m.setProperty('emissive', new Color(26, 62, 92)); } catch { /* 同上 */ }
