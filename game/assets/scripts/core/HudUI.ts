@@ -315,7 +315,9 @@ export class HudUI {
             const { face } = this.makeDockButton(184, 80, 20, HudUI.INK_FACE,
                 { bottom: 20 }, align, () => onProp(kind), 5, 0.30, HudUI.GOLD_EDGE);
             this.propOpacity[kind] = face.addComponent(UIOpacity);
-            this.drawIcon(face, kind, 40, color, 0, 11);
+            // 44 而不是 40：设计稿里图标约占键高四成，40 只有三成三，显小。
+            // 再大就会压到下面 y=-25 的文字（图标半高 ±17px，文字上边界 -14）。
+            this.drawIcon(face, kind, 44, color, 0, 12);
             this.addLabel(face, text, 22, HudUI.INK_TEXT, 0, -25, true);
 
             // 角标：原先是暖红圆牌 + 奶白环，那抹高饱和红是整块 HUD 里最抢眼的东西，
@@ -1657,56 +1659,90 @@ export class HudUI {
                 break;
             }
             case 'remove': {
-                // 向上顶出的箭头（把物件移出槽）。杆宽 5U，与 pause 竖条同一重量级。
-                g.moveTo(0, 9 * U);
-                g.lineTo(-6.8 * U, 1.2 * U);
-                g.lineTo(6.8 * U, 1.2 * U);
+                // 从槽口向上顶出的物件。
+                //
+                // 旧版只有一支光秃秃的上箭头——"向上"这个符号谁都在用（上传、升级、
+                // 展开），读不出"把件从暂存槽里取出来"。补一只开口朝上的托槽当参照物，
+                // 箭头从槽口探出去，语义才落地。
+                // 箭头与杆一笔画成同一个多边形，避免两次 fill 在接缝处叠出深色。
+                g.moveTo(0, 10 * U);
+                g.lineTo(-6.4 * U, 3.2 * U);
+                g.lineTo(-2.6 * U, 3.2 * U);
+                g.lineTo(-2.6 * U, -2.2 * U);
+                g.lineTo(2.6 * U, -2.2 * U);
+                g.lineTo(2.6 * U, 3.2 * U);
+                g.lineTo(6.4 * U, 3.2 * U);
                 g.close();
-                g.roundRect(-2.5 * U, -9 * U, 5 * U, 10.8 * U, 1.2 * U);
+                // 托槽：底 + 两片侧壁，开口朝上。不画成闭合方框——闭框读作"存进去"，
+                // 缺口朝上才读作"从这儿拿出来"。
+                g.roundRect(-8 * U, -9.4 * U, 16 * U, 3.2 * U, 1.3 * U);
+                g.roundRect(-8 * U, -9.4 * U, 3 * U, 7.6 * U, 1.3 * U);
+                g.roundRect(5 * U, -9.4 * U, 3 * U, 7.6 * U, 1.3 * U);
                 g.fill();
                 break;
             }
             case 'magnet': {
-                // U 形马蹄磁铁（开口朝上），两极各带一段极靴。
-                // 画成实心而不是粗描边：描边版在小尺寸下就是一个字母 U，读不出磁铁。
-                const ro = 8 * U, ri = 4 * U, top = 8 * U;
+                // 马蹄磁铁，开口**朝下**，两枚极头与臂之间留出空隙。
+                //
+                // 旧版开口朝上、极靴又贴在臂的内侧末端与臂重合，轮廓合起来就是一个
+                // 字母 U——画得再细也读不出磁铁。磁铁的识别全靠"两根臂 + 两枚更宽的
+                // 极头"这个分段关系，单色下只能靠**留空隙**把极头从臂上断开来表达。
+                const ro = 7.6 * U, ri = 3.9 * U;
+                const armEnd = -4.2 * U;          // 臂向下收到这里
                 const seg = 18;
-                g.moveTo(-ro, top);
-                g.lineTo(-ro, 0);
-                for (let i = 0; i <= seg; i++) {          // 外弧，从左到右走下半圈
-                    const a = Math.PI + (Math.PI * i) / seg;
+                g.moveTo(-ro, armEnd);
+                for (let i = 0; i <= seg; i++) {  // 外弧：走上半圈
+                    const a = Math.PI - (Math.PI * i) / seg;
                     g.lineTo(Math.cos(a) * ro, Math.sin(a) * ro);
                 }
-                g.lineTo(ro, top);
-                g.lineTo(ri, top);
-                g.lineTo(ri, 0);
-                for (let i = seg; i >= 0; i--) {          // 内弧原路折回
-                    const a = Math.PI + (Math.PI * i) / seg;
+                g.lineTo(ro, armEnd);
+                g.lineTo(ri, armEnd);
+                for (let i = seg; i >= 0; i--) {  // 内弧原路折回
+                    const a = Math.PI - (Math.PI * i) / seg;
                     g.lineTo(Math.cos(a) * ri, Math.sin(a) * ri);
                 }
-                g.lineTo(-ri, top);
+                g.lineTo(-ri, armEnd);
                 g.close();
                 g.fill();
-                // 两极的极靴：磁铁之所以一眼是磁铁靠的就是这两块，必须比臂宽、
-                // 向两侧探出去，否则和臂完全重合，整枚图标就只是个字母 U。
-                const shoeW = (ro - ri) * 1.6, shoeH = 3.2 * U;
+                // 两枚极头：比臂宽，且与臂末端隔开 1.2U 的空隙
+                const poleW = (ro - ri) * 1.75, poleH = 3.9 * U;
                 const armMid = (ro + ri) / 2;
                 for (const sx of [-armMid, armMid]) {
-                    g.roundRect(sx - shoeW / 2, top - shoeH, shoeW, shoeH, 0.8 * U);
+                    g.roundRect(sx - poleW / 2, armEnd - 1.2 * U - poleH, poleW, poleH, 0.7 * U);
                 }
                 g.fill();
                 break;
             }
             case 'shuffle': {
-                // 两条交叉箭头。
+                // 通用 shuffle 符号：两条交叉的**弯**路径 + 右端箭头。
+                //
+                // 旧版是两条笔直的对角线交叉，那个形状读作"叉 / 关闭 / 错误"，
+                // 而不是"重新洗一遍"。弯路径带出"两条线各自换到对方那一侧"的过程感，
+                // 这正是打乱要表达的动作。
+                // 线宽用 STROKE 而不是 HAIR：另外两枚道具图标是实心 fill，
+                // 描边版在 40px 的实际显示尺寸下轻得多，三枚并排一眼就不匀。
                 g.lineWidth = STROKE;
-                const R = 9 * U, H = 6 * U, a = 4 * U;
-                g.moveTo(-R, -H); g.lineTo(R, H);
-                g.moveTo(-R, H); g.lineTo(R, -H);
-                g.moveTo(R, H); g.lineTo(R - a, H);
-                g.moveTo(R, H); g.lineTo(R, H - a);
-                g.moveTo(R, -H); g.lineTo(R - a, -H);
-                g.moveTo(R, -H); g.lineTo(R, -H + a);
+                const x0 = -9 * U, x1 = 5.6 * U, yy = 5 * U;
+                // 下路：完整的一条，从左下走到右上
+                g.moveTo(x0, -yy);
+                g.bezierCurveTo(-3 * U, -yy, 1 * U, yy, x1, yy);
+                // 上路：在交叉点处**断开**，让下路从缺口里穿过去。
+                // 不留这个缺口时两条线在中点叠成一个实心结，整枚图标又读回"X / 关闭"；
+                // 过桥缺口才让人看出是两条路径交错换位。交叉点由对称性落在
+                // (-1.2U, 0)，缺口就开在它两侧各约 1.6U。
+                // 两段的控制点不是手调的，是把整条曲线按 de Casteljau 在 t=0.40 / 0.60
+                // 精确切开得到的——手给控制点时断口两侧不在同一条曲线走向上，
+                // 右半段会读成一根独立的断线而不是"被挡住的那一段"。
+                // 缺口实长 4.07U，配 3U 线宽两侧各余 0.5U；线宽改动时这两个 t 要一起调，
+                // 缺口小于线宽就糊成实心结，大过两倍就读作断线。
+                g.moveTo(x0, yy);
+                g.bezierCurveTo(-6.6 * U, yy, -4.52 * U, 3.4 * U, -2.59 * U, 1.48 * U);
+                g.moveTo(0.20 * U, -1.48 * U);
+                g.bezierCurveTo(2.02 * U, -3.4 * U, 3.76 * U, -yy, x1, -yy);
+                // 两枚箭头：开口朝左的 V，和路径同一次 stroke
+                const a = 3.6 * U;
+                g.moveTo(x1 - a, yy - a * 0.72); g.lineTo(x1, yy); g.lineTo(x1 - a, yy + a * 0.72);
+                g.moveTo(x1 - a, -yy - a * 0.72); g.lineTo(x1, -yy); g.lineTo(x1 - a, -yy + a * 0.72);
                 g.stroke();
                 break;
             }
