@@ -8,7 +8,8 @@ import { SKINS } from './SceneSkin';
 export type PropKind = 'remove' | 'magnet' | 'shuffle';
 
 /** UI 矢量图标种类（不依赖字体，见 HudUI.drawGlyph）。 */
-type IconKind = PropKind | 'pause' | 'play' | 'palette' | 'star' | 'sound-on' | 'sound-off';
+type IconKind = PropKind | 'pause' | 'play' | 'palette' | 'star' | 'sound-on' | 'sound-off'
+    | 'stopwatch';
 
 type HorizontalAlign = { left?: number; right?: number; centerX?: boolean };
 
@@ -50,7 +51,7 @@ export class HudUI {
      */
     private static readonly INK_FACE = new Color(31, 38, 33);
     private static readonly INK_DEEP = new Color(20, 25, 21);
-    private static readonly GOLD_EDGE = new Color(214, 181, 112);
+    private static readonly GOLD_EDGE = new Color(227, 195, 124);
     private static readonly INK_TEXT = new Color(240, 237, 226);
     private static readonly GOLD_TEXT = new Color(219, 188, 122);
 
@@ -181,13 +182,16 @@ export class HudUI {
         }
 
         // 计时牌和细进度条，缩小存在感，把视觉主舞台让给 3D 容器。
-        const timerShadow = this.makePanel(166, 58, 27, new Color(14, 19, 16, 185), { top: 25 }, 0);
+        const timerShadow = this.makePanel(190, 58, 27, new Color(14, 19, 16, 185), { top: 25 }, 0);
         timerShadow.setPosition(0, -5, 0);
-        const timerPanel = this.makePanel(160, 54, 25,
+        const timerPanel = this.makePanel(184, 54, 25,
             new Color(HudUI.INK_FACE.r, HudUI.INK_FACE.g, HudUI.INK_FACE.b, 236), { top: 22 }, 0,
             HudUI.GOLD_EDGE, 2);
         this.timerPanel = timerPanel;
-        this.timerLabel = this.addLabel(timerPanel, '0:00', 34, HudUI.INK_TEXT, 0, 0, true);
+        // 秒表图标 + 数字左右并排（设计稿）。牌宽 160 → 184 才容得下两者，
+        // 否则数字被挤到贴边，读作"排版没对齐"。
+        this.drawIcon(timerPanel, 'stopwatch', 31, HudUI.INK_TEXT, -49, 1);
+        this.timerLabel = this.addLabel(timerPanel, '0:00', 34, HudUI.INK_TEXT, 17, 0, true);
 
         // 右上关卡标牌,与左上暂停键对称。
         const levelPanel = this.makePanel(112, 52, 16,
@@ -200,7 +204,7 @@ export class HudUI {
         const W = HudUI.PROGRESS_W;
         const progPanel = this.makePanel(W, 24, 12,
             new Color(HudUI.INK_DEEP.r, HudUI.INK_DEEP.g, HudUI.INK_DEEP.b, 212), { top: 88 }, 0,
-            new Color(HudUI.GOLD_EDGE.r, HudUI.GOLD_EDGE.g, HudUI.GOLD_EDGE.b, 150), 1);
+            new Color(HudUI.GOLD_EDGE.r, HudUI.GOLD_EDGE.g, HudUI.GOLD_EDGE.b, 195), 1.5);
         const fillNode = new Node('progressFill');
         fillNode.layer = Layers.Enum.UI_2D;
         fillNode.setParent(progPanel);
@@ -230,10 +234,10 @@ export class HudUI {
         this.progressLabel = this.addLabel(progPanel, '0%', 17, cream, 0, 0, true);
 
         // 得分牌：与进度条同一行，贴在它左侧的空白带里（不与左上两枚圆键重叠）。
-        const scorePanel = this.makePanel(130, 30, 15,
-            new Color(HudUI.INK_DEEP.r, HudUI.INK_DEEP.g, HudUI.INK_DEEP.b, 212), { top: 85 }, 0,
-            new Color(HudUI.GOLD_EDGE.r, HudUI.GOLD_EDGE.g, HudUI.GOLD_EDGE.b, 150), 1, { left: 96 });
-        this.scoreLabel = this.addLabel(scorePanel, '得分 0', 19, HudUI.GOLD_TEXT, 0, 0, true);
+        const scorePanel = this.makePanel(130, 24, 12,
+            new Color(HudUI.INK_DEEP.r, HudUI.INK_DEEP.g, HudUI.INK_DEEP.b, 212), { top: 88 }, 0,
+            new Color(HudUI.GOLD_EDGE.r, HudUI.GOLD_EDGE.g, HudUI.GOLD_EDGE.b, 195), 1.5, { left: 96 });
+        this.scoreLabel = this.addLabel(scorePanel, '得分 0', 18, HudUI.GOLD_TEXT, 0, 0, true);
 
         // 连击牌：贴在得分牌正下方，倍率 + 一条走完即断连的倒计条。
         // 连击是本作唯一的加分放大器，此前只在飘字里闪一下就没了，
@@ -1461,8 +1465,13 @@ export class HudUI {
             const luma = (fill.r * 0.299 + fill.g * 0.587 + fill.b * 0.114) / 255;
             const k = Math.max(0, 0.62 - luma * 0.62);
             if (h >= 26 && h <= 150 && k > 0.05) {
-                const hi = HudUI.warm(HudUI.lighten(fill, 0.34), 0.2);
-                g.fillColor = new Color(hi.r, hi.g, hi.b, Math.round(fill.a * k));
+                // 往金边色混一半、alpha 再打六折。
+                // 原先是纯 lighten(fill) 的灰白条：墨绿底 luma 只有 0.14，k 算出来 0.53、
+                // alpha 到 136，在收集槽托盘上沿糊出一道很实的灰白胶带（而设计稿那里
+                // 只有金边）。混进金色后它与金边同色系，读作沿口的一道淡金反光。
+                const base = HudUI.warm(HudUI.lighten(fill, 0.34), 0.2);
+                const hi = HudUI.mix(base, HudUI.GOLD_EDGE, 0.45);
+                g.fillColor = new Color(hi.r, hi.g, hi.b, Math.round(fill.a * k * 0.6));
                 const inset = Math.max(2, r * 0.3);
                 g.roundRect(-w / 2 + inset, h / 2 - Math.max(2, h * 0.09) - 2,
                     w - inset * 2, Math.max(2, h * 0.09), Math.max(1, r * 0.25));
@@ -1698,6 +1707,28 @@ export class HudUI {
                 g.moveTo(R, H); g.lineTo(R, H - a);
                 g.moveTo(R, -H); g.lineTo(R - a, -H);
                 g.moveTo(R, -H); g.lineTo(R, -H + a);
+                g.stroke();
+                break;
+            }
+            case 'stopwatch': {
+                // 表盘 + 顶部表冠 + 两根指针，整枚只走一次 stroke（同一线宽），
+                // 与本文件其余图标"一次 fill 或一次 stroke"的约定一致。
+                // 表盘半径压到 7.6U 而不是满 9U：顶上还要留表冠，否则整枚图标
+                // 在 24 网格里顶出去，和相邻的数字基线对不齐。
+                g.lineWidth = HAIR;
+                const R = 7.6 * U, cy = -1.4 * U;
+                g.circle(0, cy, R);
+                // 表冠：一小段竖柄顶一道横帽
+                const top = cy + R;
+                g.moveTo(0, top);
+                g.lineTo(0, top + 2.1 * U);
+                g.moveTo(-2.5 * U, top + 2.1 * U);
+                g.lineTo(2.5 * U, top + 2.1 * U);
+                // 指针：12 点长针 + 3 点短针，读作"正在走"
+                g.moveTo(0, cy);
+                g.lineTo(0, cy + 4.6 * U);
+                g.moveTo(0, cy);
+                g.lineTo(3.4 * U, cy);
                 g.stroke();
                 break;
             }
