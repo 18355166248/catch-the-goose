@@ -69,6 +69,13 @@ export class GameManager extends Component {
     private interactionLocked = false;
     /** 各关历史最佳:{ [levelIndex]: { stars, progress, score } } */
     private best: Record<number, BestRecord> = {};
+    /**
+     * 当前仍冰封的件。缓存成列表而不是每帧 getComponentsInChildren——
+     * 雪花标记要逐帧跟位置（件会因下方被拿走而沉降），56 件的组件遍历每帧做一次不划算。
+     */
+    private frozenTags: ItemTag[] = [];
+    /** 上一帧是否画着雪花：用来在列表清空的那一帧补一次清除调用。 */
+    private frostMarksShown = false;
     /** 本局是否已经提示过冰封机制。同石头，只说一次。 */
     private frozenWarned = false;
     /** 本局是否已经提示过石头。石头是唯一「拿了就亏」的物件,但只提示一次,别唠叨。 */
@@ -442,6 +449,7 @@ export class GameManager extends Component {
     update(dt: number) {
         this.background?.sync();
         this.hud?.sync();
+        this.syncFrostMarks();
         if (!this.playing || this.paused) return;
         // 手机切后台/浏览器标签页恢复时可能一次传入数百秒 dt；游戏计时应近似暂停，
         // 不能因为系统挂起而瞬间耗尽。物理仍由 fixedTimeStep + maxSubSteps 独立求解。
@@ -902,7 +910,10 @@ export class GameManager extends Component {
                 // 冰壳必须加在 centerVisualAndFitCollider **之后**：它是子节点上的
                 // MeshRenderer，而碰撞体正是按 measureLocalAabb 量出的渲染包围盒生成的，
                 // 先加壳会把碰撞体一起撑大 18%，冰封件之间凭空多出一圈间隙。
-                if (tag.frozen) this.addIceShell(n, tag);
+                if (tag.frozen) {
+                    this.addIceShell(n, tag);
+                    this.frozenTags.push(tag);
+                }
                 this.setNaturalRotation(n, id, () => this.levelRandom());
                 rb.setLinearVelocity(v3(
                     (this.levelRandom() - 0.5) * 0.2,
@@ -1342,6 +1353,8 @@ export class GameManager extends Component {
     private thawItem(tag: ItemTag) {
         if (!tag.frozen || !tag.node.isValid) return;
         tag.frozen = false;
+        const at = this.frozenTags.indexOf(tag);
+        if (at >= 0) this.frozenTags.splice(at, 1);
         const ice = tag.iceNode;
         tag.iceNode = null;
         if (ice && ice.isValid) {
@@ -1356,6 +1369,31 @@ export class GameManager extends Component {
             .to(0.12, { scale: v3(s.x * 1.22, s.y * 1.22, s.z * 1.22) }, { easing: 'quadOut' })
             .to(0.14, { scale: s }, { easing: 'backOut' })
             .start();
+    }
+
+    /**
+     * 把冰封件的屏幕坐标推给 HUD 画雪花。每帧调用——件会因下方被拿走而沉降，
+     * 标记必须跟着走，否则会飘在空处。
+     * 列表空时也要调一次（传空数组），否则最后一片雪花在解冻后留在屏幕上。
+     */
+    private syncFrostMarks() {
+        if (!this.hud || !this.cam) return;
+        if (!this.frozenTags.length) {
+            if (this.frostMarksShown) {
+                this.hud.setFrostMarks([]);
+                this.frostMarksShown = false;
+            }
+            return;
+        }
+        const marks: { key: string; screenPos: Vec3 }[] = [];
+        for (const t of this.frozenTags) {
+            if (!t.node.isValid || t.picked || !t.frozen) continue;
+            const sp = v3();
+            this.cam.worldToScreen(t.node.worldPosition, sp);
+            marks.push({ key: t.node.uuid, screenPos: sp });
+        }
+        this.hud.setFrostMarks(marks);
+        this.frostMarksShown = true;
     }
 
     /** 化开离 center 最近的 n 件冰封物件；返回实际化开的数量。 */
@@ -1888,6 +1926,8 @@ export class GameManager extends Component {
         this.loseReason = '';
         this.rockWarned = false;
         this.frozenWarned = false;
+        this.frozenTags = [];
+        this.hud?.clearFrostMarks();
         this.interactionLocked = false;
         this.hud?.hideResult();
         this.hud?.hidePauseMenu();

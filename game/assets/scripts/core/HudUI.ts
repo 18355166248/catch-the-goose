@@ -9,7 +9,7 @@ export type PropKind = 'remove' | 'magnet' | 'shuffle';
 
 /** UI 矢量图标种类（不依赖字体，见 HudUI.drawGlyph）。 */
 type IconKind = PropKind | 'pause' | 'play' | 'palette' | 'star' | 'sound-on' | 'sound-off'
-    | 'stopwatch';
+    | 'stopwatch' | 'snowflake';
 
 type HorizontalAlign = { left?: number; right?: number; centerX?: boolean };
 
@@ -70,6 +70,9 @@ export class HudUI {
     progressLabel!: Label;
     msgLabel!: Label;
     subMsgLabel!: Label;
+
+    /** 冰封件头上的雪花标记，key = 物件节点 uuid。 */
+    private frostMarks = new Map<string, Node>();
 
     private uiCam!: Camera;
     private canvasUT!: UITransform;
@@ -594,6 +597,44 @@ export class HudUI {
     clearHint() {
         if (this.hintRoot?.isValid) this.hintRoot.destroy();
         this.hintRoot = null;
+    }
+
+    /**
+     * 冰封标记：每个冰封件头上盖一片雪花。
+     *
+     * 按 key 做**增量**维护而不是每次清空重建：这个方法每帧都被调用，
+     * 重建会让雪花的呼吸动画每帧从头开始（看着是死的），节点churn 也白费。
+     * 传入列表里没有的 key 即已解冻/已拿走，销毁对应节点。
+     */
+    setFrostMarks(marks: { key: string; screenPos: Vec3 }[]) {
+        const alive = new Set<string>();
+        for (const { key, screenPos } of marks) {
+            alive.add(key);
+            let n = this.frostMarks.get(key);
+            if (!n || !n.isValid) {
+                n = new Node('frostMark');
+                n.layer = Layers.Enum.UI_2D;
+                n.setParent(this.contentRoot);
+                HudUI.drawGlyph(n.addComponent(Graphics), 'snowflake', 42,
+                    new Color(214, 244, 255, 255));
+                // 轻微呼吸，让它在静止的堆里也能被余光捕捉到
+                tween(n).repeatForever(tween(n)
+                    .to(0.9, { scale: v3(1.12, 1.12, 1) }, { easing: 'sineInOut' })
+                    .to(0.9, { scale: v3(1, 1, 1) }, { easing: 'sineInOut' })).start();
+                this.frostMarks.set(key, n);
+            }
+            n.setPosition(this.screenToContent(screenPos));
+        }
+        for (const [key, n] of this.frostMarks) {
+            if (alive.has(key)) continue;
+            if (n.isValid) n.destroy();
+            this.frostMarks.delete(key);
+        }
+    }
+
+    clearFrostMarks() {
+        for (const [, n] of this.frostMarks) if (n.isValid) n.destroy();
+        this.frostMarks.clear();
     }
 
     /**
@@ -1765,6 +1806,29 @@ export class HudUI {
                 g.lineTo(0, cy + 4.6 * U);
                 g.moveTo(0, cy);
                 g.lineTo(3.4 * U, cy);
+                g.stroke();
+                break;
+            }
+            case 'snowflake': {
+                // 六枝雪花：主枝 + 每枝两对小分叉，整枚一次 stroke。
+                // 分叉必须有——只有六条直线时在小尺寸下读作星芒/太阳，
+                // 分叉才是"雪花"的识别特征。
+                g.lineWidth = HAIR;
+                const R = 9.2 * U;
+                for (let i = 0; i < 6; i++) {
+                    const a = (Math.PI / 3) * i;
+                    const cx = Math.cos(a), cy = Math.sin(a);
+                    g.moveTo(0, 0);
+                    g.lineTo(cx * R, cy * R);
+                    for (const [at, len] of [[0.52, 0.30], [0.78, 0.22]] as const) {
+                        const bx = cx * R * at, by = cy * R * at;
+                        for (const da of [0.62, -0.62]) {
+                            g.moveTo(bx, by);
+                            g.lineTo(bx + Math.cos(a + da) * R * len,
+                                     by + Math.sin(a + da) * R * len);
+                        }
+                    }
+                }
                 g.stroke();
                 break;
             }
