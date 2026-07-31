@@ -39,15 +39,29 @@ export interface WallSpec {
 export interface BoundaryDef {
     wall: BoundaryShape;
     clamp: BoundaryShape;
+    /**
+     * 竖向剖面：世界 y → 该高度处容器的**内壁半径**。只对圆容器有意义，省略即竖直墙。
+     *
+     * 为什么需要它：碗是上宽下窄的曲面，而围栏历来是一根固定半径的竖直圆柱。
+     * 实测 bowl_jade（缩放后碗沿 y=1.43）的内半径是
+     *   y=0.09 → 0.87 ／ 0.27 → 1.30 ／ 0.54 → 1.50 ／ 0.81 → 1.63 ／ 1.34 → 1.87
+     * 而围栏一律按 1.65 算 —— 碗底那一圈整整宽出 0.78，物件在低处能直接站到碗壁
+     * 外面去，正是"物件穿出碗壁"的根因。给了剖面后围栏改为逐层收窄，贴合真实内壁。
+     *
+     * 约定：按 y 升序；最低一段向下延伸到围栏底，最高一段向上延伸到围栏顶。
+     */
+    profile?: { y: number; radius: number }[];
 }
 
 export class ContainerBoundary {
     readonly wall: BoundaryShape;
     readonly clamp: BoundaryShape;
+    readonly profile?: { y: number; radius: number }[];
 
     constructor(def: BoundaryDef) {
         this.wall = def.wall;
         this.clamp = def.clamp;
+        this.profile = def.profile;
     }
 
     get centerX(): number { return this.wall.cx; }
@@ -80,6 +94,10 @@ export class ContainerBoundary {
         if (s.kind === 'rect') {
             return Math.max(0.01, (s.halfX - inset) * 2) * Math.max(0.01, (s.halfZ - inset) * 2);
         }
+        // 注意这里**故意**用 wall.radius 而不是剖面里碗底那个小半径。
+        // 碗底真实面积只有 π×0.95²=2.84，按它反解件会缩到 0.615，件太小；
+        // 而设计上允许"装不下就往碗口上堆"，堆到碗沿附近时可用面积本就接近碗口，
+        // 1.65 正落在碗底 0.95 与碗沿 1.84 之间，作为整堆的代表值比两端都合适。
         const r = Math.max(0.01, s.radius - inset);
         return Math.PI * r * r;
     }
@@ -102,22 +120,44 @@ export class ContainerBoundary {
                 { name: 'fenceE', pos: v3(s.cx + s.halfX + WT / 2, y, s.cz), size: v3(WT, height, s.halfZ * 2), yawDeg: 0 },
             ];
         }
+        // 有剖面 → 逐层生成收窄的环墙（碗这类曲面容器）。每层只覆盖自己那段高度，
+        // 半径取该段的内壁值，堆起来就近似出碗的斜壁。
+        if (this.profile && this.profile.length) {
+            const prof = this.profile;
+            const yBot = y - height / 2, yTop = y + height / 2;
+            const out: WallSpec[] = [];
+            for (let k = 0; k < prof.length; k++) {
+                const segBot = k === 0 ? yBot : prof[k].y;
+                const segTop = k === prof.length - 1 ? yTop : prof[k + 1].y;
+                const segH = segTop - segBot;
+                if (segH <= 0) continue;
+                out.push(...this.ringSpecs(prof[k].radius, segH, segBot + segH / 2, WT, `L${k}`));
+            }
+            return out;
+        }
         // 圆壁：N 段薄墙沿半径 (radius + WT/2) 均布，内壁恰好落在 radius 上。
         // 段长 = 弧长 × 重叠系数，宁可相邻重叠也不留缝（缝会漏物件）。
         // 段数随半径自适应：半径越大越多段，逼近真圆——减小"多边形外凸"(内壁弦
         // 在段间凸出真圆之外，物件可被顶到弦外)与段间楔出缝。下限 28 保底。
-        const N = Math.max(28, Math.ceil(s.radius * 22));
-        const ringR = s.radius + WT / 2;
+        return this.ringSpecs(s.radius, height, y, WT, '');
+    }
+
+    /** 一圈切向环段。抽出来给分层剖面复用（每层半径不同）。 */
+    private ringSpecs(radius: number, height: number, y: number, WT: number,
+        tag: string): WallSpec[] {
+        const s = this.wall as { cx: number; cz: number };
+        const N = Math.max(28, Math.ceil(radius * 22));
+        const ringR = radius + WT / 2;
         // 重叠系数按**内壁**(半径 s.radius)处的弧长算，保证连内壁接缝都相互重叠、
         // 不给小件留缝；旧版按 ringR(外圈)算，内壁处重叠偏小仍可能被薄片钻缝。
-        const segLen = (2 * Math.PI * s.radius / N) * 1.8;
+        const segLen = (2 * Math.PI * radius / N) * 1.8;
         const specs: WallSpec[] = [];
         for (let i = 0; i < N; i++) {
             const theta = (i / N) * Math.PI * 2;
             const cos = Math.cos(theta);
             const sin = Math.sin(theta);
             specs.push({
-                name: `fenceRing${i}`,
+                name: `fenceRing${tag}_${i}`,
                 pos: v3(s.cx + cos * ringR, y, s.cz + sin * ringR),
                 // 盒体 length(局部 X) 对齐切向，depth(局部 Z) 沿半径向内。
                 // 绕 Y 旋转 φ 时局部 X→(cosφ,0,-sinφ)，令其等于切向(-sinθ,cosθ) 解得 φ=-(θ+90°)。

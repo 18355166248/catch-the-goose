@@ -65,6 +65,18 @@ export const SKINS: SceneSkin[] = [
         boundary: {
             wall: { kind: 'circle', cx: 0, cz: -0.88, radius: 1.65 },
             clamp: { kind: 'circle', cx: 0, cz: -0.88, radius: 1.85 },
+            // 碗是上宽下窄的曲面，竖直围栏在低处会宽出真实内壁一大截（碗底差 0.78），
+            // 物件能直接站到碗壁外面。这组半径量自 bowl_jade 的网格顶点
+            // （按 CONTAINER_SPAN=4.0 缩放、底坐 y=-0.35 换算到世界 y），
+            // 各段取该高度实测内半径再留 0.06 余量，免得件贴着壁面卡住。
+            profile: [
+                { y: 0.00, radius: 0.95 },
+                { y: 0.28, radius: 1.26 },
+                { y: 0.56, radius: 1.46 },
+                { y: 0.84, radius: 1.60 },
+                { y: 1.10, radius: 1.72 },
+                { y: 1.36, radius: 1.84 },
+            ],
         },
     },
     {
