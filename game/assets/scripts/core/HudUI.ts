@@ -27,7 +27,6 @@ const TRAY_ICON_LAYOUT: Record<string, TrayIconLayout> = {
     hulu: { offsetX: -0.5, offsetY: 0.5, contentW: 82, contentH: 118 },
     mile: { offsetX: -2, offsetY: 4.5, contentW: 109, contentH: 116 },
     pingankou: { offsetX: -0.5, offsetY: -0.5, contentW: 118, contentH: 66 },
-    pixiu: { offsetX: -5.5, offsetY: 5, contentW: 122, contentH: 119 },
     tongqian: { offsetX: -0.5, offsetY: -0.5, contentW: 118, contentH: 66 },
     yuzhuo: { offsetX: -0.5, offsetY: -0.5, contentW: 118, contentH: 68 },
 };
