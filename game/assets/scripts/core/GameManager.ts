@@ -1288,7 +1288,11 @@ export class GameManager extends Component {
         // 用**球**而不是立方体：俯视 45° 下立方体的大平面读作"包装盒"，还把物件挡住了；
         // 球贴合物件轮廓、边缘圆润，半透明时更像裹了一层冰。
         // 半径按包围盒最长边的一半略放，保证细长件（香蕉、玉镯）也整个裹进去。
-        const r = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z) * 0.5 * 1.12;
+        // 系数 1.12 → 1.34：想让"冻住了"更醒目时，**放大壳比提 alpha 划算**。
+        // 超出物件轮廓的那一圈是纯壳色、不叠在物件上，包裹感增强而遮挡不增加；
+        // 一味提 alpha 则会把物件冲淡（实测 a128 时紫手串已发白）。
+        // 但也不能再大：实测 1.4 倍时壳会罩住**相邻**物件，反而分不清冻的是哪一件。
+        const r = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z) * 0.5 * 1.34;
         const ice = new Node('ice');
         ice.setParent(root);
         ice.layer = root.layer;          // 与物件同层，否则相机剔除掉、整块壳看不见
@@ -1322,9 +1326,10 @@ export class GameManager extends Component {
             // alpha 取 88：这层壳的职责是"一眼看出这件点不动"，不是营造冰的质感
         // （质感交给 HUD 那片雪花）。三档实测（第 3 关，玉碗）：
         //   58  几乎看不见，等于没有"不可点击"的提示
-        //   88  蒙上一层看得出来，物件的颜色与形状仍清楚  ← 取这档
-        //   112 深色件（貔貅、葡萄）开始被冲淡，又回到"认不出是什么"的老问题
-        m.setProperty('albedo', new Color(150, 208, 245, 88));
+        //   88  蒙上一层看得出来，但配 1.12 倍的小壳仍不够醒目
+        //   100 配 1.34 倍的壳，轮廓清晰、物件仍可辨  ← 取这档
+        //   128 深色件（貔貅、葡萄、紫手串）开始被冲淡，回到"认不出是什么"的老问题
+        m.setProperty('albedo', new Color(150, 208, 245, 100));
             try { m.setProperty('roughness', 0.10); } catch { /* 属性名随版本 */ }
             try { m.setProperty('metallic', 0.25); } catch { /* 同上 */ }
             try { m.setProperty('emissive', new Color(26, 62, 92)); } catch { /* 同上 */ }
