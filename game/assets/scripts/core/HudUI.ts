@@ -615,14 +615,35 @@ export class HudUI {
                 n = new Node('frostMark');
                 n.layer = Layers.Enum.UI_2D;
                 n.setParent(this.contentRoot);
-                HudUI.drawGlyph(n.addComponent(Graphics), 'snowflake', 42,
-                    new Color(214, 244, 255, 255));
-                // 轻微呼吸，让它在静止的堆里也能被余光捕捉到
-                tween(n).repeatForever(tween(n)
-                    .to(0.9, { scale: v3(1.12, 1.12, 1) }, { easing: 'sineInOut' })
-                    .to(0.9, { scale: v3(1, 1, 1) }, { easing: 'sineInOut' })).start();
+
+                // 三层叠出层次：深色底 → 浅冰蓝主体 → 亮白芯。
+                // 单层纯白线条在堆里是"一枚贴上去的图标"，压在浅色物件（橙子、香蕉）
+                // 上还会糊掉；底层那圈深色描边是它在任何底色上都立得住的关键。
+                const layers: [number, Color][] = [
+                    [62, new Color(120, 200, 240, 62)],   // 光晕：把它从杂乱堆面上托起来
+                    [50, new Color(16, 48, 70, 215)],     // 深底：任何底色上都立得住
+                    [42, new Color(156, 218, 248, 255)],  // 主体
+                    [27, new Color(255, 255, 255, 255)],  // 亮芯
+                ];
+                for (const [size, color] of layers) {
+                    const g = new Node('layer');
+                    g.layer = Layers.Enum.UI_2D;
+                    g.setParent(n);
+                    HudUI.drawGlyph(g.addComponent(Graphics), 'snowflake', size, color);
+                }
+
+                // 自转而不是缩放呼吸：雪花自转是这个符号天然的运动，读作"结着冰"；
+                // 缩放脉动更像在提示"点我"，和它表达的"点不动"正好相反。
+                // 转一圈 9 秒——快到能察觉，慢到不抢视线。
+                tween(n).repeatForever(
+                    tween(n).by(9, { angle: -360 })
+                ).start();
                 this.frostMarks.set(key, n);
             }
+            // 就盖在物件正中。试过偏到左上角当徽章，但堆是密集的，偏移后那片雪花
+            // 会压在**相邻**物件上，看不出到底冻的是哪一件——归属不清比挡一点更糟。
+            // 而且遮挡本来就不是雪花的问题：它是线框、中间是空的，压在物件上照样
+            // 看得见底下的颜色和形状（当初"物件被盖住"说的是 3D 那层实心冰壳）。
             n.setPosition(this.screenToContent(screenPos));
         }
         for (const [key, n] of this.frostMarks) {
@@ -635,6 +656,31 @@ export class HudUI {
     clearFrostMarks() {
         for (const [, n] of this.frostMarks) if (n.isValid) n.destroy();
         this.frostMarks.clear();
+    }
+
+    /** 冰层化开：在该处炸开一小簇雪屑。给"化开"一个看得见的瞬间，而不是悄悄消失。 */
+    frostBreak(screenPos: Vec3) {
+        const root = new Node('frostBreak');
+        root.layer = Layers.Enum.UI_2D;
+        root.setParent(this.contentRoot);
+        root.setPosition(this.screenToContent(screenPos));
+        for (let i = 0; i < 7; i++) {
+            const a = (Math.PI * 2 * i) / 7 + Math.random() * 0.5;
+            const dist = 26 + Math.random() * 22;
+            const n = new Node('shard');
+            n.layer = Layers.Enum.UI_2D;
+            n.setParent(root);
+            HudUI.drawGlyph(n.addComponent(Graphics), 'snowflake', 13 + Math.random() * 7,
+                new Color(226, 246, 255, 255));
+            const op = n.addComponent(UIOpacity);
+            tween(n)
+                .to(0.44, { position: v3(Math.cos(a) * dist, Math.sin(a) * dist - 10, 0) },
+                    { easing: 'quadOut' })
+                .start();
+            tween(n).to(0.44, { angle: (Math.random() - 0.5) * 300 }).start();
+            tween(op).to(0.44, { opacity: 0 }, { easing: 'quadIn' }).start();
+        }
+        tween(root).delay(0.5).call(() => root.isValid && root.destroy()).start();
     }
 
     /**

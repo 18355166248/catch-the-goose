@@ -1348,6 +1348,13 @@ export class GameManager extends Component {
         tag.frozen = false;
         const at = this.frozenTags.indexOf(tag);
         if (at >= 0) this.frozenTags.splice(at, 1);
+        // 在雪花原地炸一簇雪屑。必须**在这里**取屏幕坐标——下一帧 syncFrostMarks
+        // 就会把这枚标记销毁，那时再算位置已经没有依据了。
+        if (this.cam && tag.node.isValid) {
+            const sp = v3();
+            this.cam.worldToScreen(tag.node.worldPosition, sp);
+            this.hud?.frostBreak(sp);
+        }
         const ice = tag.iceNode;
         tag.iceNode = null;
         if (ice && ice.isValid) {
