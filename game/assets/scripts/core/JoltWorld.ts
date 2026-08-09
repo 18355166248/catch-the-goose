@@ -1,5 +1,5 @@
 import { Node, Mesh, MeshRenderer, gfx, v3, Vec3, Quat, Mat4, geometry } from 'cc';
-import { loadJolt, JoltAPI } from '../lab/JoltLoader';
+import { loadJolt, JoltAPI } from './JoltLoader';
 
 /**
  * Jolt 物理世界（取代 Cocos 内置的 ammo/Bullet）。

@@ -57,11 +57,11 @@
             "_value": false
           },
           "physics": {
-            "_value": true,
+            "_value": false,
             "_option": "physics-ammo"
           },
           "physics-ammo": {
-            "_value": true,
+            "_value": false,
             "_flags": {
               "LOAD_BULLET_MANUALLY": false
             }
@@ -199,7 +199,6 @@
           "gfx-webgl",
           "gfx-webgl2",
           "graphics",
-          "physics-ammo",
           "primitive",
           "tween",
           "ui",

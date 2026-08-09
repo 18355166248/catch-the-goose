@@ -1,7 +1,6 @@
 import { director, Director, Node, Camera, DirectionalLight, Color, view, ResolutionPolicy, Layers } from 'cc';
 import { EDITOR } from 'cc/env';
 import { GameManager } from './GameManager';
-import { LabScene } from '../lab/LabScene';
 import { JoltProbe } from '../lab/JoltProbe';
 
 /**
@@ -102,25 +101,20 @@ if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
     const root = new Node('GameRoot');
     root.setParent(scene);
 
-    // 堆积实验场（?lab=1）：跑测用的对照组，与 GameManager **互斥**——两者都要接管
-    // 物理步进与相机，同时存在必然互相打架。相机与灯光沿用上面自建的那套，
-    // 正是 lab/shared/scenario.ts 里 CAMERA/LIGHT 的来源，三套 POC 构图因此一致。
     const query = new URLSearchParams(location.search);
 
-    // 可行性探针（?joltprobe=1）：验证 Cocos 能不能 import 并跑起 npm 里的 Jolt wasm。
-    // 这是「保留 Cocos 渲染 + Jolt 接管物理」的地基，验完即可连同 JoltProbe.ts 一起删。
+    // 自检探针（?joltprobe=1）：不加载玩法，只把 Jolt 的动词跑一遍，结果写进
+    // window.__joltProbe。留着是因为它是排查「wasm 在某台设备上起不来」的最短路径
+    // ——真机上物件不动时，先开这个看是 wasm 挂了还是玩法逻辑挂了。
     if (query.get('joltprobe') === '1') {
         root.addComponent(JoltProbe);
-        console.log('[Bootstrap] 进入 Jolt 可行性探针');
+        console.log('[Bootstrap] 进入 Jolt 自检探针');
         return;
     }
 
-    if (query.get('lab') === '1') {
-        root.addComponent(LabScene);
-        console.log('[Bootstrap] 进入堆积实验场（POC A · Cocos 对照组）');
-        return;
-    }
-
+    // 曾经这里还有个 ?lab=1 的堆积实验场（Cocos+Bullet 对照组）。它已随「关掉 Cocos
+    // 物理模块」一起移出构建，源码留在 lab/poc-a-cocos/ 作证据。要重跑对照组得把它
+    // 拷回 assets/ 并在 engine.json 里把 physics 打开——那会让包重新胖 0.63MB。
     const gm = root.addComponent(GameManager);
     gm.cam = cam;
     console.log('[Bootstrap] 自举完成，游戏开始');

@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = join(here, 'shared');
-const dst = join(here, '..', 'game', 'assets', 'scripts', 'lab');
+const dst = join(here, 'poc-a-cocos');
 
 const FILES = ['scenario.ts', 'metrics.ts', 'harness.ts'];
 
@@ -30,6 +30,6 @@ mkdirSync(dst, { recursive: true });
 for (const f of FILES) {
     const text = readFileSync(join(src, f), 'utf8');
     writeFileSync(join(dst, f), BANNER + text);
-    console.log(`同步 ${f} → game/assets/scripts/lab/${f}`);
+    console.log(`同步 ${f} → lab/poc-a-cocos/${f}`);
 }
 console.log('完成。');
