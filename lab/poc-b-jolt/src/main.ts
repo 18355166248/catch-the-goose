@@ -15,7 +15,7 @@ import type JoltNS from 'jolt-physics';
 
 import {
     BODY, CAMERA, CONTAINER, LIGHT, PHYSICS, ROUND_ITEMS, SCENARIOS, SPAWN,
-    allModelIds, ScenarioDef, SpawnPlanEntry, SpawnRandoms,
+    allModelIds, orthoExtents, ScenarioDef, SpawnPlanEntry, SpawnRandoms,
 } from '../../shared/scenario';
 import { BodySample } from '../../shared/metrics';
 import { EngineAdapter, runScenario } from '../../shared/harness';
@@ -122,17 +122,20 @@ class JoltAdapter implements EngineAdapter {
         this.scene.background = new THREE.Color(
             CAMERA.clearColor.r / 255, CAMERA.clearColor.g / 255, CAMERA.clearColor.b / 255);
 
-        const aspect = innerWidth / innerHeight;
-        const h = CAMERA.orthoHeight;
-        this.camera = new THREE.OrthographicCamera(-h * aspect, h * aspect, h, -h, 0.1, 100);
+        const e0 = orthoExtents(innerWidth / innerHeight);
+        this.camera = new THREE.OrthographicCamera(
+            -e0.halfWidth, e0.halfWidth, e0.halfHeight, -e0.halfHeight, 0.1, 100);
         this.camera.position.set(CAMERA.position.x, CAMERA.position.y, CAMERA.position.z);
         this.camera.rotation.set(
             THREE.MathUtils.degToRad(CAMERA.euler.x),
             THREE.MathUtils.degToRad(CAMERA.euler.y),
             THREE.MathUtils.degToRad(CAMERA.euler.z), 'YXZ');
+        // 调试钩子：真机 / 窄屏排查框取问题时直接读相机参数，省得靠截图猜。
+        (window as unknown as { __cam: THREE.OrthographicCamera }).__cam = this.camera;
         addEventListener('resize', () => {
-            const a = innerWidth / innerHeight;
-            this.camera.left = -h * a; this.camera.right = h * a;
+            const e = orthoExtents(innerWidth / innerHeight);
+            this.camera.left = -e.halfWidth; this.camera.right = e.halfWidth;
+            this.camera.top = e.halfHeight; this.camera.bottom = -e.halfHeight;
             this.camera.updateProjectionMatrix();
             this.renderer.setSize(innerWidth, innerHeight, false);
         });

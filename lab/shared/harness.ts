@@ -197,7 +197,10 @@ function makeHud(title: string) {
             'position:fixed', 'left:8px', 'top:8px', 'z-index:99',
             'font:12px/1.5 ui-monospace,Menlo,monospace', 'color:#eee',
             'background:rgba(0,0,0,.62)', 'padding:8px 10px', 'border-radius:6px',
-            'white-space:pre', 'pointer-events:auto',
+            // pre-wrap + 限宽：真机竖屏只有 375 逻辑像素，用 pre 会让整块 HUD 溢出屏幕
+            // 右侧，帧率那一行正好被切掉——而那是真机跑分唯一要读的数。
+            'white-space:pre-wrap', 'max-width:calc(100vw - 32px)',
+            'box-sizing:border-box', 'pointer-events:auto',
         ].join(';');
         document.body.appendChild(el);
     }

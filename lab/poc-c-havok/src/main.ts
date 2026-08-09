@@ -45,7 +45,7 @@ import HavokPhysics from '@babylonjs/havok';
 
 import {
     BODY, CAMERA, CONTAINER, LIGHT, PHYSICS, ROUND_ITEMS, SCENARIOS, SPAWN,
-    ScenarioDef, SpawnPlanEntry, SpawnRandoms,
+    orthoExtents, ScenarioDef, SpawnPlanEntry, SpawnRandoms,
 } from '../../shared/scenario';
 import { BodySample } from '../../shared/metrics';
 import { EngineAdapter, runScenario } from '../../shared/harness';
@@ -118,10 +118,9 @@ class HavokAdapter implements EngineAdapter {
         cam.minZ = 0.1;
         cam.maxZ = 100;
         const applyOrtho = () => {
-            const a = this.engine.getRenderWidth() / this.engine.getRenderHeight();
-            const h = CAMERA.orthoHeight;
-            cam.orthoTop = h; cam.orthoBottom = -h;
-            cam.orthoLeft = -h * a; cam.orthoRight = h * a;
+            const e = orthoExtents(this.engine.getRenderWidth() / this.engine.getRenderHeight());
+            cam.orthoTop = e.halfHeight; cam.orthoBottom = -e.halfHeight;
+            cam.orthoLeft = -e.halfWidth; cam.orthoRight = e.halfWidth;
         };
         applyOrtho();
         addEventListener('resize', () => { this.engine.resize(); applyOrtho(); });

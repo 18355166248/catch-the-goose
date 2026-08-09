@@ -150,8 +150,17 @@ export function allModelIds(): string[] {
 // ---------- 相机与灯光（构图一致，否则录屏没法并排看） ----------
 
 export const CAMERA = {
-    /** 正交相机：堆再高投影宽度也不变，便于逐帧比对。 */
+    /**
+     * 正交相机：堆再高投影宽度也不变，便于逐帧比对。
+     *
+     * 这个 4.25 抄自正式工程（Bootstrap 里的 cam.orthoHeight），但**不要直接拿来用**——
+     * 它在 Cocos 那边配的是 FIXED_WIDTH 分辨率策略，横向半宽才是被钉死的那一维。
+     * 在 Three / Babylon 里照抄成"竖向半高"，桌面横屏看着没事，手机竖屏（aspect≈0.46）
+     * 横向可视范围只剩 ±1.96，筐（半宽 1.35）连同外沿会被切掉。请用 {@link orthoExtents}。
+     */
     orthoHeight: 4.25,
+    /** 容器外沿到画面边缘的留白（世界单位）。 */
+    margin: 0.5,
     position: { x: 0, y: 8.2, z: -0.35 },
     /** 欧拉角（度），近俯视。 */
     euler: { x: -87.3, y: 0, z: 0 },
@@ -164,6 +173,24 @@ export const LIGHT = {
     ambientSky: { r: 214, g: 196, b: 176 },
     ambientGround: { r: 88, g: 72, b: 60 },
 } as const;
+
+/**
+ * 正交相机的可视范围：保证容器在**任意宽高比**下都完整入画，横屏竖屏都不切边。
+ *
+ * 只固定竖向半高（照抄 CAMERA.orthoHeight）在手机竖屏下会切掉筐的左右两侧；
+ * 只固定横向半宽又会让桌面横屏把筐缩成一小块。这里两维都给下限，取能同时满足的那个：
+ * 竖向至少覆盖 halfZ+margin，横向至少覆盖 halfX+margin。
+ *
+ * @param aspect 视口宽 / 高
+ * @returns halfHeight = 竖向半高；halfWidth = 横向半宽（= halfHeight × aspect）
+ */
+export function orthoExtents(aspect: number): { halfHeight: number; halfWidth: number } {
+    const a = Math.max(aspect, 1e-3);
+    const needW = CONTAINER.halfX + CAMERA.margin;
+    const needH = CONTAINER.halfZ + CAMERA.margin;
+    const halfHeight = Math.max(needH, needW / a);
+    return { halfHeight, halfWidth: halfHeight * a };
+}
 
 // ---------- 确定性随机（三套 POC 必须逐次调用同序，才能得到同一堆） ----------
 
