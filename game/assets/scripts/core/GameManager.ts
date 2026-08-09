@@ -1799,6 +1799,10 @@ export class GameManager extends Component {
         for (const t of this.node.getComponentsInChildren(ItemTag)) {
             if (t.node.isValid) t.node.destroy();
         }
+        // 销毁节点**不会**连带销毁刚体：节点归 Cocos，刚体归 Jolt，两边只靠 bodyKey 相连。
+        // 漏掉这一步，上一关的刚体会全部留在物理世界里变成看不见的幽灵堆，
+        // 新一关的物件落下来会砸在半空——而且画面上什么都看不到，极难排查。
+        this.jolt.clearBodies();
         this.tray.clear();
         this.hud?.setTrayCount(0);
         this.hud?.clearCapturedModels();

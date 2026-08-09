@@ -128,7 +128,9 @@ export class JoltWorld {
      */
     addStaticBox(pos: Vec3, size: Vec3, yawDeg: number,
         friction: number, restitution: number) {
-        if (!this.ready) return;
+        // 未就绪时静默跳过会让围栏凭空消失、物件直接飞出容器，而画面上看不出任何异常。
+        // 这类故障极难反查，宁可在控制台炸得很响。
+        if (!this.ready) { console.error('[JoltWorld] 物理未就绪就建静态体，围栏会缺失'); return; }
         const J = this.J;
         const shape = new J.BoxShape(new J.Vec3(size.x / 2, size.y / 2, size.z / 2), 0.01);
         const q = new Quat();
@@ -161,7 +163,8 @@ export class JoltWorld {
      * @returns 该件的 key；射线拾取与移除都用它
      */
     spawn(node: Node, opt: BodyOptions): number {
-        if (!this.ready) return -1;
+        // 同 addStaticBox：静默失败会让物件悬在半空不动，看着像"物理没生效"却无从下手。
+        if (!this.ready) { console.error(`[JoltWorld] 物理未就绪就投件 ${node.name}`); return -1; }
         const J = this.J;
 
         let shape: any;
