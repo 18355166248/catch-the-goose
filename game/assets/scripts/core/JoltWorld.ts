@@ -1,4 +1,4 @@
-import { Node, Mesh, MeshRenderer, AttributeName, v3, Vec3, Quat, Mat4, geometry } from 'cc';
+import { Node, Mesh, MeshRenderer, gfx, v3, Vec3, Quat, Mat4, geometry } from 'cc';
 import { loadJolt, JoltAPI } from '../lab/JoltLoader';
 
 /**
@@ -268,6 +268,30 @@ export class JoltWorld {
         this.byId.clear();
     }
 
+    /**
+     * 把一件瞬移到新位姿并重新激活。
+     *
+     * 这是**唯一**允许脚本改写动态刚体位置的口子，只服务于「打乱」道具——那本来就是
+     * 一次超自然的重新发牌，不是物理过程。除此之外任何"把件拉回墙内""贴住堆顶"之类的
+     * 位置修正都不许走这里：正式工程历史上的 constrainVisualInside 就是那么长出来的，
+     * 结果是物理与脚本互相打架、堆永远静不下来。
+     */
+    teleport(key: number, pos: Vec3, rot: Quat, linVel: Vec3) {
+        const it = this.byId.get(key);
+        if (!it || it.removed || !this.ready) return;
+        const J = this.J;
+        this.bi.SetPositionAndRotation(
+            it.body.GetID(),
+            new J.RVec3(pos.x, pos.y, pos.z),
+            new J.Quat(rot.x, rot.y, rot.z, rot.w),
+            J.EActivation_Activate);
+        it.body.SetLinearVelocity(new J.Vec3(linVel.x, linVel.y, linVel.z));
+        it.body.SetAngularVelocity(new J.Vec3(0, 0, 0));
+        // 插值缓存一并重置，否则这一帧渲染会从旧位置"拉丝"到新位置。
+        Vec3.copy(it.curP, pos); Quat.copy(it.curQ, rot);
+        Vec3.copy(it.prevP, pos); Quat.copy(it.prevQ, rot);
+    }
+
     /** 唤醒一点周围的物件（道具打乱、摘件后的局部塌落补刀）。 */
     wakeAround(center: Vec3, radius: number) {
         if (!this.ready) return;
@@ -400,7 +424,7 @@ export function extractHullPoints(root: Node, center: Vec3, scale: number): Floa
         if (!mesh) continue;
         Mat4.multiply(meshToRoot, invRoot, mr.node.worldMatrix);
         for (let sub = 0; sub < mesh.struct.primitives.length; sub++) {
-            const pos = mesh.readAttribute(sub, AttributeName.ATTR_POSITION);
+            const pos = mesh.readAttribute(sub, gfx.AttributeName.ATTR_POSITION);
             if (!pos) continue;
             for (let i = 0; i + 2 < pos.length; i += 3) {
                 p.set(pos[i] as number, pos[i + 1] as number, pos[i + 2] as number);

@@ -15,6 +15,11 @@ export class ItemTag extends Component {
     /** 冰封中：点不动，要靠三消化开（见 GameManager.thawNearest）。 */
     frozen = false;
     /**
+     * 该件在物理世界（JoltWorld）里的标识。-1 = 尚未入物理 / 已摘除。
+     * 射线拾取回传的就是它，摘件、唤醒邻居也都用它——节点与刚体的唯一连接点。
+     */
+    bodyKey = -1;
+    /**
      * 冰壳节点（半透明冰块 + 霜晶，见 GameManager.addIceShell）。
      * 物件本身保持原色，冻/化只是加上或销毁这个子节点。
      */

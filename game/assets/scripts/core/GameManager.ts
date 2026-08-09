@@ -1,8 +1,8 @@
 import {
     _decorator, Component, Node, Camera, Label, instantiate,
-    RigidBody, BoxCollider, Collider, CylinderCollider, EAxisDirection, MeshRenderer,
-    PhysicsSystem, input, Input, EventTouch, tween, Tween, v3, Vec3, Quat, Mat4, geometry, screen,
-    Layers, PhysicsMaterial, Color, Material, utils, primitives,
+    MeshRenderer,
+    input, Input, EventTouch, tween, Tween, v3, Vec3, Quat, Mat4, geometry, screen,
+    Layers, Color, Material, utils, primitives,
 } from 'cc';
 import { DebugViz } from './DebugViz';
 import { LEVELS, LevelDef, getActiveTheme, DISTRACTOR_ID } from './LevelConfig';
@@ -11,7 +11,7 @@ import { ContainerBoundary, BoundaryDef } from './ContainerBoundary';
 import { SlotTray, TRAY_CAPACITY } from './SlotTray';
 import { ItemTag } from './ItemTag';
 import { PrefabCache } from './PrefabCache';
-import { PilePatrol } from './PilePatrol';
+import { JoltWorld, extractHullPoints, ProxyShape } from './JoltWorld';
 import { SaveData, BestRecord } from './SaveData';
 import { HudUI, PropKind } from './HudUI';
 import { SceneBackground } from './SceneBackground';
@@ -54,7 +54,10 @@ export class GameManager extends Component {
     private hud: HudUI | null = null;
     private background: SceneBackground | null = null;
     private audio: AudioMan | null = null;
-    private pileMaterial!: PhysicsMaterial;
+    /** 物理世界（Jolt）。全工程唯一一处物理入口，玩法层不直接碰 Jolt 类型。 */
+    private jolt = new JoltWorld();
+    /** 固定步长累加器。渲染帧长喂进来，按 FIXED_STEP 整步消费，余量交给渲染插值。 */
+    private physAccum = 0;
     /** 存档键与读写容错集中在 SaveData；这里只保留业务默认值。 */
     private static readonly DAILY_FREE = 3;
     /** 当前场景皮肤 id。所有 3D 容器/背景视觉从此皮肤取色。 */
@@ -128,9 +131,6 @@ export class GameManager extends Component {
      * 圆锅/圆碗等在皮肤里声明 boundary 即整体切换。围栏、逃逸、视觉兜底、投放全走它。
      */
     private boundary: ContainerBoundary = GameManager.makeBoundary(undefined);
-    /** 堆内巡检/沉降/逃逸回收 + 视觉外轮廓兜底。边界随换肤重建时同步给它。 */
-    private patrol = new PilePatrol(this.boundary);
-    private settleToken = 0;
     /** 本关物件基准缩放:少件关卡放大物件,保证盒子饱满、目标好点。 */
     private itemScale = 0.46;
 
@@ -246,28 +246,45 @@ export class GameManager extends Component {
      * 非圆形物件(鹅/佛像/葫芦等)仍用方盒。
      */
     private static readonly ROUND_ITEMS = new Set(['banzhi', 'bracelet', 'pingankou', 'tongqian', 'yuzhuo']);
+    /** 重力。数值与旧实现一致，只是从 PhysicsSystem 挪到了 JoltWorld。 */
+    private static readonly GRAVITY_Y = -12;
+    /** 固定物理步长。必须是 60Hz 的整数分之一，见 initPhysics 的说明。 */
+    private static readonly FIXED_STEP = 1 / 120;
+    /** 单帧最多推几步：切后台回来时别把几秒欠账一次性喂给物理（会直接炸堆）。 */
+    private static readonly MAX_STEPS_PER_FRAME = 8;
+    /** 接触材质：高摩擦 + 少量回弹，落地有轻微弹跳的实感又不会滚得到处都是。 */
+    private static readonly PILE_FRICTION = 1.25;
+    private static readonly PILE_RESTITUTION = 0.08;
     /** 只服务于初始堆叠的确定性随机流，不受巡逻、道具等运行时随机行为干扰。 */
     private levelRandomState = 1;
 
     onLoad() {
-        this.pileMaterial = new PhysicsMaterial();
-        // 高摩擦 + 少量回弹：落地有一下轻微弹跳的"实感"，又不会弹得到处乱滚。
-        this.pileMaterial.setValues(1.25, 0.9, 0.9, 0.08);
-        // 模板场景可能保存过倾斜的物理重力；这里强制为世界竖直方向，
-        // 否则物件落地后会持续滑向篮子后侧，看起来像堆叠算法失效。
-        PhysicsSystem.instance.gravity = v3(0, -12, 0);
-        // 小物件 + 薄片需要更密的物理步进；CCD 负责线性高速运动，子步负责接触堆叠和旋转。
-        // 步长必须是 60Hz 渲染帧的整数分之一：1/90 会让每帧交替推进 1/2 个物理步，
-        // 引擎不做状态插值，运动中的物件屏幕位移逐帧交替 1 倍/2 倍，
-        // 表现为堆叠沉降阶段全体物件毫米级高频颤动。1/120 = 每帧恰好 2 步。
-        PhysicsSystem.instance.maxSubSteps = 8;
-        PhysicsSystem.instance.fixedTimeStep = 1 / 120;
-        PhysicsSystem.instance.sleepThreshold = 0.15;
+        // 物理由 Jolt 接管（见 JoltWorld 的类注释与 lab/ 的同场对比）。Cocos 内置的
+        // ammo/Bullet 在本玩法的密堆下永不收敛——36 件跑满 45 仿真秒一件都不休眠，
+        // 正式工程历史上那三层脚本兜底（0.9s 定时硬冻、PilePatrol 两条冻结判据、
+        // constrainVisualInside 位置改写）都是在给这个擦屁股，现已连同本段配置一起删除。
+        //
+        // wasm 是异步加载的：init 完成前 buildBox 建的围栏会被丢掉，所以要等它。
+        // 期间玩家看到的是加载页，没有可交互内容，等待无感。
+        void this.initPhysics();
         // 皮肤要在建盒之前定好。每天固定一个场景：皮肤跟随当天主题（getActiveTheme），
         // 不再由玩家自选决定「场景身份」；HUD 换肤面板仅作背景微调，不改物件族。
         this.skinId = getSkin(getActiveTheme().skinId).id;
-        this.buildBox();
         input.on(Input.EventType.TOUCH_START, this.onTouch, this);
+    }
+
+    /**
+     * 起物理世界，就绪后再建容器。
+     *
+     * 固定步长 1/120 的理由没变，只是从 Cocos 的配置挪到了自己的累加器（见 update）：
+     * 步长必须是 60Hz 渲染帧的整数分之一。1/90 会让每帧交替推进 1/2 个物理步，
+     * 表现为沉降阶段全体物件毫米级高频颤动。1/120 = 每帧恰好 2 步。
+     * 与旧实现的关键差别是**现在有渲染插值**（JoltWorld.syncNodes），混叠不再靠步长凑。
+     */
+    private async initPhysics() {
+        await this.jolt.init(GameManager.GRAVITY_Y);
+        if (!this.node.isValid) return;   // 等待期间场景已被换掉
+        this.buildBox();
     }
 
     onDestroy() {
@@ -440,6 +457,28 @@ export class GameManager extends Component {
         return better && !!prev; // 首次成绩不算"刷新纪录"
     }
 
+    /**
+     * 固定步长推进物理，再按余量做渲染插值。
+     *
+     * 插值那一步不是锦上添花：固定 1/120 配 60Hz 渲染是 2:1 采样，不插值就是逐帧抖
+     * ——本工程为这个坑付过一次代价。旧实现没有插值，只能靠"步长必须整除帧长"来回避，
+     * 于是步长一改就抖；现在插值兜住了混叠，步长成了纯粹的精度旋钮。
+     */
+    private stepPhysics(frameDt: number) {
+        if (!this.jolt.isReady) return;
+        const STEP = GameManager.FIXED_STEP;
+        this.physAccum += frameDt;
+        let steps = 0;
+        while (this.physAccum >= STEP && steps < GameManager.MAX_STEPS_PER_FRAME) {
+            this.jolt.step(STEP);
+            this.physAccum -= STEP;
+            steps++;
+        }
+        // 欠账超过上限就丢弃，别攒着——攒下来的步数会在之后某一帧集中爆发。
+        if (this.physAccum > STEP * GameManager.MAX_STEPS_PER_FRAME) this.physAccum = 0;
+        this.jolt.syncNodes(this.physAccum / STEP);
+    }
+
     /** 递归把节点树全部放进 DEFAULT 渲染层（代码创建的节点 layer 可能为 0 → 任何相机都不画） */
     private forceLayer(n: Node) {
         n.layer = Layers.Enum.DEFAULT;
@@ -450,12 +489,14 @@ export class GameManager extends Component {
         this.background?.sync();
         this.hud?.sync();
         this.syncFrostMarks();
-        if (!this.playing || this.paused) return;
         // 手机切后台/浏览器标签页恢复时可能一次传入数百秒 dt；游戏计时应近似暂停，
-        // 不能因为系统挂起而瞬间耗尽。物理仍由 fixedTimeStep + maxSubSteps 独立求解。
+        // 不能因为系统挂起而瞬间耗尽。
         const frameDt = Math.min(dt, 0.1);
-        // 堆内巡检/沉降/逃逸回收全在 PilePatrol，内部自带 0.15s 周期节流。
-        this.patrol.tick(this.node, frameDt);
+        // 物理**不受暂停与胜负影响**地推进到收敛：暂停时堆本来就该停在原地，而 Jolt
+        // 休眠后步进几乎零成本；结算画面里堆还在缓慢落定也属正常观感。放在 playing
+        // 判定之前，是为了让开局倾倒能在弹窗期间就跑完。
+        this.stepPhysics(frameDt);
+        if (!this.playing || this.paused) return;
         this.timeLeft -= frameDt;
         if (this.timeLeft <= 0) {
             this.timeLeft = 0;
@@ -616,7 +657,9 @@ export class GameManager extends Component {
         // 边界随皮肤重建：矩形皮肤得到与常量一字不差的默认边界；圆锅/圆碗皮肤声明
         // boundary 后，围栏 / 逃逸 / 视觉兜底 / 投放种子全部按该形状生效，物品不出界。
         this.boundary = GameManager.makeBoundary(skin.boundary);
-        this.patrol.setBoundary(this.boundary);
+        // 换肤会重建整个容器：旧的静态体必须先清掉，否则新旧围栏叠在一起，
+        // 物件会被卡在两层墙之间。动态件不受影响，贴靠关系保持不变。
+        this.jolt.clearStatics();
 
         // 碰撞地基顶面保持 y=0，厚地基防止高速物件穿底。
         // 物理底板始终居中覆盖整个围栏，与视觉完全解耦。
@@ -728,17 +771,15 @@ export class GameManager extends Component {
         return has ? { min, max } : null;
     }
 
-    /** 只有物理没有外观的围栏；yawDeg 用于圆容器的切向环段（矩形墙传 0）。 */
-    private makeInvisibleWall(name: string, pos: Vec3, size: Vec3, yawDeg = 0) {
-        const n = new Node(name);
-        n.setParent(this.sceneRoot ?? this.node);
-        n.setPosition(pos);
-        if (yawDeg) n.setRotationFromEuler(0, yawDeg, 0);
-        const rb = n.addComponent(RigidBody);
-        rb.type = RigidBody.Type.STATIC;
-        const col = n.addComponent(BoxCollider);
-        col.size = size;
-        col.sharedMaterial = this.pileMaterial;
+    /**
+     * 只有物理没有外观的围栏；yawDeg 用于圆容器的切向环段（矩形墙传 0）。
+     *
+     * 不再建 Cocos 节点：围栏纯粹是物理实体，没有渲染内容也不需要被射线打到
+     * （Jolt 的拾取只收动态层）。直接进 Jolt 的静态层，换肤时 clearStatics 整体重建。
+     */
+    private makeInvisibleWall(_name: string, pos: Vec3, size: Vec3, yawDeg = 0) {
+        this.jolt.addStaticBox(pos, size, yawDeg,
+            GameManager.PILE_FRICTION, GameManager.PILE_RESTITUTION);
     }
 
     // ---------- 物件加载与生成 ----------
@@ -879,10 +920,10 @@ export class GameManager extends Component {
                     seed.z + (this.levelRandom() - 0.5) * 0.08,
                 );
                 // 参考录屏中单件约为篮宽的 1/6；66 件时形成紧凑但不过高的堆。
+                // 根节点直接给最终缩放：它的位姿归物理管，弹大动画改由视觉子树承担
+                // （见下方 tween），否则 syncNodes 每帧都会把缩放外的改动一并冲掉。
                 const scale = this.itemScale + (idx % 4) * 0.012;
-                // 出生缩放弹大("从小变大"):先设小,下方在自由下落头 SPAWN_POP_TIME 内 tween 到满。
-                const from = scale * GameManager.SPAWN_POP_FROM;
-                n.setScale(from, from, from);
+                n.setScale(scale, scale, scale);
 
                 const tag = n.addComponent(ItemTag);
                 tag.id = id;
@@ -893,57 +934,63 @@ export class GameManager extends Component {
                 } else if (frozenIdx.has(index)) {
                     tag.frozen = true;   // 冰壳在碰撞体设定之后再加，见下方
                 }
-                const rb = n.addComponent(RigidBody);
-                rb.mass = 0.85 + (idx % 3) * 0.1;
-                // 低阻尼 = 真实自由落体。旧值 0.92/0.97 像掉进糖浆，
-                // 下落绵软且落地后长时间蠕动，是"摔落不真实"的直接原因。
-                rb.angularDamping = 0.3;
-                rb.linearDamping = 0.06;
-                rb.sleepThreshold = 0.15;
-                rb.useCCD = true;
-                // 圆形/环形物件用圆柱碰撞体(消除方角互插导致的高速抖),其余用方盒。
-                const col: Collider = GameManager.ROUND_ITEMS.has(id)
-                    ? n.addComponent(CylinderCollider)
-                    : n.addComponent(BoxCollider);
-                col.sharedMaterial = this.pileMaterial;
-                this.centerVisualAndFitCollider(n, col);
-                // 冰壳必须加在 centerVisualAndFitCollider **之后**：它是子节点上的
-                // MeshRenderer，而碰撞体正是按 measureLocalAabb 量出的渲染包围盒生成的，
-                // 先加壳会把碰撞体一起撑大 18%，冰封件之间凭空多出一圈间隙。
+                // 视觉归心 + 量出碰撞代理。必须在加冰壳**之前**：冰壳是子节点上的
+                // MeshRenderer，先加会把包围盒撑大 18%，代理跟着变大，冰封件之间
+                // 凭空多出一圈间隙。
+                const shape = this.centerVisualAndMakeShape(n, id, scale);
                 if (tag.frozen) {
                     this.addIceShell(n, tag);
                     this.frozenTags.push(tag);
                 }
                 this.setNaturalRotation(n, id, () => this.levelRandom());
-                rb.setLinearVelocity(v3(
-                    (this.levelRandom() - 0.5) * 0.2,
-                    -2.6,
-                    (this.levelRandom() - 0.5) * 0.2,
-                ));
+
                 // 薄片(铜钱/玉环/平安扣等)只给绕竖轴的自转(改朝向、仍拍平落),
                 // 大幅收窄横轴翻滚——否则它们在半空翻立起来边缘着地、圆柱立着打滚,
                 // 是这类物件抖动/蹭墙/堆乱的主因。非薄片保留全向翻滚的自然感。
                 const tumble = GameManager.ROUND_ITEMS.has(id) ? 0.25 : 1.2;
-                rb.setAngularVelocity(v3(
-                    (this.levelRandom() - 0.5) * tumble,
-                    (this.levelRandom() - 0.5) * 1.2,
-                    (this.levelRandom() - 0.5) * tumble,
-                ));
-                // 弹大动画:趁下落无接触段从 from 长到满(backOut 带轻微过冲更弹)。
-                // 碰撞体随节点缩放同步长大,但全程在半空、无接触,不会推挤邻居。
-                tween(n).to(GameManager.SPAWN_POP_TIME, { scale: v3(scale, scale, scale) },
-                    { easing: 'backOut' }).start();
+                const key = this.jolt.spawn(n, {
+                    shape,
+                    mass: 0.85 + (idx % 3) * 0.1,
+                    // 低阻尼 = 真实自由落体。旧值 0.92/0.97 像掉进糖浆，
+                    // 下落绵软且落地后长时间蠕动，是"摔落不真实"的直接原因。
+                    linearDamping: 0.06,
+                    angularDamping: 0.3,
+                    friction: GameManager.PILE_FRICTION,
+                    restitution: GameManager.PILE_RESTITUTION,
+                    useCCD: true,
+                    position: n.worldPosition.clone(),
+                    rotation: n.worldRotation.clone(),
+                    linearVelocity: v3(
+                        (this.levelRandom() - 0.5) * 0.2,
+                        -2.6,
+                        (this.levelRandom() - 0.5) * 0.2,
+                    ),
+                    angularVelocity: v3(
+                        (this.levelRandom() - 0.5) * tumble,
+                        (this.levelRandom() - 0.5) * 1.2,
+                        (this.levelRandom() - 0.5) * tumble,
+                    ),
+                });
+                tag.bodyKey = key;
+
+                // 弹大动画只作用于**视觉子树**，不是根节点——根节点的位姿现在归物理管，
+                // 缩放它会被下一帧的 syncNodes 冲掉。碰撞代理按最终尺寸一次建好、不随
+                // 弹大变化：弹大全程 0.15s 在半空无接触段，代理略大于视觉不会推挤邻居。
+                for (const child of n.children) {
+                    child.setScale(GameManager.SPAWN_POP_FROM, GameManager.SPAWN_POP_FROM, GameManager.SPAWN_POP_FROM);
+                    tween(child).to(GameManager.SPAWN_POP_TIME, { scale: v3(1, 1, 1) },
+                        { easing: 'backOut' }).start();
+                }
                 // 物件投平面阴影
                 for (const mr of n.getComponentsInChildren(MeshRenderer)) {
                     mr.shadowCastingMode = MeshRenderer.ShadowCastingMode.ON;
                 }
-                // 逐件定时硬冻:落定所需时间后无条件锁死,不依赖检测(高频挤压抖检测抓不住)。
-                this.scheduleOnce(() => this.hardFreezeItem(n), GameManager.SPAWN_FREEZE_DELAY);
+                // 这里**没有**定时硬冻了。物件停下来的唯一途径是 Jolt 自己的休眠——
+                // 那正是这次换引擎买到的东西，别再往回加任何脚本冻结。
             }, delay);
         });
-        // 最后一件落下(高处下落约 0.6s)后再给物理一段自然沉降,然后锁定整堆。
-        // 巡逻里的逐件冻结通常早已把大部分物件锁死,这里只是兜底。
-        this.schedulePileSettle(queue.length * GameManager.SPAWN_INTERVAL + GameManager.SETTLE_BACKSTOP);
+        // 这里原本有一次"整堆定时锁死"的兜底。Jolt 下不需要也不允许：堆自己会在
+        // 约 1.5s 内落定并休眠（实验数据见 lab/results/poc-b-jolt.json）。
         console.log(`[GameManager] 关卡 ${this.levelIndex + 1}：生成 ${this.totalCount} 个物件，seed=${this.level.seed}`);
     }
 
@@ -952,7 +999,7 @@ export class GameManager extends Component {
      * 旧实现把碰撞盒固定放在 Prefab 根节点，视觉模型却在旁边，物理上没有真正包住模型。
      * 这里读取所有 Mesh 的局部包围盒，统一把视觉内容移回根节点中心，再按真实尺寸生成碰撞盒。
      */
-    private centerVisualAndFitCollider(root: Node, collider: Collider) {
+    private centerVisualAndMakeShape(root: Node, id: string, scale: number): ProxyShape {
         // 刚实例化并 setPosition/setScale 的节点，worldMatrix 可能仍是上一帧缓存。
         // 若直接求 bounds，会把“生成落点”误算进模型自身偏移，再次平移视觉子树，
         // 结果就是碰撞体分散在篮底、所有可见模型却挤到同一侧，看起来严重穿模。
@@ -987,9 +1034,7 @@ export class GameManager extends Component {
 
         if (!hasBounds) {
             // 资源尚未提供 bounds 时使用保守尺寸，仍比原先 0.75³ 更不容易露出模型。
-            this.fitColliderDims(collider, 1.05, 1.05, 1.05);
-            collider.center = v3();
-            return;
+            return { kind: 'box', half: v3(0.525 * scale, 0.525 * scale, 0.525 * scale) };
         }
 
         const center = v3(
@@ -1007,242 +1052,26 @@ export class GameManager extends Component {
         }
         root.updateWorldTransform();
 
-        this.fitColliderDims(collider, max.x - min.x, max.y - min.y, max.z - min.z);
-        collider.center = v3();
-    }
-
-    /**
-     * 按包围盒三轴尺寸设定碰撞体。
-     * 方盒:直接用尺寸(4% 安全余量防表面相交,薄片至少 0.20 配合 CCD 防单步穿越)。
-     * 圆柱:自动挑**最薄的轴**为圆柱轴向(圆盘法线,自适应各模型网格朝向),另两轴较大半长为半径。
-     */
-    private fitColliderDims(collider: Collider, ex: number, ey: number, ez: number) {
-        if (collider instanceof CylinderCollider) {
-            let axis: EAxisDirection;
-            let radius: number;
-            let height: number;
-            if (ey <= ex && ey <= ez) { axis = EAxisDirection.Y_AXIS; radius = Math.max(ex, ez) / 2; height = ey; }
-            else if (ex <= ey && ex <= ez) { axis = EAxisDirection.X_AXIS; radius = Math.max(ey, ez) / 2; height = ex; }
-            else { axis = EAxisDirection.Z_AXIS; radius = Math.max(ex, ey) / 2; height = ez; }
-            collider.direction = axis;
-            // 圆柱已贴合圆盘,余量取小(2%);高度贴合薄片厚度,下限防退化。
-            // 高度下限 0.12→0.05:一枚 ~2cm 厚铜钱曾被撑成 12cm,堆叠悬空/松散。
-            // 薄片的单步穿越由 CCD 兜底,不再靠加厚碰撞体防穿。
-            collider.radius = Math.max(0.1, radius * 1.02);
-            collider.height = Math.max(0.05, height * 1.02);
-        } else if (collider instanceof BoxCollider) {
-            // 膨胀 4%→2% + 下限 0.20→0.08:碰撞体更贴合网格,消除"件件撑开的空隙"观感。
-            collider.size = v3(
-                Math.max(0.08, ex * 1.02),
-                Math.max(0.08, ey * 1.02),
-                Math.max(0.08, ez * 1.02),
-            );
+        // 薄片/环形件仍用圆柱：它们本来就是回转体，圆柱比凸包更便宜也更贴合，
+        // 而且能保住"拍平落、不立起来打滚"的手感（凸包会把边缘棱角还原出来）。
+        if (GameManager.ROUND_ITEMS.has(id)) {
+            const ex = (max.x - min.x) * scale;
+            const ey = (max.y - min.y) * scale;
+            const ez = (max.z - min.z) * scale;
+            return { kind: 'cylinder', halfHeight: ey / 2, radius: Math.max(ex, ez) / 2 };
         }
-    }
 
-    /**
-     * 单件无条件硬冻(逐件定时器回调)。不看速度/检测:高频挤压抖动检测抓不住,到点直接锁。
-     * 已被拾取/已销毁/已是运动学的跳过。冻前把视觉外轮廓拉回边界内。
-     */
-    private hardFreezeItem(n: Node) {
-        if (!n.isValid || !this.playing) return;
-        const tag = n.getComponent(ItemTag);
-        if (!tag || tag.picked) return;
-        const rb = n.getComponent(RigidBody);
-        if (!rb?.enabled || rb.type === RigidBody.Type.KINEMATIC) return;
-        this.patrol.constrainVisualInside(n, 0.03);
-        try { rb.clearState(); } catch { /* 忽略 */ }
-        rb.setLinearVelocity(v3());
-        rb.setAngularVelocity(v3());
-        rb.type = RigidBody.Type.KINEMATIC;
-    }
-
-    /** 延迟冻结当前堆；token 防止重开、连续拾取时旧定时器误冻新一轮运动。 */
-    private schedulePileSettle(delay: number) {
-        const token = ++this.settleToken;
-        this.scheduleOnce(() => {
-            if (token !== this.settleToken || !this.playing || this.paused) return;
-            for (const t of this.node.getComponentsInChildren(ItemTag)) {
-                if (t.picked || !t.node.isValid) continue;
-                // 单步限幅矫正:与逐件 freeze 一致,避免此刻大幅瞬移读作"最后一跳"。
-                this.patrol.constrainVisualInside(t.node, 0.03);
-                const rb = t.node.getComponent(RigidBody);
-                if (!rb?.enabled) continue;
-                // 必须显式归零线/角速度再切 KINEMATIC:clearState() 只清力与冲量累积,
-                // 不清当前速度。带残余速度的物件被一次性锁死,最后一物理步与锁死帧
-                // 之间会有位置突变——这正是电脑端"整堆最后啪地颤一下"的来源。
-                rb.clearState();
-                rb.setLinearVelocity(v3());
-                rb.setAngularVelocity(v3());
-                // Bullet 中相互重叠的动态刚体即使 sleep 也可能被接触求解重新唤醒。
-                // 切为运动学刚体后仍保留 Collider/射线拾取，但不会再被重力或邻居推动。
-                rb.type = RigidBody.Type.KINEMATIC;
-            }
-        }, delay);
-    }
-
-    /**
-     * 只让被拿走物件正上方、确实可能失去支撑的 1~2 件做一次微小沉降。
-     * 这里不用重新启用动态物理：密集堆中一个动态刚体会把接触链逐层唤醒，表现为整堆抖动。
-     * 三段式位移模拟“下落 → 轻微接触回弹 → 停稳”，既保留重量感，也保证远处物件绝对静止。
-     */
-    private settleNearRemoved(center: Vec3): Set<Node> {
-        const handled = new Set<Node>();
-        const candidates = this.node.getComponentsInChildren(ItemTag)
-            .filter(t => !t.picked && t.node.isValid)
-            .map(t => {
-                const p = t.node.worldPosition;
-                const dx = p.x - center.x;
-                const dy = p.y - center.y;
-                const dz = p.z - center.z;
-                const horizontal2 = dx * dx + dz * dz;
-                return { t, dy, horizontal2, score: horizontal2 + dy * dy * 0.18 };
-            })
-            // 只处理移除点上方的支撑关系；同层和下层物件不应跟着晃。
-            .filter(v => v.dy > 0.035 && v.dy < 0.9 && v.horizontal2 < 0.62 * 0.62)
-            .sort((a, b) => a.score - b.score)
-            .slice(0, 2);
-
-        for (const [index, candidate] of candidates.entries()) {
-            const n = candidate.t.node;
-            const rb = n.getComponent(RigidBody);
-            if (!rb?.enabled) continue;
-
-            // 该件正下方若仍被别的物件顶着(近距离、略低),说明它并没真正失去支撑——
-            // 强行下沉 + 固定倾斜正是"动画假"的来源(玩家看到凭空抽搐)。此时直接跳过。
-            const cp = n.worldPosition.clone();
-            const stillSupported = this.node.getComponentsInChildren(ItemTag).some(o => {
-                if (o === candidate.t || o.picked || !o.node.isValid) return false;
-                const q = o.node.worldPosition;
-                const dyBelow = cp.y - q.y;               // 正 = o 在下方
-                if (dyBelow < 0.02 || dyBelow > 0.6) return false;
-                const dxh = q.x - cp.x, dzh = q.z - cp.z;
-                return dxh * dxh + dzh * dzh < 0.28 * 0.28; // 正下方近距离 = 仍有支撑
-            });
-            if (stillSupported) continue;
-
-            Tween.stopAllByTarget(n);
-            handled.add(n);
-            rb.clearState();
-            rb.type = RigidBody.Type.KINEMATIC;
-
-            const start = n.position.clone();
-            // 离支撑中心越近，沉降稍明显；最大 6.5cm，第二件再减弱 20%。
-            const proximity = 1 - Math.min(1, Math.sqrt(candidate.horizontal2) / 0.62);
-            const fall = (0.035 + proximity * 0.03) * (index === 0 ? 1 : 0.8);
-            const landed = start.clone();
-            landed.y -= fall;
-            const rebound = landed.clone();
-            rebound.y += Math.min(0.012, fall * 0.22);
-
-            // 很小的确定性倾斜让接触不显机械，又不会每次点击产生随机抽搐。
-            const sign = (n.uuid.charCodeAt(n.uuid.length - 1) & 1) ? 1 : -1;
-            const delta = new Quat();
-            const settledRotation = new Quat();
-            Quat.fromEuler(delta, sign * (0.7 + proximity * 0.7), 0, -sign * 0.55);
-            Quat.multiply(settledRotation, n.rotation, delta);
-
-            tween(n)
-                .to(0.15, { position: landed, rotation: settledRotation }, { easing: 'quadIn' })
-                .to(0.09, { position: rebound }, { easing: 'quadOut' })
-                .to(0.12, { position: landed }, { easing: 'sineOut' })
-                .call(() => {
-                    if (!n.isValid || candidate.t.picked) return;
-                    this.patrol.constrainVisualInside(n);
-                    rb.clearState();
-                })
-                .start();
-        }
-        return handled;
-    }
-
-    /**
-     * 拿走一件后，邻近几件跟着轻晃两下——纯装饰，不动物理。
-     *
-     * settleNearRemoved 只处理"真失去支撑"的 1~2 件，而它的 stillSupported 守卫
-     * 在密堆里几乎恒为真（正下方 0.6 内有任何一件就跳过），于是绝大多数点击整堆纹丝不动，
-     * 手感像在点一张贴图。这里补的是反馈而不是物理：附近几件做一次阻尼衰减的小幅摆动，
-     * 幅度按距离衰减，最大位移 1.8cm、倾角 2°，0.28s 内收敛回原位。
-     *
-     * 全程 KINEMATIC + tween，不重新启用动态刚体——一旦有一件转回动态，
-     * 接触链会被逐层唤醒，整堆抖起来（这正是 settleNearRemoved 当初绕开的坑）。
-     */
-    private jiggleAround(center: Vec3, exclude: Set<Node>) {
-        // 取**最近 K 件**而不是固定半径内的所有件。堆的疏密会随关卡件数和投放参数变，
-        // 固定半径下同一个数字在稀疏堆里只罩得住一件、在密堆里又会罩住一大片变成地震；
-        // 取 K 近邻则密度无关。实测第 1 关最近邻中位距 0.54，硬上限 1.2 足够宽松。
-        const K = 5, MAX_D = 1.2;
-        const near: { t: ItemTag; d: number }[] = [];
-        for (const t of this.node.getComponentsInChildren(ItemTag)) {
-            if (t.picked || !t.node.isValid || exclude.has(t.node)) continue;
-            const p = t.node.worldPosition;
-            const dx = p.x - center.x, dy = p.y - center.y, dz = p.z - center.z;
-            // 竖向差按 0.6 折算：上方压着的和同层挨着的都该有反应，隔了两层的不该。
-            const d = Math.sqrt(dx * dx + dz * dz + dy * dy * 0.36);
-            if (d > MAX_D) continue;
-            near.push({ t, d });
-        }
-        near.sort((a, b) => a.d - b.d);
-        const chosen = near.slice(0, K);
-        // 幅度按"在这批近邻里排多远"归一，而不是按绝对距离——同样密度无关。
-        // 系数留到 0.65 而不是 1，最远那件也还剩三成幅度，不至于白挑进来。
-        const span = chosen.length ? chosen[chosen.length - 1].d || 1 : 1;
-
-        for (const [i, { t, d }] of chosen.entries()) {
-            const falloff = 1 - 0.65 * (d / span);
-            const n = t.node;
-            // 已在晃的：先停掉并退回钉住的静止位姿，否则第二次晃动会以偏移位为基准，
-            // 连点几次堆就整体走形了。
-            Tween.stopAllByTarget(n);
-            if (t.restPos && t.restRot) {
-                n.setPosition(t.restPos);
-                n.setRotation(t.restRot);
-            } else {
-                t.restPos = n.position.clone();
-                t.restRot = n.rotation.clone();
-            }
-            const rest = t.restPos!;
-            const restRot = t.restRot!;
-
-            // 方向取"背离被拿走那件"的水平法向：读作被让开的一下，而不是随机抽搐。
-            const ox = n.position.x - center.x, oz = n.position.z - center.z;
-            const len = Math.hypot(ox, oz) || 1;
-            const amp = (0.009 + falloff * 0.013);
-            const ux = (ox / len) * amp, uz = (oz / len) * amp;
-
-            const swing = (k: number) => v3(rest.x + ux * k, rest.y - amp * 0.35 * Math.abs(k),
-                rest.z + uz * k);
-            // 绕水平轴的小倾角，符号按 uuid 定死：同一件每次晃的方向一致，不会看着乱抽。
-            const sign = (n.uuid.charCodeAt(n.uuid.length - 1) & 1) ? 1 : -1;
-            const tilt = (q: Quat, k: number) => {
-                const d = new Quat();
-                Quat.fromEuler(d, sign * 2.0 * falloff * k, 0, -sign * 1.4 * falloff * k);
-                Quat.multiply(q, restRot, d);
-                return q;
-            };
-
-            tween(n)
-                // 错峰起振：同时起跳会读作整块地板在动
-                .delay(i * 0.012)
-                .to(0.08, { position: swing(1), rotation: tilt(new Quat(), 1) },
-                    { easing: 'quadOut' })
-                .to(0.09, { position: swing(-0.45), rotation: tilt(new Quat(), -0.45) },
-                    { easing: 'sineInOut' })
-                .to(0.11, { position: rest.clone(), rotation: restRot.clone() },
-                    { easing: 'sineOut' })
-                .call(() => {
-                    if (!n.isValid) return;
-                    // 钉回静止位姿并交还锚点：巡检那边靠 anchor 判静止，位姿变了要同步，
-                    // 否则下一拍会以为它在动。
-                    n.setPosition(rest);
-                    n.setRotation(restRot);
-                    t.restPos = null;
-                    t.restRot = null;
-                    const wp = n.worldPosition;
-                    t.anchorX = wp.x; t.anchorY = wp.y; t.anchorZ = wp.z;
-                })
-                .start();
-        }
+        // 其余一律凸包。这是 lab 里最关键的一条发现：碰撞代理才是堆型的决定因素，
+        // 换凸包后三套引擎的堆顶都从 2.8~3.5 掉到 1.3~1.5、筐内覆盖率从 78% 涨到 87%。
+        // 方盒把水果撑成方块、互相架桥垒成柱，正是旧版"堆得像塔"的根因。
+        // 点集在 JoltWorld 里按方向分格抽稀到约 100 点，与 lab/poc-b-jolt 逐行一致。
+        const pts = extractHullPoints(root, center, scale);
+        if (pts.length >= 12) return { kind: 'hull', points: pts };
+        // 网格读不出顶点（压缩格式/无 position 属性）时退回方盒，别让物件没有碰撞体。
+        return {
+            kind: 'box',
+            half: v3((max.x - min.x) * scale / 2, (max.y - min.y) * scale / 2, (max.z - min.z) * scale / 2),
+        };
     }
 
     /**
@@ -1484,15 +1313,12 @@ export class GameManager extends Component {
         const ray = new geometry.Ray();
         this.cam.screenPointToRay(x, y, ray);
         let bestTag: ItemTag | null = null;
-        let bestDist = Infinity;
-        if (PhysicsSystem.instance.raycast(ray)) {
-            for (const r of PhysicsSystem.instance.raycastResults) {
-                const tag = r.collider.node.getComponent(ItemTag);
-                if (tag && !tag.picked && r.distance < bestDist) {
-                    bestDist = r.distance;
-                    bestTag = tag;
-                }
-            }
+        // Jolt 的射线只收动态层且**只回最近一次命中**（围栏、地板在静态层，天然不遮挡），
+        // 所以不再需要旧实现那套"遍历全部命中挑最近"的循环。
+        const key = this.jolt.raycast(ray);
+        if (key > 0) {
+            const t = this.tagByBodyKey(key);
+            if (t && !t.picked) bestTag = t;
         }
         if (!bestTag) {
             const thresh = screen.windowSize.width * 0.06;
@@ -1506,6 +1332,14 @@ export class GameManager extends Component {
             }
         }
         return bestTag;
+    }
+
+    /** 由物理侧的 bodyKey 反查回玩法侧的 ItemTag（射线命中只拿得到 key）。 */
+    private tagByBodyKey(key: number): ItemTag | null {
+        for (const t of this.node.getComponentsInChildren(ItemTag)) {
+            if (t.bodyKey === key && t.node.isValid) return t;
+        }
+        return null;
     }
 
     private pick(node: Node, tag: ItemTag) {
@@ -1532,9 +1366,10 @@ export class GameManager extends Component {
         const removedPos = node.worldPosition.clone();
         const screenPos = v3();
         this.cam.worldToScreen(node.worldPosition, screenPos);
-        // 物理组件失效，交给 Tween 接管
-        node.getComponent(RigidBody)!.enabled = false;
-        node.getComponent(Collider)!.enabled = false;
+        // 退出物理，位姿交给 Tween 接管（飞进暂存槽的那段动画）。
+        // remove 内部会唤醒周围一圈，失去支撑的邻居随即自然塌落。
+        this.jolt.remove(tag.bodyKey);
+        tag.bodyKey = -1;
 
         // 金鹅走完全另一条路：不进暂存槽、不参与三消、不计完成度，就地结算奖励后消失。
         // 进槽是绝对不能做的——它只有一只，永远配不齐，彩蛋会变成"占掉一格"的惩罚。
@@ -1556,8 +1391,15 @@ export class GameManager extends Component {
         }
         this.hud?.captureModel(node, screenPos, index);
         this.reflowTray();
-        // 先让真失去支撑的 1~2 件沉降，剩下的邻居只做装饰性轻晃（别晃已在沉降的那几件）。
-        this.jiggleAround(removedPos, this.settleNearRemoved(removedPos));
+        // 这里**不需要**再补一次唤醒：JoltWorld.remove 已按被摘刚体的包围盒唤醒了接触岛
+        // （实测摘掉堆底一件即唤醒 31 件里的 22 件，塌落范围正好是局部）。
+        // 早先在这儿按 itemScale*2.2 又唤醒了一圈，结果把 31 件全唤醒 = 整堆重启，
+        // 正是自己注释里警告的"看着像地震"。
+        //
+        // 旧实现这里是「settleNearRemoved 挑 1~2 件手动沉降 + jiggleAround 给其余邻居做
+        // 假装晃动的 tween」——因为 Bullet 下整堆早被冻成 KINEMATIC，不伪造反馈就纹丝不动、
+        // 手感像点贴图。现在塌落是真的物理结果，假动作全部删掉。
+        void removedPos;
         this.scheduleOnce(() => this.audio?.play('drop', 0.5), 0.3);
 
         if (matched) {
@@ -1627,8 +1469,9 @@ export class GameManager extends Component {
             .call(() => node.isValid && node.destroy())
             .start();
 
-        // 它原先垫在堆底，拿走后上面那摞要跟着塌一下。
-        this.jiggleAround(worldPos, this.settleNearRemoved(worldPos));
+        // 它原先垫在堆底，拿走后上面那摞会跟着塌一下——这已由 pick() 里的
+        // JoltWorld.remove 按接触岛唤醒完成，不必也不该在这儿再唤醒一次（会变成整堆重启）。
+        void worldPos;
     }
 
     /**
@@ -1734,22 +1577,29 @@ export class GameManager extends Component {
             tag.picked = false;
             tag.stillTicks = 0;
             tag.anchorY = -99;
-            const rbBack = e.node.getComponent(RigidBody)!;
-            rbBack.linearDamping = 0.06;
-            rbBack.angularDamping = 0.3;
             // 落点走通用边界的回收点：矩形/圆形容器都能保证落在承载物内，逐件抬高错开。
             const rp = this.boundary.respawn(Math.random);
             e.node.setWorldPosition(rp.x, 1.3 + i * 0.5, rp.z);
             e.node.setScale(this.itemScale, this.itemScale, this.itemScale);
             this.setNaturalRotation(e.node, tag.id);
-            const rb = e.node.getComponent(RigidBody)!;
-            rb.type = RigidBody.Type.DYNAMIC;
-            rb.enabled = true;
-            rb.wakeUp();
-            e.node.getComponent(Collider)!.enabled = true;
+            // 被拾取时刚体已经销毁（见 removeItem），放回堆里等于重新投一件。
+            // 碰撞代理就地重算：视觉子树还在、且已归心，centerVisualAndMakeShape 是
+            // 幂等的（再算一次 center≈0、不会二次平移）。只有 ≤3 件，重算凸包开销可忽略。
+            tag.bodyKey = this.jolt.spawn(e.node, {
+                shape: this.centerVisualAndMakeShape(e.node, tag.id, this.itemScale),
+                mass: 0.9,
+                linearDamping: 0.06,
+                angularDamping: 0.3,
+                friction: GameManager.PILE_FRICTION,
+                restitution: GameManager.PILE_RESTITUTION,
+                useCCD: true,
+                position: e.node.worldPosition.clone(),
+                rotation: e.node.worldRotation.clone(),
+                linearVelocity: v3(0, -1.2, 0),
+                angularVelocity: v3(),
+            });
         });
         this.reflowTray();
-        this.schedulePileSettle(GameManager.SETTLE_BACKSTOP);
     }
 
     /** 凑齐：自动吸取盒中物件补全一组三消（优先补槽内已有的类别） */
@@ -1805,22 +1655,17 @@ export class GameManager extends Component {
             // 重洗与投放共用落点函数，打乱后堆形与开局同构（否则用一次道具堆就变样）。
             // 已消掉一些件时 boxItems 变少，层数自动跟着降，不会在半空留出悬着的上层。
             const seed = this.pileSeedPoint(i);
-            t.node.setWorldPosition(
+            const pos = v3(
                 seed.x + (Math.random() - 0.5) * 0.1,
                 1.55 + (i % 6) * 0.1,
                 seed.z + (Math.random() - 0.5) * 0.06);
             this.setNaturalRotation(t.node, t.id);
-            t.stillTicks = 0;
-            t.anchorY = -99;
-            const rb = t.node.getComponent(RigidBody)!;
-            rb.linearDamping = 0.06;
-            rb.angularDamping = 0.3;
-            rb.type = RigidBody.Type.DYNAMIC;
-            try { rb.clearState(); } catch { /* 部分版本无此方法，忽略 */ }
-            rb.wakeUp();
-            rb.setLinearVelocity(v3((Math.random() - 0.5) * 0.4, -1.2, (Math.random() - 0.5) * 0.4));
+            // 打乱是一次超自然的重新发牌，不是物理过程，所以走 teleport 直接改刚体位姿
+            // ——这是全工程唯一允许脚本改写动态刚体位置的地方，见 JoltWorld.teleport。
+            // 节点位姿不用自己写：teleport 之后由 syncNodes 统一同步过去。
+            this.jolt.teleport(t.bodyKey, pos, t.node.worldRotation,
+                v3((Math.random() - 0.5) * 0.4, -1.2, (Math.random() - 0.5) * 0.4));
         }
-        this.schedulePileSettle(GameManager.SETTLE_BACKSTOP);
         return true;
     }
 
