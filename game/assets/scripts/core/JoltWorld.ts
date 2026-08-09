@@ -295,6 +295,23 @@ export class JoltWorld {
         Vec3.copy(it.prevP, pos); Quat.copy(it.prevQ, rot);
     }
 
+    /**
+     * 唤醒全部动态件。
+     *
+     * 换肤重建围栏后必须调一次：几何变了，休眠中的刚体不会自己发现自己正卡在新墙里。
+     * 矩形筐的角落距碗心 1.96、而碗壁半径只有 1.65——落在角上的件换肤后就在墙外，
+     * 不唤醒它就永远停在那儿，看着像穿模。
+     */
+    wakeAll() {
+        if (!this.ready) return;
+        const J = this.J;
+        for (const it of this.bodies) {
+            if (it.removed) continue;
+            this.bi.ActivateBody(it.body.GetID());
+        }
+        void J;
+    }
+
     /** 唤醒一点周围的物件（道具打乱、摘件后的局部塌落补刀）。 */
     wakeAround(center: Vec3, radius: number) {
         if (!this.ready) return;
