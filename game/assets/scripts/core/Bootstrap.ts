@@ -1,6 +1,7 @@
 import { director, Director, Node, Camera, DirectionalLight, Color, view, ResolutionPolicy, Layers } from 'cc';
 import { EDITOR } from 'cc/env';
 import { GameManager } from './GameManager';
+import { LabScene } from '../lab/LabScene';
 
 /**
  * 免编辑器接线的自举：场景启动后自动搭好游戏所需节点。
@@ -99,6 +100,16 @@ if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
 
     const root = new Node('GameRoot');
     root.setParent(scene);
+
+    // 堆积实验场（?lab=1）：跑测用的对照组，与 GameManager **互斥**——两者都要接管
+    // 物理步进与相机，同时存在必然互相打架。相机与灯光沿用上面自建的那套，
+    // 正是 lab/shared/scenario.ts 里 CAMERA/LIGHT 的来源，三套 POC 构图因此一致。
+    if (new URLSearchParams(location.search).get('lab') === '1') {
+        root.addComponent(LabScene);
+        console.log('[Bootstrap] 进入堆积实验场（POC A · Cocos 对照组）');
+        return;
+    }
+
     const gm = root.addComponent(GameManager);
     gm.cam = cam;
     console.log('[Bootstrap] 自举完成，游戏开始');

@@ -1,0 +1,27 @@
+{
+  "note": "POC A（Cocos 3.8.8 + ammo/Bullet）对照组首轮采数。mode=fast。刻意删掉了正式工程的全部脚本兜底：无 SPAWN_FREEZE_DELAY 定时硬冻、无 PilePatrol 两条冻结判据、无 constrainVisualInside 位置改写、无巡检限速与两段阻尼。物件停下来的唯一途径是 Bullet 自己的休眠。",
+  "date": "2026-08-09",
+  "backend": "physics-ammo（Bullet）。注意：方案原文写的是 PhysX，实际 settings/v2/packages/engine.json 里 physics-physx=false、physics-ammo=true。",
+  "engineNotes": [
+    "hull 档与 POC B/C **不对等**：B/C 喂的是按方向分格抽稀到约 100 点的凸包，而 Cocos 的 MeshCollider 只吃现成 Mesh 资源、没有喂点集的接口，只能把全量网格交给 Bullet 建凸包，且多网格模型只取顶点最多的那一块。这不是 POC 偷懒，是 Cocos 这条路的真实 API 成本——代价直接体现在 stepMsP50 上。",
+    "物理与视觉必须拆成两个节点。同节点方案下渲染插值写回 = 改写刚体位置：Cocos 每步 syncSceneToPhysics 会把节点 transform 灌回物理体。拆开后数据流单向。",
+    "autoSimulation 关掉、手动按 1/120 步进，否则 Cocos 会把渲染帧长喂给物理。"
+  ],
+  "runs": [
+    {"engine":"cocos-bullet","proxy":"auto","scenario":"s36","itemCount":36,"settleTime":-1,"maxDrift":0,"jitteryCount":0,"overlapPairs":0,"escapedCount":0,"pileTopY":3.42,"pileMedianY":1.45,"coverage":0.781,"stepMsP50":0.162,"removeDisturbRatio":0,"removeResettle":-1},
+    {"engine":"cocos-bullet","proxy":"hull","scenario":"s36","itemCount":36,"settleTime":21.9,"maxDrift":0.2425,"jitteryCount":32,"overlapPairs":0,"escapedCount":0,"pileTopY":1.34,"pileMedianY":0.55,"coverage":0.896,"stepMsP50":18.97,"removeDisturbRatio":0.2,"removeResettle":-1},
+    {"engine":"cocos-bullet","proxy":"auto","scenario":"s56","itemCount":56,"settleTime":18.25,"maxDrift":0.7772,"jitteryCount":52,"overlapPairs":0,"escapedCount":0,"pileTopY":2.97,"pileMedianY":1.22,"coverage":0.765,"stepMsP50":0.249,"removeDisturbRatio":0.673,"removeResettle":-1},
+    {"engine":"cocos-bullet","proxy":"hull","scenario":"s56","itemCount":56,"settleTime":30.1,"maxDrift":0.0527,"jitteryCount":26,"overlapPairs":0,"escapedCount":0,"pileTopY":1.17,"pileMedianY":0.31,"coverage":0.879,"stepMsP50":34.422,"removeDisturbRatio":0,"removeResettle":0.5}
+  ],
+  "keyFinding": {
+    "title": "整堆永不休眠，永久蠕动——这是引擎层的问题，不是脚本补丁造成的",
+    "evidence": "s36/auto 跑满 45 仿真秒后逐件读状态：36 件里 32 件处于 Bullet 的 WANTS_DEACTIVATION（想睡），但**真正 ISLAND_SLEEPING 的是 0 件**；30 件的线速度仍高于 1cm/s，最高 10cm/s。",
+    "mechanism": "Bullet 的休眠按**接触岛**整体判定：一岛之内只要还有一件不满足休眠条件，整岛都不睡。密堆下 36 件同属一个接触岛，香蕉这类被方盒代理粗暴近似的长条件始终找不到稳定支撑点，于是一件拖着 35 件一起醒着。",
+    "implication": "正式工程的 0.9s 定时硬冻、PilePatrol 两条冻结判据、constrainVisualInside，本质上都是在给这个「永不收敛」擦屁股。删掉补丁并不会自动变好——反而暴露出底层就没停下来过。这一条同时否掉了「只要把补丁清干净，Cocos 就够用」这个假设。"
+  },
+  "perfVerdict": "凸包档的单步耗时 18.97ms(36 件) / 34.42ms(56 件)。固定步 1/120 下，每仿真秒的物理开销 = 120 × 单步 = 2.3s / 4.1s——桌面 Mac 上就已经比实时慢 2~4 倍，移动端不用测。对照：同样 56 件凸包，Jolt 0.042ms、Havok 0.059ms。",
+  "open": [
+    "PhysX 后端（engine.json 一个开关）见 poc-a2-physx.json。",
+    "帧率未测：fast 模式不产出可比帧率，需另跑 realtime。"
+  ]
+}

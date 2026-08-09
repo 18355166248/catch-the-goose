@@ -1,0 +1,26 @@
+{
+  "note": "POC C（Babylon.js + Havok）首轮采数。mode=fast，纯物理、无任何脚本冻结、不改写刚体位置（body.disablePreStep=true，数据流单向 物理→节点）。",
+  "date": "2026-08-09",
+  "engineNotes": [
+    "Havok 的 web 版没有暴露 CCD 开关（HavokPhysics.d.ts 只有 MotionType，没有 MotionQuality），而 POC B 显式开了 Jolt 的 LinearCast。穿透风险两边不对等。",
+    "Havok 没有暴露求解迭代次数，POC B 的 mNumVelocitySteps / mNumPositionSteps 在这里无对应项，只能吃默认求解器。",
+    "休眠阈值不可配，只能读状态（HP_Body_GetActivationState），不能设阈值。BODY.sleepThreshold 在这一套里没有落点。",
+    "以上三条不是 POC 写得不够细，而是 Havok Web 包本身的可调空间——它本身就是一项选型结论。"
+  ],
+  "runs": [
+    {"engine":"havok","proxy":"auto","scenario":"s36","itemCount":36,"settleTime":2.7,"maxDrift":0.0036,"jitteryCount":0,"overlapPairs":0,"escapedCount":0,"pileTopY":3.5,"pileMedianY":1.33,"coverage":0.81,"stepMsP50":0.023,"removeDisturbRatio":0.057,"removeResettle":0.35},
+    {"engine":"havok","proxy":"hull","scenario":"s36","itemCount":36,"settleTime":2.6,"maxDrift":0.0005,"jitteryCount":0,"overlapPairs":0,"escapedCount":0,"pileTopY":1.27,"pileMedianY":0.45,"coverage":0.896,"stepMsP50":0.068,"removeDisturbRatio":0,"removeResettle":0.05},
+    {"engine":"havok","proxy":"auto","scenario":"s56","itemCount":56,"settleTime":1.65,"maxDrift":0.0476,"jitteryCount":1,"overlapPairs":0,"escapedCount":0,"pileTopY":2.14,"pileMedianY":0.85,"coverage":0.795,"stepMsP50":0.056,"removeDisturbRatio":0.018,"removeResettle":0.85},
+    {"engine":"havok","proxy":"hull","scenario":"s56","itemCount":56,"settleTime":4.3,"maxDrift":0.0098,"jitteryCount":0,"overlapPairs":1,"escapedCount":0,"pileTopY":0.98,"pileMedianY":0.29,"coverage":0.833,"stepMsP50":0.059,"removeDisturbRatio":0,"removeResettle":0.05}
+  ],
+  "realtime": [
+    {"engine":"havok","proxy":"hull","scenario":"s56","itemCount":56,"settleTime":4.3,"maxDrift":0.0098,"jitteryCount":0,"overlapPairs":1,"escapedCount":0,"pileTopY":0.98,"pileMedianY":0.29,"coverage":0.833,"fpsP50":59.88,"fpsP5":58.48,"stepMsP50":0.2,"removeDisturbRatio":0,"removeResettle":0.05,"video":"havok-s56.webm"}
+  ],
+  "realtimeNote": "realtime 与 fast 两种模式的物理读数完全一致（落定 4.3s、位移 0.0098m、抽底 0% 扰动）。桌面 Chrome 稳 60fps，但单步 0.2ms 是 Jolt 的 4 倍。",
+  "open": [
+    "auto 档堆顶 3.50（36 件）明显高于 Jolt 的 2.83：方盒代理下 Havok 的堆更松。hull 档已消除这个差距（0.98 vs Jolt 0.95），所以不必单独追查。",
+    "s56 auto 有 1 件落定后位移 4.8cm，是四档里唯一超阈的；hull 档降到 0.98cm 且 0 件超阈。",
+    "落定 4.3s 处在验收窗口（2~5s）的上沿，Jolt 是 1.45s。这是两者最明显的差距。",
+    "移动端未测。"
+  ]
+}

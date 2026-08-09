@@ -1,0 +1,18 @@
+{
+  "note": "POC B（Three.js + Jolt）首轮采数。mode=fast，纯物理、无任何脚本冻结、不改写刚体位置。",
+  "date": "2026-08-08",
+  "runs": [
+    {"engine":"jolt","proxy":"auto","scenario":"s36","itemCount":36,"settleTime":1.25,"maxDrift":0,"jitteryCount":0,"overlapPairs":0,"escapedCount":0,"pileTopY":2.83,"pileMedianY":1.55,"coverage":0.803,"stepMsP50":0.037,"removeDisturbRatio":0.029,"removeResettle":0.35},
+    {"engine":"jolt","proxy":"hull","scenario":"s36","itemCount":36,"settleTime":1.45,"maxDrift":0,"jitteryCount":0,"overlapPairs":1,"escapedCount":0,"pileTopY":1.53,"pileMedianY":0.38,"coverage":0.871,"stepMsP50":0.028,"removeDisturbRatio":0,"removeResettle":0.15},
+    {"engine":"jolt","proxy":"auto","scenario":"s56","itemCount":56,"settleTime":1.3,"maxDrift":0,"jitteryCount":0,"overlapPairs":0,"escapedCount":0,"pileTopY":2.27,"pileMedianY":0.87,"coverage":0.764,"stepMsP50":0.048,"removeDisturbRatio":0.218,"removeResettle":1.25},
+    {"engine":"jolt","proxy":"hull","scenario":"s56","itemCount":56,"settleTime":1.45,"maxDrift":0,"jitteryCount":0,"overlapPairs":1,"escapedCount":0,"pileTopY":0.95,"pileMedianY":0.27,"coverage":0.882,"stepMsP50":0.042,"removeDisturbRatio":0,"removeResettle":0.1}
+  ],
+  "realtime": [
+    {"engine":"jolt","proxy":"hull","scenario":"s56","itemCount":56,"settleTime":1.45,"maxDrift":0,"jitteryCount":0,"overlapPairs":1,"escapedCount":0,"pileTopY":0.95,"pileMedianY":0.27,"coverage":0.882,"fpsP50":59.88,"fpsP5":56.82,"stepMsP50":0.05,"removeDisturbRatio":0,"removeResettle":0.1,"video":"jolt-s56.webm"}
+  ],
+  "realtimeNote": "realtime 与 fast 两种模式的物理读数完全一致（落定 1.45s、零位移、抽底 0% 扰动），说明 fast 模式的采数是可信的。桌面 Chrome 稳 60fps。",
+  "open": [
+    "hull 档抽底扰动 0% 已由 realtime 录屏确认：堆本来就稳，不是休眠没被唤醒（再落定 0.1s，说明确实被唤醒并重新收敛了）。",
+    "移动端未测。"
+  ]
+}

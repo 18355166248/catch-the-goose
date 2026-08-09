@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lab-jolt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "lab/poc-b-jolt", "run", "dev"],
+      "port": 5183
+    },
+    {
+      "name": "lab-havok",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "lab/poc-c-havok", "run", "dev"],
+      "port": 5184
+    },
+    {
+      "name": "lab-cocos",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "5185", "--directory", "game/build/web-mobile"],
+      "port": 5185
+    }
+  ]
+}

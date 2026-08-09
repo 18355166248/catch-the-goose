@@ -1,0 +1,24 @@
+{
+  "note": "POC A2（Cocos 3.8.8 + PhysX）。与 POC A 同一份 LabScene 代码、同一批参数，唯一差别是 settings/v2/packages/engine.json 把 physics 后端从 physics-ammo 换成 physics-physx。跑完已还原成 ammo。",
+  "date": "2026-08-09",
+  "confirmed": "控制台确认 `[PHYSICS]: using physx`；hull 档逐件核对，36 件全部挂的是 MeshCollider。",
+  "runs": [
+    {"engine":"cocos-physx","proxy":"auto","scenario":"s36","itemCount":36,"settleTime":-1,"maxDrift":0,"jitteryCount":0,"overlapPairs":1,"escapedCount":0,"pileTopY":6.36,"pileMedianY":1.71,"coverage":0.839,"stepMsP50":0.166,"removeDisturbRatio":0,"removeResettle":-1,"asleepAt45s":"3/36","stillMoving":"9 件 > 5cm/s"},
+    {"engine":"cocos-physx","proxy":"hull","scenario":"s36","itemCount":36,"settleTime":-1,"maxDrift":0,"jitteryCount":0,"overlapPairs":0,"escapedCount":0,"pileTopY":2.72,"pileMedianY":1.13,"coverage":0.839,"stepMsP50":0.507,"removeDisturbRatio":0,"removeResettle":-1,"asleepAt45s":"0/36","stillMoving":"22 件 > 1cm/s"}
+  ],
+  "findings": [
+    {
+      "title": "PhysX 同样不收敛，两档都跑不出落定",
+      "detail": "auto 档 45 仿真秒后 36 件里只有 3 件休眠、9 件线速度仍高于 5cm/s；hull 档 0 件休眠、22 件高于 1cm/s。换后端救不了「整堆停不下来」。"
+    },
+    {
+      "title": "auto 档出现半空悬停：apple_23 停在 y=6.36、速度 0、已休眠",
+      "detail": "该位置 (x=1.25, z=0.14) 水平方向在筐内，高度却比围栏顶(y=6)还高。件被挤压弹上去、在半空速度归零、PhysX 判它休眠，于是永远吊在那儿不掉。这比蠕动更糟——是肉眼可见的穿帮。"
+    },
+    {
+      "title": "但 PhysX 解决了凸包的性能问题：0.507ms vs Bullet 的 18.97ms（37 倍）",
+      "detail": "PhysX 在 cook 阶段会把凸包顶点压到上限（默认 255）再用，Bullet 则是拿到多少顶点用多少。所以「Cocos 用不了凸包」这句要修正为「Bullet 用不了凸包，PhysX 可以」。可惜性能可用不等于结果可用——它照样不落定。"
+    }
+  ],
+  "verdict": "PhysX 不构成「留在 Cocos」的救兵。它把凸包的性能问题解决了，却没解决收敛问题，还额外引入了半空悬停。"
+}

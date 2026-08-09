@@ -1,0 +1,17 @@
+{
+  "name": "lab-poc-b-jolt",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5183",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "jolt-physics": "^1.1.0",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
