@@ -1,20 +1,16 @@
-import { _decorator, Component } from 'cc';
-import { loadJolt, JoltAPI } from './JoltLoader';
+import { _decorator, Component, Node, v3, Quat, geometry } from 'cc';
+import { JoltWorld } from '../core/JoltWorld';
 
 const { ccclass } = _decorator;
 
 /**
- * 可行性探针：验证 Cocos 的 assets 脚本能不能 import npm 里的 Jolt 并真的跑起来。
+ * 可行性探针：验证 Cocos 里能不能跑 Jolt，以及 {@link JoltWorld} 这层封装本身对不对。
  *
- * 这是「保留 Cocos 渲染 + Jolt 接管物理」这条路的**地基**。地基不成立，选型就得重来，
- * 所以在动 GameManager 之前先用最小代价把它钉死。探针只回答四个问题：
- *   1. Cocos 的构建管线能不能解析 `import initJolt from 'jolt-physics'`；
- *   2. wasm 能不能在浏览器里实例化（用 wasm-compat 版，wasm 以 base64 内联在 JS 里，
- *      不需要额外托管 .wasm 文件，省掉 Cocos 资源管线对二进制文件的处理）；
- *   3. 能不能建世界、建刚体、步进；
- *   4. 步进结果对不对（自由落体位移是否符合解析解）。
+ * 这是「保留 Cocos 渲染 + Jolt 接管物理」的地基。在动 GameManager 之前先把地基钉死，
+ * 免得改完 2000 行才发现底层的某个动词根本跑不通。探针逐个走一遍玩法真正会用到的动词：
+ *   init → 静态地板 → 投件 → 步进 → 位姿同步 → 射线拾取 → 摘件 → 休眠查询。
  *
- * 验证完即可删除。留着不碍事，但它不是玩法的一部分。
+ * 验证完即可删除（连同 Bootstrap 里的 ?joltprobe=1 分支）。
  */
 @ccclass('JoltProbe')
 export class JoltProbe extends Component {
@@ -23,85 +19,75 @@ export class JoltProbe extends Component {
     }
 
     private async run() {
+        const out: Record<string, unknown> = {};
+        const world = new JoltWorld();
+
         const t0 = performance.now();
-        let J: JoltAPI;
-        try {
-            J = await loadJolt();
-        } catch (e) {
-            console.error('[JoltProbe] ❌ wasm 实例化失败', e);
-            report({ ok: false, stage: 'init', error: String(e) });
-            return;
+        await world.init(-12);
+        out.initMs = +(performance.now() - t0).toFixed(1);
+        out.ready = world.isReady;
+        if (!world.isReady) { report(out, false, 'init 失败'); return; }
+
+        // 地板：顶面 y=0，与正式工程的 basketFloorCollider 同口径（厚板防穿底）。
+        world.addStaticBox(v3(0, -2.25, 0), v3(8, 4.5, 8), 0, 1.25, 0.08);
+
+        // 三件盒子从不同高度落下，落到地板上应停在 y≈半高。
+        const nodes: Node[] = [];
+        const keys: number[] = [];
+        for (let i = 0; i < 3; i++) {
+            const n = new Node(`probe_${i}`);
+            n.setParent(this.node);
+            nodes.push(n);
+            keys.push(world.spawn(n, {
+                shape: { kind: 'box', half: v3(0.25, 0.25, 0.25) },
+                mass: 1, linearDamping: 0.06, angularDamping: 0.3,
+                friction: 1.25, restitution: 0.08, useCCD: true,
+                position: v3(i * 0.8 - 0.8, 2 + i * 0.5, 0),
+                rotation: new Quat(),
+                linearVelocity: v3(0, -2.6, 0),
+                angularVelocity: v3(),
+            }));
         }
-        const initMs = performance.now() - t0;
+        out.keys = keys.join(',');
+        out.spawnOk = keys.every(k => k > 0);
 
-        // 最小世界：两个对象层（静态 / 动态）+ 一块地板 + 一个自由落体的球。
-        const settings = new J.JoltSettings();
-        settings.mMaxBodies = 64;
-        const objFilter = new J.ObjectLayerPairFilterTable(2);
-        objFilter.EnableCollision(0, 1);
-        objFilter.EnableCollision(1, 1);
-        const bpTable = new J.BroadPhaseLayerInterfaceTable(2, 2);
-        bpTable.MapObjectToBroadPhaseLayer(0, new J.BroadPhaseLayer(0));
-        bpTable.MapObjectToBroadPhaseLayer(1, new J.BroadPhaseLayer(1));
-        settings.mObjectLayerPairFilter = objFilter;
-        settings.mBroadPhaseLayerInterface = bpTable;
-        settings.mObjectVsBroadPhaseLayerFilter =
-            new J.ObjectVsBroadPhaseLayerFilterTable(bpTable, 2, objFilter, 2);
-
-        const jolt = new J.JoltInterface(settings);
-        J.destroy(settings);
-        const phys = jolt.GetPhysicsSystem();
-        const bi = phys.GetBodyInterface();
-        phys.SetGravity(new J.Vec3(0, -12, 0));
-
-        // 地板（静态）
-        const floorShape = new J.BoxShape(new J.Vec3(5, 0.5, 5), 0.01);
-        const floorSettings = new J.BodyCreationSettings(
-            floorShape, new J.RVec3(0, -0.5, 0), new J.Quat(0, 0, 0, 1),
-            J.EMotionType_Static, 0);
-        const floor = bi.CreateBody(floorSettings);
-        bi.AddBody(floor.GetID(), J.EActivation_DontActivate);
-        J.destroy(floorSettings);
-
-        // 自由落体球：从 y=5 静止释放，重力 -12。
-        const ballShape = new J.SphereShape(0.5);
-        const ballSettings = new J.BodyCreationSettings(
-            ballShape, new J.RVec3(0, 5, 0), new J.Quat(0, 0, 0, 1),
-            J.EMotionType_Dynamic, 1);
-        ballSettings.mLinearDamping = 0;   // 关阻尼，才能对上解析解
-        const ball = bi.CreateBody(ballSettings);
-        bi.AddBody(ball.GetID(), J.EActivation_Activate);
-        J.destroy(ballSettings);
-
-        // 步进 0.5 秒（60 步 × 1/120）。
+        // 步进 3 秒（360 步 × 1/120），足够落定并进入休眠。
         const STEP = 1 / 120;
-        const N = 60;
         const tStep = performance.now();
-        for (let i = 0; i < N; i++) jolt.Step(STEP, 1);
-        const stepMs = (performance.now() - tStep) / N;
+        for (let i = 0; i < 360; i++) world.step(STEP);
+        out.stepMs = +((performance.now() - tStep) / 360).toFixed(4);
 
-        const y = ball.GetPosition().GetY();
-        // 解析解：y = 5 - ½·g·t²，g=12、t=0.5 → 5 - 1.5 = 3.5。
-        // 半隐式欧拉会有一步的偏差（约 ½·g·dt·t = 0.025），给 5cm 容差。
-        const expected = 5 - 0.5 * 12 * (N * STEP) ** 2;
-        const err = Math.abs(y - expected);
-        const ok = err < 0.05;
+        world.syncNodes(1);
+        const p = v3();
+        world.getPosition(keys[0], p);
+        out.restY = +p.y.toFixed(3);
+        // 半高 0.25 + Jolt 的凸半径余量，落定应在 0.25 附近。
+        out.restOk = Math.abs(p.y - 0.25) < 0.06;
+        // 节点位姿必须被同步过去（渲染靠它）。
+        out.nodeSynced = Math.abs(nodes[0].worldPosition.y - p.y) < 1e-4;
+        out.asleep = world.isAsleep(keys[0]);
 
-        const result = {
-            ok,
-            initMs: +initMs.toFixed(1),
-            stepMs: +stepMs.toFixed(4),
-            fallY: +y.toFixed(4),
-            expectedY: +expected.toFixed(4),
-            error: +err.toFixed(4),
-        };
-        console.log(ok
-            ? `[JoltProbe] ✅ Cocos 里跑通 Jolt：wasm 实例化 ${result.initMs}ms，单步 ${result.stepMs}ms，自由落体 y=${result.fallY}（理论 ${result.expectedY}）`
-            : `[JoltProbe] ❌ 步进结果不对：y=${result.fallY}，理论 ${result.expectedY}`);
-        report(result);
+        // 射线拾取：从正上方朝下打，应命中第 0 件。
+        const ray = new geometry.Ray(p.x, 5, p.z, 0, -1, 0);
+        const hit = world.raycast(ray);
+        out.rayHit = hit;
+        out.rayOk = hit === keys[0];
+
+        // 摘件：摘掉后在场数减一，且再打同一条射线不该命中它。
+        const before = world.liveCount;
+        world.remove(keys[0]);
+        const hit2 = world.raycast(ray);
+        out.removeOk = world.liveCount === before - 1 && hit2 !== keys[0];
+
+        const ok = !!(out.spawnOk && out.restOk && out.nodeSynced && out.rayOk && out.removeOk);
+        report(out, ok, ok ? '' : '有子项未通过');
     }
 }
 
-function report(r: unknown) {
-    (globalThis as unknown as { __joltProbe: unknown }).__joltProbe = r;
+function report(out: Record<string, unknown>, ok: boolean, why: string) {
+    out.ok = ok;
+    (globalThis as unknown as { __joltProbe: unknown }).__joltProbe = out;
+    console.log(ok
+        ? `[JoltProbe] ✅ JoltWorld 全部动词跑通：${JSON.stringify(out)}`
+        : `[JoltProbe] ❌ ${why}：${JSON.stringify(out)}`);
 }
