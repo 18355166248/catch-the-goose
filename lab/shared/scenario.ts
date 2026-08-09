@@ -8,9 +8,10 @@
  * 数值全部抄自正式工程（game/assets/scripts/core/GameManager.ts 与 ContainerBoundary.ts），
  * 且**只取第一个红木矩形筐**——碗按方案退出第一阶段。
  *
- * 本文件不依赖任何引擎，POC B/C 直接 import；POC A 在 Cocos 工程内，由
- * `node lab/sync-spec.mjs` 生成一份等价副本到 game/assets/scripts/lab/ScenarioSpec.ts
- * （Cocos 的 assets/ 不能 import 工程外的模块）。改本文件后必须重跑同步脚本。
+ * 本文件不依赖任何引擎，由 poc-b-jolt 直接 import。
+ *
+ * 选型阶段还有 POC A（Cocos+Bullet）与 POC C（Babylon+Havok），它们各自的规格副本
+ * 靠一个同步脚本生成。选型结束后两套 POC 连同脚本一并删除，采数结果留在 lab/results/。
  */
 
 // ---------- 容器（红木矩形筐，与正式工程 FENCE_* 常量一字不差） ----------

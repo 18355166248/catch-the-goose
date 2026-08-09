@@ -101,9 +101,8 @@ if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
     root.setParent(scene);
 
     // 这里曾经有两个调试入口，物理迁移完成后都撤了：
-    //   ?lab=1       堆积实验场（Cocos+Bullet 对照组）。随「关掉 Cocos 物理模块」移出
-    //                构建，源码留在 lab/poc-a-cocos/ 作证据。要重跑得拷回 assets/
-    //                并在 engine.json 打开 physics——包会重新胖 0.63MB。
+    //   ?lab=1       堆积实验场（Cocos+Bullet 对照组）。Cocos 物理模块关掉后它跑不起来，
+    //                源码已删，采数结果留在 lab/results/poc-a-cocos.json。
     //   ?joltprobe=1 Jolt 自检探针。它要验的「wasm 能否在 Cocos 里跑起来」现在由整个
     //                游戏本身证明，留着是多余的。需要时从 git 历史里取回。
     const gm = root.addComponent(GameManager);

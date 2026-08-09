@@ -3,7 +3,11 @@
 正式玩法之外的独立跑测场。目的只有一个：**在同一批物件、同一个红木矩形筐、同一套
 参数下，让几种物理底层正面比一次堆积效果**，效果确认之后再决定正式工程的架构。
 
-碗形容器不参与本阶段（方案已定：矩形筐达到满意效果后，再专门做连续碰撞碗壳）。
+> **选型已结束：Jolt 胜出，正式工程已完成迁移**（见分支 `feature/jolt-physics`）。
+> 落选的 POC A（Cocos+Bullet）、POC A2（Cocos+PhysX）、POC C（Babylon+Havok）源码已删，
+> 四份采数结果全部留在 `results/`。保留 poc-b-jolt 的唯一理由是**它现在是物理参数的
+> 调优沙箱**：`JoltWorld` 里那几个求解迭代与休眠旋钮，改之前应先在这里复现，
+> 别直接在正式工程上试——那样分不清是参数变了还是玩法逻辑变了。
 
 ## 目录
 
@@ -12,13 +16,9 @@ lab/
   shared/scenario.ts   场景规格（唯一真相源：容器 / 件表 / 缩放 / 落点 / 初速度 / 种子 / 步长）
   shared/metrics.ts    指标采集（落定时间、微颤、互插、覆盖率、抽底扰动）
   shared/harness.ts    跑测外壳（录屏、HUD、阶段机、结果导出）
-  poc-b-jolt/          POC B：Three.js + Jolt
-  poc-c-havok/         POC C：Babylon.js + Havok
-  results/             各 POC 的采数结果
+  poc-b-jolt/          Three.js + Jolt —— 胜出方案，现为参数调优沙箱
+  results/             四套 POC 的采数结果（含已删除的三套）
 ```
-
-POC A（清理后的 Cocos 对照组）住在正式工程里：`game/assets/scripts/lab/`，
-用 `?lab=1` 启动，不与 GameManager 共存。
 
 ## 跑测
 
@@ -26,8 +26,7 @@ POC A（清理后的 Cocos 对照组）住在正式工程里：`game/assets/scri
 npm --prefix lab/poc-b-jolt install --registry=https://registry.npmjs.org
 ```
 
-然后起 dev server（`.claude/launch.json` 里已登记 `lab-jolt` / `lab-havok`），
-浏览器打开：
+然后起 dev server（`.claude/launch.json` 里已登记 `lab-jolt`），浏览器打开：
 
 - `?sc=s36&mode=fast` —— 36 件、采数模式（几秒出结果，后台标签页也跑得动）
 - `?sc=s56&mode=realtime` —— 56 件、真实速度并录 webm（跑完 HUD 上出下载链接）
@@ -75,15 +74,15 @@ npm --prefix lab/poc-b-jolt install --registry=https://registry.npmjs.org
   密堆下正常相邻的件会被成片误判（实测 56 件凸包堆虚报 109 对）。现用等效体积
   半径 `cbrt(hx·hy·hz)`。
 
-## 当前进度
+## 选型过程（已完成）
 
 - [x] 共享规格 / 指标 / 跑测外壳
-- [x] POC B（Three.js + Jolt）—— `results/poc-b-jolt.json`
+- [x] POC B（Three.js + Jolt）—— `results/poc-b-jolt.json` ← **胜出**
 - [x] POC C（Babylon.js + Havok）—— `results/poc-c-havok.json`
 - [x] POC A（清理后的 Cocos + Bullet 对照组）—— `results/poc-a-cocos.json`
 - [x] POC A2：PhysX 后端 —— `results/poc-a2-physx.json`
-- [ ] realtime 录屏与并排评审
-- [ ] 移动端实测
+- [x] realtime 帧率实测（桌面 60fps）与并排评审
+- [x] 移动端实测（Jolt POC 56 件凸包档 p50 59.88 / p5 57.14）
 
 ## 首轮横向结果（mode=fast，36 件）
 
