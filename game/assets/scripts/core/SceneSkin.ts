@@ -29,6 +29,19 @@ export interface SceneSkin {
      * 需与 containerModel 的开口对齐。
      */
     boundary?: BoundaryDef;
+    /**
+     * 用 {@link containerModel} 的真实网格做碰撞（Jolt 静态三角网格），而不是拿
+     * {@link BoundaryDef.profile} 拼环墙。曲面容器（碗、锅）应当开启。
+     *
+     * 环墙是 Bullet 时代的妥协：那时拿不出凹形静态体，只能用几十段竖直圆筒逼近碗壁，
+     * 代价是分层处有台阶、接触法线在层间跳变、静态体上百个，物件在低处还会站到壁外。
+     * Jolt 的 MeshShape 直接吃三角汤，凹形无碍，且只是**一个** shape。
+     *
+     * 开启后 boundary 仍然要配：逃逸判定、投放铺点、视觉兜底都还走它，
+     * 只有「物理围栏」这一项换成网格。围栏则退化成 clamp 半径上的一圈安全网，
+     * 正常游戏中物件碰不到它，只在模型异步加载完成前兜底。
+     */
+    meshCollider?: boolean;
 }
 
 /**
@@ -58,6 +71,8 @@ export const SKINS: SceneSkin[] = [
         backdrop: new Color(140, 145, 142),
         backdropTex: 'bg_jade',
         containerModel: 'bowl_jade',
+        // 碗是曲面容器：碰撞交给模型网格本身，不再拼环墙（见 meshCollider 说明）。
+        meshCollider: true,
         // 圆碗必须用圆边界：套默认矩形围栏时，矩形 4 角会把物件顶到碗壁外侧 = 穿模。
         // 圆心沿用默认矩形中心 (0,-0.88)。半径为保守初值——物件先落在碗内留余量；
         // 打开 GameManager.DEBUG_FENCE 看青色环段与碗口的差距后，逐步调大到贴合碗口。

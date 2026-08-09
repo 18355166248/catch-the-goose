@@ -146,6 +146,79 @@ export class JoltWorld {
         this.statics.push(body);
     }
 
+    /**
+     * 用节点下的真实网格建**静态三角形碰撞体**，位姿按节点的世界变换烘进顶点。
+     *
+     * 这是碗这类曲面容器的正解。旧实现（Bullet 时代）拿不出凹形静态体，只能用几十段
+     * 竖直环墙去逼近碗壁——分层处有台阶、接触法线在层间跳变、静态体数量上百，物件在
+     * 低处还会站到碗壁外面去。Jolt 的 MeshShape 直接吃三角汤，凹形没有任何问题，
+     * 而且是**一个** shape 而不是上百个盒子。
+     *
+     * 只能给静态体用：三角网格没有体积，动态刚体压上去会互相穿透。
+     *
+     * @returns 成功烘进去的三角形数；0 表示没读到网格（调用方应回退到围栏方案）
+     */
+    addStaticMesh(root: Node, friction: number, restitution: number): number {
+        if (!this.ready) { console.error('[JoltWorld] 物理未就绪就建静态网格'); return 0; }
+        const J = this.J;
+
+        const verts = new J.VertexList();
+        const tris = new J.IndexedTriangleList();
+        const p = v3();
+        let base = 0;
+        let triCount = 0;
+
+        root.updateWorldTransform();
+        for (const mr of root.getComponentsInChildren(MeshRenderer)) {
+            const mesh: Mesh | null = mr.mesh;
+            if (!mesh) continue;
+            const toWorld = mr.node.worldMatrix;
+            for (let sub = 0; sub < mesh.struct.primitives.length; sub++) {
+                const pos = mesh.readAttribute(sub, gfx.AttributeName.ATTR_POSITION);
+                const idx = mesh.readIndices(sub);
+                if (!pos || !idx) continue;
+                const n = pos.length / 3;
+                for (let i = 0; i < n; i++) {
+                    p.set(pos[i * 3] as number, pos[i * 3 + 1] as number, pos[i * 3 + 2] as number);
+                    Vec3.transformMat4(p, p, toWorld);
+                    verts.push_back(new J.Float3(p.x, p.y, p.z));
+                }
+                for (let i = 0; i + 2 < idx.length; i += 3) {
+                    tris.push_back(new J.IndexedTriangle(
+                        base + (idx[i] as number),
+                        base + (idx[i + 1] as number),
+                        base + (idx[i + 2] as number), 0));
+                    triCount++;
+                }
+                base += n;
+            }
+        }
+
+        if (!triCount) {
+            J.destroy(verts); J.destroy(tris);
+            return 0;
+        }
+
+        const settings = new J.MeshShapeSettings(verts, tris, new J.PhysicsMaterialList());
+        // Sanitize 去掉退化三角形与重复面。碗这类 DCC 导出的网格常带这些，
+        // 不清掉会在碰撞时产生零面积法线，表现为物件贴着壁面抽搐。
+        settings.Sanitize();
+        const shape = settings.Create().Get();
+        J.destroy(settings); J.destroy(verts); J.destroy(tris);
+
+        // 顶点已经是世界坐标，刚体本身摆在原点即可。
+        const bcs = new J.BodyCreationSettings(
+            shape, new J.RVec3(0, 0, 0), new J.Quat(0, 0, 0, 1),
+            J.EMotionType_Static, LAYER_STATIC);
+        bcs.mFriction = friction;
+        bcs.mRestitution = restitution;
+        const body = this.bi.CreateBody(bcs);
+        this.bi.AddBody(body.GetID(), J.EActivation_DontActivate);
+        J.destroy(bcs);
+        this.statics.push(body);
+        return triCount;
+    }
+
     /** 清掉全部静态体（换肤重建容器时用）。动态件不受影响。 */
     clearStatics() {
         if (!this.ready) return;

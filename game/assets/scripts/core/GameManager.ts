@@ -672,7 +672,12 @@ export class GameManager extends Component {
         // 隐形围栏（只有碰撞体，无渲染）：厚 1.2、下探到台面以下，杜绝高速隧穿和底缝钻出。
         // 墙段由当前边界生成——矩形出 4 面厚墙（与旧硬编码等价），圆形出一圈切向环段。
         const WH = 7, WT = 1.2, WY = WH / 2 - 1; // 竖向覆盖 -1 ~ 6
-        const wallSpecs = this.boundary.buildWallSpecs(WH, WY, WT);
+        // meshCollider 皮肤（碗这类曲面容器）的围栏退化成**外圈安全网**：真正的碰撞由
+        // 模型网格承担（见 loadContainerModel 末尾），但那是异步加载的，加载完成前得有
+        // 东西兜住物件。安全网按 clamp 半径建，比碗口还大一圈，正常游戏中碰不到。
+        const fenceShape = skin.meshCollider ? this.boundary.clamp : this.boundary.wall;
+        const wallSpecs = new ContainerBoundary({ wall: fenceShape, clamp: fenceShape })
+            .buildWallSpecs(WH, WY, WT);
         for (const w of wallSpecs) {
             this.makeInvisibleWall(w.name, w.pos, w.size, w.yawDeg);
         }
@@ -748,6 +753,20 @@ export class GameManager extends Component {
             mr.shadowCastingMode = MeshRenderer.ShadowCastingMode.OFF;
         }
         console.log(`[GameManager] 置物筐 ${id} 就位：原始尺寸 w=${w.toFixed(2)} d=${d.toFixed(2)} h=${h.toFixed(2)}，缩放=${s.toFixed(3)}`);
+
+        // 曲面容器：拿模型自己的网格做静态碰撞体，取代拼出来的环墙。
+        // 必须放在缩放与落点都定好之后——顶点是按节点世界变换烘进去的。
+        if (this.currentSkin().meshCollider) {
+            const tris = this.jolt.addStaticMesh(n,
+                GameManager.PILE_FRICTION, GameManager.PILE_RESTITUTION);
+            if (tris > 0) {
+                // 网格就位后唤醒全部动态件：它们可能正落在旧安全网与新碗壁之间。
+                this.jolt.wakeAll();
+                console.log(`[GameManager] ${id} 网格碰撞体就位：${tris} 三角形`);
+            } else {
+                console.warn(`[GameManager] ${id} 读不出网格，仍靠围栏安全网约束`);
+            }
+        }
     }
 
     /** 量节点下所有 Mesh 的局部包围盒（root 局部空间）。无网格返回 null。 */
