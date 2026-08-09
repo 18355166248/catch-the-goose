@@ -246,6 +246,11 @@ export class GameManager extends Component {
      * 非圆形物件(鹅/佛像/葫芦等)仍用方盒。
      */
     private static readonly ROUND_ITEMS = new Set(['banzhi', 'bracelet', 'pingankou', 'tongqian', 'yuzhuo']);
+    /**
+     * ⚠️ 临时开关：关掉每日 3 次的免费挑战限制（见 ensureDaily / consumeDaily）。
+     * 物理迁移的测试期打开，方便反复重开关卡。**上线前必须改回 false**。
+     */
+    private static readonly DAILY_LIMIT_OFF = true;
     /** 重力。数值与旧实现一致，只是从 PhysicsSystem 挪到了 JoltWorld。 */
     private static readonly GRAVITY_Y = -12;
     /** 固定物理步长。必须是 60Hz 的整数分之一，见 initPhysics 的说明。 */
@@ -375,6 +380,10 @@ export class GameManager extends Component {
      * 此入口的位置为将来接广告预留：届时只需把 onAction 换成广告回调。
      */
     private ensureDaily(next: () => void): boolean {
+        // ⚠️ 临时：物理迁移的测试期关掉每日次数限制。反复重开关卡验证时，
+        // 「今日次数用完」弹窗每三局就打断一次，纯粹是干扰。
+        // **上线前必须改回 false**，否则每日免费次数这条商业化设计整个失效。
+        if (GameManager.DAILY_LIMIT_OFF) return true;
         if (this.dailyLeft > 0) return true;
         this.hud?.showNotice('今日次数用完', '每天可免费挑战 3 次\n想接着玩就再续一次吧',
             '再续一次', () => {

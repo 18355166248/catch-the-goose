@@ -73,25 +73,12 @@ export const SKINS: SceneSkin[] = [
         containerModel: 'bowl_jade',
         // 碗是曲面容器：碰撞交给模型网格本身，不再拼环墙（见 meshCollider 说明）。
         meshCollider: true,
-        // 圆碗必须用圆边界：套默认矩形围栏时，矩形 4 角会把物件顶到碗壁外侧 = 穿模。
-        // 圆心沿用默认矩形中心 (0,-0.88)。半径为保守初值——物件先落在碗内留余量；
-        // 打开 GameManager.DEBUG_FENCE 看青色环段与碗口的差距后，逐步调大到贴合碗口。
-        // clamp 略大于 wall，给渲染外轮廓留一点缓冲。
+        // 碰撞已交给模型网格（meshCollider），这里的 wall 只用于投放铺点与件的大小反解，
+        // clamp 用于建外圈安全网。圆心沿用默认矩形中心 (0,-0.88)。
+        // wall.radius=1.65 的依据见 ContainerBoundary.usableArea 的注释（实测碗沿 1.78）。
         boundary: {
             wall: { kind: 'circle', cx: 0, cz: -0.88, radius: 1.65 },
             clamp: { kind: 'circle', cx: 0, cz: -0.88, radius: 1.85 },
-            // 碗是上宽下窄的曲面，竖直围栏在低处会宽出真实内壁一大截（碗底差 0.78），
-            // 物件能直接站到碗壁外面。这组半径量自 bowl_jade 的网格顶点
-            // （按 CONTAINER_SPAN=4.0 缩放、底坐 y=-0.35 换算到世界 y），
-            // 各段取该高度实测内半径再留 0.06 余量，免得件贴着壁面卡住。
-            profile: [
-                { y: 0.00, radius: 0.95 },
-                { y: 0.28, radius: 1.26 },
-                { y: 0.56, radius: 1.46 },
-                { y: 0.84, radius: 1.60 },
-                { y: 1.10, radius: 1.72 },
-                { y: 1.36, radius: 1.84 },
-            ],
         },
     },
     {
