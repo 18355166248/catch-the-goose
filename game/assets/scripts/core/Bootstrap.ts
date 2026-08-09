@@ -1,7 +1,6 @@
 import { director, Director, Node, Camera, DirectionalLight, Color, view, ResolutionPolicy, Layers } from 'cc';
 import { EDITOR } from 'cc/env';
 import { GameManager } from './GameManager';
-import { JoltProbe } from '../lab/JoltProbe';
 
 /**
  * 免编辑器接线的自举：场景启动后自动搭好游戏所需节点。
@@ -101,20 +100,12 @@ if (!EDITOR) director.on(Director.EVENT_AFTER_SCENE_LAUNCH, () => {
     const root = new Node('GameRoot');
     root.setParent(scene);
 
-    const query = new URLSearchParams(location.search);
-
-    // 自检探针（?joltprobe=1）：不加载玩法，只把 Jolt 的动词跑一遍，结果写进
-    // window.__joltProbe。留着是因为它是排查「wasm 在某台设备上起不来」的最短路径
-    // ——真机上物件不动时，先开这个看是 wasm 挂了还是玩法逻辑挂了。
-    if (query.get('joltprobe') === '1') {
-        root.addComponent(JoltProbe);
-        console.log('[Bootstrap] 进入 Jolt 自检探针');
-        return;
-    }
-
-    // 曾经这里还有个 ?lab=1 的堆积实验场（Cocos+Bullet 对照组）。它已随「关掉 Cocos
-    // 物理模块」一起移出构建，源码留在 lab/poc-a-cocos/ 作证据。要重跑对照组得把它
-    // 拷回 assets/ 并在 engine.json 里把 physics 打开——那会让包重新胖 0.63MB。
+    // 这里曾经有两个调试入口，物理迁移完成后都撤了：
+    //   ?lab=1       堆积实验场（Cocos+Bullet 对照组）。随「关掉 Cocos 物理模块」移出
+    //                构建，源码留在 lab/poc-a-cocos/ 作证据。要重跑得拷回 assets/
+    //                并在 engine.json 打开 physics——包会重新胖 0.63MB。
+    //   ?joltprobe=1 Jolt 自检探针。它要验的「wasm 能否在 Cocos 里跑起来」现在由整个
+    //                游戏本身证明，留着是多余的。需要时从 git 历史里取回。
     const gm = root.addComponent(GameManager);
     gm.cam = cam;
     console.log('[Bootstrap] 自举完成，游戏开始');
