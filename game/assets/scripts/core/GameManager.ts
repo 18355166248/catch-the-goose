@@ -287,7 +287,17 @@ export class GameManager extends Component {
      * 与旧实现的关键差别是**现在有渲染插值**（JoltWorld.syncNodes），混叠不再靠步长凑。
      */
     private async initPhysics() {
-        await this.jolt.init(GameManager.GRAVITY_Y);
+        try {
+            await this.jolt.init(GameManager.GRAVITY_Y);
+        } catch (e) {
+            // **必须炸得很响**：物理起不来时游戏照样能跑完整个流程，物件停在投放点不动、
+            // 消除也不会塌，看着像"堆积效果变差"而不是"物理没了"。
+            // 踩过一次：构建开了 md5Cache，把 jolt-glue.js 改成了 jolt-glue.<hash>.js，
+            // 加载器按固定路径取 → 404 → 这里静默失败，一路跑到用户手里。
+            console.error('[GameManager] ❌ 物理初始化失败，游戏将没有任何物理效果', e);
+            this.hud?.toast('物理引擎加载失败，请刷新页面');
+            return;
+        }
         if (!this.node.isValid) return;   // 等待期间场景已被换掉
         this.buildBox();
     }
@@ -1862,6 +1872,9 @@ export class GameManager extends Component {
 
     /** 原地开始 levelIndex 指向的关卡（重试当前关或进入下一关） */
     private async resetLevel() {
+        // 开始页可能还开着（重开、救场、跳关都会走到这里，它们不经过「开始挑战」按钮）。
+        // 不关掉的话新一局的堆就倒在首页底下，玩家看不见也点不到。
+        this.hud?.hideHome();
         if (!this.ensureDaily(() => void this.resetLevel())) return;
         this.consumeDaily();
         this.rescueUsed = false;

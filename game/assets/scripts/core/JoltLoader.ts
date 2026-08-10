@@ -36,7 +36,13 @@ let cached: Promise<JoltAPI> | null = null;
 export function loadJolt(): Promise<JoltAPI> {
     if (!cached) {
         const url = new URL('jolt-glue.js', location.href).href;
-        cached = nativeImport(url).then(m => m.default());
+        cached = nativeImport(url).then(m => m.default()).catch(e => {
+            // 这里最常见的死法是 404：构建若开了 md5Cache，产物根目录的文件会被改名成
+            // jolt-glue.<hash>.js，而这个路径是写死的。**构建请勿开 md5Cache**——
+            // 缓存问题用开发服务器的 no-store 头解决，见 tools/serve.py。
+            throw new Error(`Jolt 胶水加载失败（${url}）。`
+                + `若构建开了 md5Cache，文件已被改名，请关掉它。原始错误：${e}`);
+        });
     }
     return cached;
 }
