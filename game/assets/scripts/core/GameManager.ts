@@ -316,7 +316,7 @@ export class GameManager extends Component {
         this.forceLayer(this.node);
         // HUD（纯代码占位版）
         this.hud = new HudUI(this.node.scene, kind => this.useProp(kind), () => this.togglePause(),
-            id => this.applyTheme(id), () => getActiveTheme().id, open => this.setOverlayPause(open),
+            open => this.setOverlayPause(open),
             () => this.toggleSound());
         this.timerLabel = this.hud.timerLabel;
         this.progressLabel = this.hud.progressLabel;
@@ -345,27 +345,60 @@ export class GameManager extends Component {
         (globalThis as any).__gooseBoot?.done();
     }
 
-    /** 首页：今日场景 + 本关信息 + 玩法一句话 + 成绩，点开始才真正入局。 */
+    /**
+     * 开始页：选场景 + 选难度 + 开始。场景在这里定死，进局后不可改（见 HudUI.showHome）。
+     *
+     * 难度「先解锁再自选」：第 1 关恒开放，之后每一关要前一关有过成绩才解锁。
+     * 这样既保留三关阶梯，又让打过的档位可以直接重玩。
+     */
     private showHome() {
-        const count = this.level.items.length * this.level.groupsPerItem * 3;
-        const best = this.best[this.levelIndex];
+        const best = this.best;
+        const unlockedUpTo = (() => {
+            let n = 0;                       // 第 1 关（下标 0）恒开放
+            while (n + 1 < LEVELS.length && best[n]) n++;
+            return n;
+        })();
+        // 选中的难度不能停在没解锁的档上（换主题后成绩清零就会出现）。
+        if (this.levelIndex > unlockedUpTo) this.levelIndex = unlockedUpTo;
+
         this.hud?.showHome({
-            themeName: getActiveTheme().name,
-            levelText: `第 ${this.levelIndex + 1} 关 · ${count} 件 · ${GameManager.clock(this.level.timeSec)}`,
-            // 计分规则此前从没说过：连击是唯一的加分放大器，剩余时间也折算成分，
-            // 玩家不知道就只会慢慢挪，体验完全是另一个游戏。
-            ruleText: '点相同的物件收进底部 7 格，凑齐 3 个消除\n塞满或超时失败；连消翻倍、剩余时间也计分',
-            // 第 2 关起混入石头，此前玩家只能自己踩坑才知道它凑不成三个。
-            warnText: this.level.distractors
-                ? `本关混了 ${this.level.distractors} 块石头：凑不成三个，误拿会一直占格`
-                : '',
+            themes: THEMES.map(t => ({
+                id: t.id, name: t.name,
+                swatch: getSkin(t.skinId).swatch,
+                selected: t.id === getActiveTheme().id,
+            })),
+            levels: LEVELS.map((lv, i) => {
+                const count = lv.items.length * lv.groupsPerItem * 3;
+                const rock = lv.distractors ? ` · 石头 ${lv.distractors}` : '';
+                return {
+                    text: GameManager.LEVEL_NAMES[i] ?? `第 ${i + 1} 关`,
+                    detail: `${lv.items.length} 种 · ${count} 件 · ${GameManager.clock(lv.timeSec)}${rock}`,
+                    stars: best[i]?.stars ?? 0,
+                    unlocked: i <= unlockedUpTo,
+                    selected: i === this.levelIndex,
+                };
+            }),
             dailyText: `今日剩余 ${this.dailyLeft}/${GameManager.DAILY_FREE}`,
-            bestText: best
-                ? `最佳 ${'★'.repeat(best.stars) || '—'} ${best.score ?? 0} 分`
+            bestText: best[this.levelIndex]
+                ? `最佳 ${'★'.repeat(best[this.levelIndex].stars) || '—'} ${best[this.levelIndex].score ?? 0} 分`
                 : '本关暂无成绩',
+            propText: `移出 ×${this.propCounts.remove}　凑齐 ×${this.propCounts.magnet}　打乱 ×${this.propCounts.shuffle}`,
+            onPickTheme: id => {
+                this.applyTheme(id, false);  // 还在开始页挑场景，不入局
+                this.showHome();             // 主题换了，物件族与成绩都变，整页重画
+            },
+            onPickLevel: i => {
+                this.levelIndex = i;
+                this.level = LEVELS[i];
+                this.updateHud();
+                this.showHome();
+            },
             onStart: () => void this.beginRound(),
         });
     }
+
+    /** 三关的难度名，与 LevelConfig 的设计注释一致。 */
+    private static readonly LEVEL_NAMES = ['送温暖', '正常', '地狱'];
 
     /** 秒数 → m:ss。 */
     private static clock(sec: number): string {
@@ -631,13 +664,17 @@ export class GameManager extends Component {
      * 必须重开关卡：物件族变了，堆里那批旧模型既不属于新主题、也凑不出新的三消组。
      * 重开走 resetLevel，它会清掉旧刚体（clearBodies）并按新 LEVELS 重新投放。
      */
-    applyTheme(themeId: string) {
+    applyTheme(themeId: string, restart = true) {
         if (getActiveTheme().id === themeId) return;
         SaveData.setTheme(themeId);
-        refreshLevels();                       // 先重建关卡表，resetLevel 才拿得到新物件族
+        refreshLevels();                       // 先重建关卡表，下面才拿得到新物件族
         this.applySkin(getActiveTheme().skinId);
         this.levelIndex = 0;                   // 物件族换了，从第 1 关重新开始
-        void this.resetLevel();
+        this.level = LEVELS[0];
+        this.loadBest();                       // 成绩按主题分开存，换主题要重新读
+        // restart=false 用于开始页：那里只是在挑场景，还没入局，不该把物件倒出来。
+        if (restart) void this.resetLevel();
+        else this.updateHud();
     }
 
     applySkin(id: string) {

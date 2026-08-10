@@ -116,17 +116,11 @@ export class HudUI {
     private comboPopRoot: Node | null = null;
     private capturedModels = new Map<Node, number>();
     private capturedIcons = new Map<Node, Node>();
-    private skinRoot: Node | null = null;
-    private onSelectSkin?: (id: string) => void;
-    private getSkinId?: () => string;
-    private onSkinPanelToggle?: (open: boolean) => void;
+    private onOverlayToggle?: (open: boolean) => void;
 
     constructor(scene: Scene, onProp: (kind: PropKind) => void, onPause?: () => void,
-        onSelectSkin?: (id: string) => void, getSkinId?: () => string,
-        onSkinPanelToggle?: (open: boolean) => void, onToggleSound?: () => boolean) {
-        this.onSelectSkin = onSelectSkin;
-        this.getSkinId = getSkinId;
-        this.onSkinPanelToggle = onSkinPanelToggle;
+        onOverlayToggle?: (open: boolean) => void, onToggleSound?: () => boolean) {
+        this.onOverlayToggle = onOverlayToggle;
         const canvasNode = new Node('HudCanvas');
         this.canvasNode = canvasNode;
         canvasNode.layer = Layers.Enum.UI_2D;
@@ -167,19 +161,14 @@ export class HudUI {
             { top: 24 }, { left: 24 }, () => onPause?.(), 4, 0.34, HudUI.GOLD_EDGE);
         this.pauseIcon = this.drawIcon(pause.face, 'pause', 33, cream, 0, 0);
 
-        // \u6362\u80a4\u952e\uff1a\u6682\u505c\u952e\u6b63\u4e0b\u65b9\uff0c\u540c\u6b3e\u68d5\u8272\u8f6f\u7cd6\u8d28\u611f\uff0c\u8c03\u8272\u76d8\u56fe\u6807\u3002
-        if (this.onSelectSkin) {
-            const skin = this.makeDockButton(66, 66, 20, dockFill,
-                { top: 24 + DOCK_STEP }, { left: 24 }, () => this.toggleSkinPanel(), 4,
-                0.34, HudUI.GOLD_EDGE);
-            this.drawIcon(skin.face, 'palette', 33, cream, 0, 0);
-        }
+        // 这里原本还有个换肤键。场景现在只在开始页选定、进局后不可改——它决定物件族，
+        // 中途换等于换牌组，成绩也会失去可比性。入口已移到 showHome。
 
-        // 声音键：跟在换肤键后面排。默认是静音的，开关只放在暂停菜单里的话，
-        // 多数玩家整局都不会知道这游戏有声音——所以主界面必须有个能看见的入口。
+        // 声音键：默认静音。开关只放在暂停菜单里的话，多数玩家整局都不知道有声音，
+        // 所以主界面必须有个看得见的入口。
         if (onToggleSound) {
             const sound = this.makeDockButton(66, 66, 20, dockFill,
-                { top: 24 + DOCK_STEP * (this.onSelectSkin ? 2 : 1) }, { left: 24 },
+                { top: 24 + DOCK_STEP }, { left: 24 },
                 () => this.setSoundOn(onToggleSound()), 4, 0.34, HudUI.GOLD_EDGE);
             this.soundIcon = this.drawIcon(sound.face, 'sound-off', 33, cream, 0, 0);
         }
@@ -833,47 +822,115 @@ export class HudUI {
     // ---------- 首页 / 暂停菜单 ----------
 
     /**
-     * 开局首页：进入即停在这里，玩家点「开始挑战」才扣次数、倒物件。
-     * 一上来就哗啦倒一堆物件，新玩家不知道在干嘛；这一屏交代场景、关卡、玩法和成绩。
+     * 开始页：进入即停在这里，选好场景与难度，点「开始挑战」才扣次数、倒物件。
+     *
+     * 场景在这里定死、进局后不可改，是有意的：场景决定**物件族**，中途换等于换了牌组，
+     * 成绩也就失去可比性。历史实现把换肤入口放在游玩页，且只改外观不改物件族，
+     * 于是能切出「翡翠碗装水果」这种不搭的组合——那个入口已随本页移走。
+     *
+     * 难度是「先解锁再自选」：打通过的档位可以直接选，没通关的锁着。纯自选会让
+     * 三关阶梯失去意义（玩家只会刷最简单那档），纯顺序又不给重玩自由。
      */
     showHome(opts: {
-        themeName: string; levelText: string; ruleText: string; warnText?: string;
-        dailyText: string; bestText: string; onStart: () => void;
+        themes: { id: string; name: string; swatch: [Color, Color]; selected: boolean }[];
+        levels: { text: string; detail: string; stars: number; unlocked: boolean; selected: boolean }[];
+        dailyText: string; bestText: string; propText: string;
+        onPickTheme: (id: string) => void;
+        onPickLevel: (index: number) => void;
+        onStart: () => void;
     }) {
         this.hideHome();
         const root = this.makeModal('homeRoot');
         this.homeRoot = root;
 
-        const W = 560, H = 520;
+        const W = 620, H = 900;
         this.makePanelChild(root, W + 12, H + 12, 36, new Color(52, 27, 15, 235), 0, -8);
         const panel = this.makePanelChild(root, W, H, 32, new Color(255, 244, 214), 0, 0,
             new Color(196, 130, 64), 6);
 
-        this.addLabel(panel, '抓住大鹅', 58, new Color(240, 150, 26), 0, H / 2 - 72, true);
-        this.addLabel(panel, `今日场景 · ${opts.themeName}`, 24, new Color(158, 122, 82), 0, H / 2 - 126, true);
+        this.addLabel(panel, '抓住大鹅', 58, new Color(240, 150, 26), 0, H / 2 - 70, true);
+        this.addLabel(panel, '点相同的物件收进底部 7 格，凑齐 3 个消除',
+            20, new Color(158, 122, 82), 0, H / 2 - 118, true);
 
-        // 关卡横幅：把「今天打第几关」做成视觉焦点，而不是混在文字里。
-        const banner = this.makePanelChild(panel, 380, 64, 18, new Color(250, 232, 196), 0, 62,
-            new Color(214, 172, 104), 4);
-        this.addLabel(banner, opts.levelText, 30, new Color(102, 57, 28), 0, 0, true);
+        // ---- 选择场景 ----
+        this.sectionLabel(panel, '选择场景', -W / 2 + 40, H / 2 - 168);
+        opts.themes.forEach((t, i) => {
+            const cw = 268, ch = 104;
+            const x = (i % 2 - 0.5) * (cw + 16);
+            const y = H / 2 - 250 - Math.floor(i / 2) * (ch + 14);
+            const card = this.makePanelChild(panel, cw, ch, 18, new Color(250, 238, 210), x, y,
+                t.selected ? new Color(240, 150, 26) : new Color(198, 168, 120), t.selected ? 6 : 3);
+            this.makePanelChild(card, 44, 62, 10, t.swatch[0], -88, 0, new Color(255, 255, 255, 120), 2);
+            this.makePanelChild(card, 22, 62, 7, t.swatch[1], -52, 0);
+            this.addLabel(card, t.name, 24, new Color(102, 57, 28), 32, 16, true);
+            this.addLabel(card, t.selected ? '使用中' : '点击切换', 17,
+                t.selected ? new Color(52, 148, 68) : new Color(158, 122, 82), 32, -18, true);
+            this.tapCard(card, () => opts.onPickTheme(t.id));
+        });
 
-        const rule = this.addLabel(panel, opts.ruleText, 21, new Color(122, 88, 54), 0, -8, false);
-        rule.horizontalAlign = Label.HorizontalAlign.CENTER;
-        rule.overflow = Label.Overflow.RESIZE_HEIGHT;
-        rule.node.getComponent(UITransform)?.setContentSize(452, 60);
+        // ---- 选择难度 ----
+        const rowsTop = H / 2 - 250 - Math.ceil(opts.themes.length / 2) * 118 - 4;
+        this.sectionLabel(panel, '选择难度', -W / 2 + 40, rowsTop);
+        opts.levels.forEach((lv, i) => {
+            const rw = 552, rh = 82;
+            const y = rowsTop - 58 - i * (rh + 10);
+            // 未解锁：整行压暗并去掉描边，点了也没反应——比弹一句「未解锁」更省事。
+            const fill = lv.unlocked ? new Color(250, 238, 210) : new Color(238, 226, 202);
+            const card = this.makePanelChild(panel, rw, rh, 18, fill, 0, y,
+                lv.selected ? new Color(240, 150, 26) : new Color(198, 168, 120), lv.selected ? 6 : 3);
+            const textCol = lv.unlocked ? new Color(102, 57, 28) : new Color(176, 156, 128);
+            // 两行文字都要左对齐并限宽，否则 Label 以自身中心为锚点、长文本会向左溢出卡片。
+            // （踩过：详情行的「N 种」被挤到框外挂在左边。）
+            for (const [text, size, col, dy] of [
+                [lv.text, 25, textCol, 16] as const,
+                [lv.detail, 17, new Color(158, 122, 82), -16] as const,
+            ]) {
+                const l = this.addLabel(card, text, size, col, -rw / 2 + 26, dy, false);
+                l.horizontalAlign = Label.HorizontalAlign.LEFT;
+                l.overflow = Label.Overflow.NONE;
+                l.node.getComponent(UITransform)?.setAnchorPoint(0, 0.5);
+            }
+            // 星级 = 该档历史最佳，同时兼作解锁指示（灰星 = 没通关过）。
+            for (let s = 0; s < 3; s++) {
+                this.addLabel(card, '★', 24,
+                    s < lv.stars ? new Color(240, 150, 26) : new Color(224, 203, 160),
+                    rw / 2 - 96 + s * 30, 0, false);
+            }
+            if (!lv.unlocked) this.addLabel(card, '未解锁', 16, new Color(176, 156, 128), rw / 2 - 150, 0, false);
+            else this.tapCard(card, () => opts.onPickLevel(i));
+        });
 
-        // 本关特有的注意事项（如第 2 关起混入的石头），没有就不占位。
-        if (opts.warnText) {
-            this.addLabel(panel, opts.warnText, 19, new Color(214, 106, 48), 0, -56, true);
-        }
-
-        this.makeButton(panel, '开始挑战', 300, 88, 0, -118, new Color(255, 207, 55), () => {
+        // ---- 开始 ----
+        this.makeButton(panel, '开始挑战', 340, 92, 0, -H / 2 + 150, new Color(255, 207, 55), () => {
             this.hideHome();
             opts.onStart();
-        }, 32);
+        }, 34);
+        this.addLabel(panel, opts.dailyText, 19, new Color(158, 122, 82), -130, -H / 2 + 88, true);
+        this.addLabel(panel, opts.bestText, 19, new Color(158, 122, 82), 130, -H / 2 + 88, true);
+        // 道具存量：选难度时得知道手上有多少底牌，否则要进局才看得到。纯展示，点不了。
+        this.addLabel(panel, opts.propText, 18, new Color(158, 122, 82), 0, -H / 2 + 46, true);
+    }
 
-        this.addLabel(panel, opts.dailyText, 19, new Color(158, 122, 82), -112, -196, true);
-        this.addLabel(panel, opts.bestText, 19, new Color(158, 122, 82), 112, -196, true);
+    /** 分区小标题。左对齐锚点，避免长短文字左边缘对不齐。 */
+    private sectionLabel(parent: Node, text: string, x: number, y: number) {
+        const l = this.addLabel(parent, text, 20, new Color(158, 122, 82), x, y, false);
+        l.horizontalAlign = Label.HorizontalAlign.LEFT;
+        l.node.getComponent(UITransform)?.setAnchorPoint(0, 0.5);
+    }
+
+    /** 卡片点击：按下缩一点、松手弹回。 */
+    private tapCard(card: Node, onTap: () => void) {
+        card.on(NodeEventType.TOUCH_START, () => {
+            tween(card).stop();
+            tween(card).to(0.06, { scale: v3(0.96, 0.96, 1) }).start();
+        });
+        card.on(NodeEventType.TOUCH_END, () => {
+            tween(card).to(0.08, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
+            onTap();
+        });
+        card.on(NodeEventType.TOUCH_CANCEL, () => {
+            tween(card).to(0.08, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
+        });
     }
 
     hideHome() {
@@ -1015,81 +1072,6 @@ export class HudUI {
     hideResult() {
         this.dismissModal(this.resultRoot);
         this.resultRoot = null;
-    }
-
-    // ---------- 选皮面板 ----------
-
-    private toggleSkinPanel() {
-        if (this.skinRoot?.isValid) { this.closeSkinPanel(); return; }
-        this.onSkinPanelToggle?.(true);
-        this.renderSkinPanel();
-    }
-
-    private closeSkinPanel() {
-        const wasOpen = !!this.skinRoot?.isValid;
-        this.dismissModal(this.skinRoot);
-        this.skinRoot = null;
-        if (wasOpen) this.onSkinPanelToggle?.(false);
-    }
-
-    /**
-     * 皮肤选择弹窗：遮罩 + 2×3 皮肤卡片网格 + 完成键。点卡片即时换肤并刷新高亮。
-     * 只重建视觉、不改变“打开”状态，因此切皮刷新时不会误触发暂停开关。
-     */
-    private renderSkinPanel() {
-        if (this.skinRoot?.isValid) this.skinRoot.destroy();
-        const current = this.getSkinId?.() ?? THEMES[0].id;
-        // 遮罩点空白处关闭，同时吞掉触摸不穿透到 3D 拾取区。
-        const root = this.makeModal('skinRoot', () => this.closeSkinPanel());
-        this.skinRoot = root;
-
-        const panelW = 548;
-        const panelH = 560;
-        this.makePanelChild(root, panelW + 12, panelH + 12, 34, new Color(52, 27, 15, 235), 0, -8);
-        const panel = this.makePanelChild(root, panelW, panelH, 30, new Color(255, 244, 214), 0, 0,
-            new Color(196, 130, 64), 6);
-        this.addLabel(panel, '选择场景', 38, new Color(240, 150, 26), 0, panelH / 2 - 44, true);
-
-        const cellW = 232, cellH = 118, stepX = 252, stepY = 136, firstRowY = 138;
-        // 列的是**主题**不是皮肤：主题决定物件族，皮肤只是它配套的外观。
-        // 早先这里列 SKINS，于是能选出「翡翠碗装水果」这种不搭的组合。
-        THEMES.forEach((theme, i) => {
-            const skin = getSkin(theme.skinId);
-            const col = i % 2;
-            const row = Math.floor(i / 2);
-            const x = (col - 0.5) * stepX;
-            const y = firstRowY - row * stepY;
-            const selected = theme.id === current;
-
-            // 卡片：选中态描金加粗。
-            const card = this.makePanelChild(panel, cellW, cellH, 18, new Color(250, 238, 210), x, y,
-                selected ? new Color(240, 150, 26) : new Color(198, 168, 120), selected ? 6 : 3);
-            // 左侧两条皮肤主色预览。
-            this.makePanelChild(card, 54, 84, 12, skin.swatch[0], -71, 0, new Color(255, 255, 255, 120), 2);
-            this.makePanelChild(card, 26, 84, 8, skin.swatch[1], -31, 0);
-            // 名称 + 状态。四字皮肤名（翡翠青玉）在 25 号字下会顶到左侧色条，缩一号并右移让开。
-            this.addLabel(card, theme.name, 23, new Color(102, 57, 28), 38, 20, true);
-            this.addLabel(card, selected ? '使用中' : '点击切换', 16,
-                selected ? new Color(52, 148, 68) : new Color(158, 122, 82), 38, -22, true);
-
-            card.on(NodeEventType.TOUCH_START, () => {
-                tween(card).stop();
-                tween(card).to(0.06, { scale: v3(0.96, 0.96, 1) }).start();
-            });
-            const releaseCard = () => tween(card).to(0.08, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
-            card.on(NodeEventType.TOUCH_END, () => {
-                releaseCard();
-                if (theme.id === current) return;
-                this.onSelectSkin?.(theme.id);
-                // 只刷新视觉高亮，保持面板打开与暂停状态。
-                this.renderSkinPanel();
-            });
-            card.on(NodeEventType.TOUCH_CANCEL, releaseCard);
-        });
-
-        // 完成键。
-        this.makeButton(panel, '完成', 194, 62, 0, -panelH / 2 + 34, new Color(255, 207, 55),
-            () => this.closeSkinPanel(), 26);
     }
 
     sync() {
