@@ -5,7 +5,7 @@ import {
     Layers, Color, Material, utils, primitives,
 } from 'cc';
 import { DebugViz } from './DebugViz';
-import { LEVELS, LevelDef, getActiveTheme, DISTRACTOR_ID } from './LevelConfig';
+import { LEVELS, LevelDef, getActiveTheme, refreshLevels, THEMES, DISTRACTOR_ID } from './LevelConfig';
 import { SceneSkin, getSkin, DEFAULT_SKIN_ID } from './SceneSkin';
 import { ContainerBoundary, BoundaryDef } from './ContainerBoundary';
 import { SlotTray, TRAY_CAPACITY } from './SlotTray';
@@ -316,7 +316,7 @@ export class GameManager extends Component {
         this.forceLayer(this.node);
         // HUD（纯代码占位版）
         this.hud = new HudUI(this.node.scene, kind => this.useProp(kind), () => this.togglePause(),
-            id => this.applySkin(id), () => this.skinId, open => this.setOverlayPause(open),
+            id => this.applyTheme(id), () => getActiveTheme().id, open => this.setOverlayPause(open),
             () => this.toggleSound());
         this.timerLabel = this.hud.timerLabel;
         this.progressLabel = this.hud.progressLabel;
@@ -622,6 +622,24 @@ export class GameManager extends Component {
      * 换肤：持久化选择并原地重建场景视觉 + 围栏。物件在 this.node 上、与 sceneRoot 平级，
      * 不受重建影响；围栏几何各皮肤一致，重建后物件贴靠关系不变。
      */
+    /**
+     * 切换场景主题：一次换齐**物件族 + 皮肤 + 容器**，并重开当前关。
+     *
+     * 与 {@link applySkin} 的区别是它改的是玩什么，不只是长什么样。历史实现里主题按
+     * 日期锁定、换肤面板只改视觉，于是能切出「翡翠碗装水果」这种不搭的组合。
+     *
+     * 必须重开关卡：物件族变了，堆里那批旧模型既不属于新主题、也凑不出新的三消组。
+     * 重开走 resetLevel，它会清掉旧刚体（clearBodies）并按新 LEVELS 重新投放。
+     */
+    applyTheme(themeId: string) {
+        if (getActiveTheme().id === themeId) return;
+        SaveData.setTheme(themeId);
+        refreshLevels();                       // 先重建关卡表，resetLevel 才拿得到新物件族
+        this.applySkin(getActiveTheme().skinId);
+        this.levelIndex = 0;                   // 物件族换了，从第 1 关重新开始
+        void this.resetLevel();
+    }
+
     applySkin(id: string) {
         if (id === this.skinId && this.sceneRoot?.isValid) return;
         this.skinId = getSkin(id).id;
@@ -1097,7 +1115,7 @@ export class GameManager extends Component {
         // 换凸包后三套引擎的堆顶都从 2.8~3.5 掉到 1.3~1.5、筐内覆盖率从 78% 涨到 87%。
         // 方盒把水果撑成方块、互相架桥垒成柱，正是旧版"堆得像塔"的根因。
         // 点集在 JoltWorld 里按方向分格抽稀到约 100 点，与 lab/poc-b-jolt 逐行一致。
-        const pts = extractHullPoints(root, center, scale);
+        const pts = extractHullPoints(root, scale);
         if (pts.length >= 12) return { kind: 'hull', points: pts };
         // 网格读不出顶点（压缩格式/无 position 属性）时退回方盒，别让物件没有碰撞体。
         return {

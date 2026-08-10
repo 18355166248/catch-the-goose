@@ -3,7 +3,8 @@ import {
     NodeEventType, Widget, view, screen, Graphics, UIOpacity, resources,
     tween, v3, Vec3, Tween,
 } from 'cc';
-import { SKINS } from './SceneSkin';
+import { getSkin } from './SceneSkin';
+import { THEMES } from './LevelConfig';
 
 export type PropKind = 'remove' | 'magnet' | 'shuffle';
 
@@ -1037,7 +1038,7 @@ export class HudUI {
      */
     private renderSkinPanel() {
         if (this.skinRoot?.isValid) this.skinRoot.destroy();
-        const current = this.getSkinId?.() ?? SKINS[0].id;
+        const current = this.getSkinId?.() ?? THEMES[0].id;
         // 遮罩点空白处关闭，同时吞掉触摸不穿透到 3D 拾取区。
         const root = this.makeModal('skinRoot', () => this.closeSkinPanel());
         this.skinRoot = root;
@@ -1047,15 +1048,18 @@ export class HudUI {
         this.makePanelChild(root, panelW + 12, panelH + 12, 34, new Color(52, 27, 15, 235), 0, -8);
         const panel = this.makePanelChild(root, panelW, panelH, 30, new Color(255, 244, 214), 0, 0,
             new Color(196, 130, 64), 6);
-        this.addLabel(panel, '选择皮肤', 38, new Color(240, 150, 26), 0, panelH / 2 - 44, true);
+        this.addLabel(panel, '选择场景', 38, new Color(240, 150, 26), 0, panelH / 2 - 44, true);
 
         const cellW = 232, cellH = 118, stepX = 252, stepY = 136, firstRowY = 138;
-        SKINS.forEach((skin, i) => {
+        // 列的是**主题**不是皮肤：主题决定物件族，皮肤只是它配套的外观。
+        // 早先这里列 SKINS，于是能选出「翡翠碗装水果」这种不搭的组合。
+        THEMES.forEach((theme, i) => {
+            const skin = getSkin(theme.skinId);
             const col = i % 2;
             const row = Math.floor(i / 2);
             const x = (col - 0.5) * stepX;
             const y = firstRowY - row * stepY;
-            const selected = skin.id === current;
+            const selected = theme.id === current;
 
             // 卡片：选中态描金加粗。
             const card = this.makePanelChild(panel, cellW, cellH, 18, new Color(250, 238, 210), x, y,
@@ -1064,7 +1068,7 @@ export class HudUI {
             this.makePanelChild(card, 54, 84, 12, skin.swatch[0], -71, 0, new Color(255, 255, 255, 120), 2);
             this.makePanelChild(card, 26, 84, 8, skin.swatch[1], -31, 0);
             // 名称 + 状态。四字皮肤名（翡翠青玉）在 25 号字下会顶到左侧色条，缩一号并右移让开。
-            this.addLabel(card, skin.name, 23, new Color(102, 57, 28), 38, 20, true);
+            this.addLabel(card, theme.name, 23, new Color(102, 57, 28), 38, 20, true);
             this.addLabel(card, selected ? '使用中' : '点击切换', 16,
                 selected ? new Color(52, 148, 68) : new Color(158, 122, 82), 38, -22, true);
 
@@ -1075,8 +1079,8 @@ export class HudUI {
             const releaseCard = () => tween(card).to(0.08, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
             card.on(NodeEventType.TOUCH_END, () => {
                 releaseCard();
-                if (skin.id === current) return;
-                this.onSelectSkin?.(skin.id);
+                if (theme.id === current) return;
+                this.onSelectSkin?.(theme.id);
                 // 只刷新视觉高亮，保持面板打开与暂停状态。
                 this.renderSkinPanel();
             });

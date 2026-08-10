@@ -1,3 +1,4 @@
+import { SaveData } from './SaveData';
 /**
  * 关卡与场景配置。
  *
@@ -100,13 +101,25 @@ export const THEMES: Theme[] = [
     },
 ];
 
-/** 按日期取模选当天主题（UTC 天数；全服一致）。 */
+/** 按日期取模选当天主题（UTC 天数；全服一致）。玩家未手动选主题时用它。 */
 export function activeThemeIndex(): number {
     const day = Math.floor(Date.now() / 86400000);
     return ((day % THEMES.length) + THEMES.length) % THEMES.length;
 }
 
+/**
+ * 当前主题：玩家手动选过就用他选的，否则跟随每日轮播。
+ *
+ * 主题决定**物件族**，皮肤只决定外观。两者过去是分开的：主题按日期锁死、换肤面板
+ * 只改视觉，于是能切出「翡翠碗装水果」这种不搭的组合，玩家也没法主动挑想玩的那一族。
+ * 现在主题可选且持久化，选主题会连带把皮肤换成它配套的那套（见 GameManager.applyTheme）。
+ */
 export function getActiveTheme(): Theme {
+    const saved = SaveData.getTheme();
+    if (saved) {
+        const hit = THEMES.find(t => t.id === saved);
+        if (hit) return hit;
+    }
     return THEMES[activeThemeIndex()];
 }
 
@@ -133,8 +146,19 @@ export function buildLevels(family: string[]): LevelDef[] {
     ];
 }
 
-/** 当天的 3 关（模块加载时按当天主题定；一局游戏时长内日期不变，无需热更）。 */
+/**
+ * 当前主题的 3 关。模块加载时按当前主题算一次，玩家切主题后由 {@link refreshLevels}
+ * **原地**重建——必须原地改而不是重新赋值，因为 GameManager 直接持有这个数组引用，
+ * 换成新数组的话它那边还指着旧的，切完主题物件族不变、只有皮肤变了。
+ */
 export const LEVELS: LevelDef[] = buildLevels(getActiveTheme().family);
+
+/** 切主题后重建关卡表。调用方负责重开当前关（物件族变了，堆必须重新投放）。 */
+export function refreshLevels(): void {
+    const next = buildLevels(getActiveTheme().family);
+    LEVELS.length = 0;
+    LEVELS.push(...next);
+}
 
 /** 校验：每关物件总数必须是 3 的倍数（groupsPerItem 保证了这一点，这里防御性再查一遍） */
 export function validateLevel(def: LevelDef): boolean {

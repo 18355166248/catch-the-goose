@@ -15,6 +15,7 @@ export class SaveData {
     private static readonly DAILY = 'goose_daily_v1';
     private static readonly BEST = 'goose_best_v1';
     private static readonly SKIN = 'goose_skin_v1';
+    private static readonly THEME = 'goose_theme_v1';
     private static readonly PROP = 'goose_props_v1';
     private static readonly PROPGIFT = 'goose_propgift_v1';
     private static readonly SOUND = 'goose_sound_v1';
@@ -74,6 +75,21 @@ export class SaveData {
     }
     static setSkin(id: string): void {
         SaveData.write(SaveData.SKIN, id);
+    }
+
+    /**
+     * 玩家手动选定的场景主题 id（null = 跟随每日轮播）。
+     *
+     * 主题决定**物件族**（水果摊 / 古玩铺），皮肤只决定外观。历史实现里主题按日期锁定、
+     * 换肤面板又只改视觉，于是能切出「翡翠碗装水果」这种不搭的组合，玩家也没法主动
+     * 选想玩的那一族。这里让选择可持久化，见 LevelConfig.getActiveTheme。
+     */
+    static getTheme(): string | null {
+        return SaveData.read(SaveData.THEME);
+    }
+    static setTheme(id: string | null): void {
+        if (id === null) SaveData.write(SaveData.THEME, '');
+        else SaveData.write(SaveData.THEME, id);
     }
 
     static getProps<T>(fallback: T): T {

@@ -251,7 +251,18 @@ export class JoltWorld {
             }
             // 凸半径给 1cm：完全为 0 会让 GJK 在薄片上退化，接触法线跳变正是抖动来源。
             chs.mMaxConvexRadius = 0.01;
-            shape = chs.Create().Get();
+            const res = chs.Create();
+            // **必须校验**：点集退化（共面、重合、尺度过小）时 Create 会失败，而 Get()
+            // 照样返回一个东西。拿它建刚体的后果是物件没有有效碰撞形状——穿过碗、穿过
+            // 地板、一路掉到 y=-15 万。踩过一次（葫芦），别把这个校验删了。
+            if (res.HasError()) {
+                console.warn(`[JoltWorld] ${node.name} 凸包构建失败（${res.GetError().c_str()}），`
+                    + `降级为方盒。点数 ${opt.shape.points.length / 3}`);
+                const h = hullHalfExtents(opt.shape.points);
+                shape = new J.BoxShape(new J.Vec3(h.x, h.y, h.z), 0.01);
+            } else {
+                shape = res.Get();
+            }
             J.destroy(chs);
             radius = hullRadius(opt.shape.points);
         } else if (opt.shape.kind === 'cylinder') {
@@ -500,10 +511,16 @@ export class JoltWorld {
  * （随机抽稀会把尖端抽没，凸包就缩水了）。这套抽稀与 lab/poc-b-jolt 里逐行一致，
  * 换句话说正式工程与实验场用的是同一个凸包，实验结论才迁得过来。
  *
- * @param center 视觉包围盒中心（局部），点集会减掉它以对齐刚体质心
  * @param scale  实例化时的统一缩放
  */
-export function extractHullPoints(root: Node, center: Vec3, scale: number): Float32Array {
+export function extractHullPoints(root: Node, scale: number): Float32Array {
+    // 注意：**不要**在这里再减一次视觉中心。调用方（centerVisualAndMakeShape）已经把
+    // 子树平移 -center 归过心了，这里的 root-local 坐标本身就是以质心为原点的。
+    // 早先这个函数从实验场原样搬过来时多带了一个 center 参数并二次相减——实验场那边
+    // 模型没有预先归心，所以那边是对的，搬过来就成了双重扣减。
+    // 后果按模型的 DCC 偏移大小而异：偏移小的（宝石）几乎看不出，偏移大的（葫芦）
+    // 整个点集被推到一米多外，所有点从原点看方向趋同，12×12 的方向分桶塌缩成 5 个，
+    // 凸包退化成一个薄片 → 物件穿过碗和地板一路掉到 y=-6 万。
     root.updateWorldTransform();
     const invRoot = new Mat4();
     const meshToRoot = new Mat4();
@@ -522,9 +539,9 @@ export function extractHullPoints(root: Node, center: Vec3, scale: number): Floa
             for (let i = 0; i + 2 < pos.length; i += 3) {
                 p.set(pos[i] as number, pos[i + 1] as number, pos[i + 2] as number);
                 Vec3.transformMat4(p, p, meshToRoot);
-                const x = (p.x - center.x) * scale;
-                const y = (p.y - center.y) * scale;
-                const z = (p.z - center.z) * scale;
+                const x = p.x * scale;
+                const y = p.y * scale;
+                const z = p.z * scale;
                 const d = Math.hypot(x, y, z);
                 if (d < 1e-6) continue;
                 const theta = Math.atan2(z, x);                              // -π..π
@@ -541,6 +558,17 @@ export function extractHullPoints(root: Node, center: Vec3, scale: number): Floa
     let k = 0;
     buckets.forEach(b => { arr[k++] = b.x; arr[k++] = b.y; arr[k++] = b.z; });
     return arr;
+}
+
+/** 点集的轴向半尺寸，凸包构建失败时用来退回方盒。 */
+function hullHalfExtents(points: Float32Array): { x: number; y: number; z: number } {
+    let mx = 0.01, my = 0.01, mz = 0.01;
+    for (let i = 0; i + 2 < points.length; i += 3) {
+        mx = Math.max(mx, Math.abs(points[i]));
+        my = Math.max(my, Math.abs(points[i + 1]));
+        mz = Math.max(mz, Math.abs(points[i + 2]));
+    }
+    return { x: mx, y: my, z: mz };
 }
 
 /** 点集的等效体积半径，用于估计唤醒范围。 */
