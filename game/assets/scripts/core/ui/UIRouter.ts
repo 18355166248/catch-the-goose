@@ -1,5 +1,13 @@
 import { Node, Layers, UITransform, UIOpacity, tween, v3, Vec3, Color, Graphics } from 'cc';
 
+/** 页面在 720 宽美术坐标中的真实可视范围。 */
+export interface ScreenViewport {
+    topY: number;
+    bottomY: number;
+    width: number;
+    height: number;
+}
+
 /**
  * 页面路由：整屏页面之间的切换，取代「一切都是盖在游戏上的弹窗」。
  *
@@ -29,6 +37,11 @@ export interface Screen {
     readonly dimWorld?: boolean;
     /** 把页面内容画到 root 上。root 是 720×1280 的整屏节点，坐标以屏心为原点。 */
     build(root: Node): void;
+    /**
+     * 窗口尺寸变化后的页面布局入口。长地图页用它固定头尾、把剩余高度交给地图视口；
+     * 普通页面不实现即可继续沿用自己的固定坐标。
+     */
+    layout?(viewport: ScreenViewport): void;
     /** 页面退场前的清理（解绑外部监听等）。纯节点内容不用管，路由会整棵销毁。 */
     dispose?(): void;
 }
@@ -60,14 +73,19 @@ export class UIRouter {
     }
 
     /**
-     * 长页底部被窗口裁掉时，把页面自己声明的安全操作栏吸附到当前可视底边。
-     * 路由只负责定位，不理解按钮内容；没有该节点的页面不会受影响。
+     * 把真实可视范围交给活动页。路由只做坐标换算，不理解“地图”或“控制台”；
+     * 页面据此决定哪些区域固定、哪些区域裁切，避免再用悬浮按钮遮挡正文。
      */
-    layoutBottomDock(bottomY: number, visible: boolean) {
-        const dock = this.current?.node.getChildByName('screenBottomDock');
-        if (!dock?.isValid) return;
-        dock.active = visible;
-        if (visible) dock.setPosition(0, bottomY, 0);
+    layoutVisibleArea(bottomY: number) {
+        const current = this.current;
+        if (!current) return;
+        const topY = current.screen.artTop ?? 850;
+        current.screen.layout?.({
+            topY,
+            bottomY,
+            width: this.size.w,
+            height: topY - bottomY,
+        });
     }
 
     /**

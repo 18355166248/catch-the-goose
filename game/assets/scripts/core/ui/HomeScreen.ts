@@ -1,5 +1,7 @@
-import { Node, Color, Layers, UITransform, Graphics, NodeEventType } from 'cc';
-import { Screen } from './UIRouter';
+import {
+    Node, Color, Layers, UITransform, NodeEventType, Mask, EventTouch, Label,
+} from 'cc';
+import { Screen, ScreenViewport } from './UIRouter';
 import { UIKit, UIColors } from './UIKit';
 
 export interface MapChoice {
@@ -23,75 +25,234 @@ export interface HomeData {
     onStart: () => void;
 }
 
+const HEADER_H = 173;
+const BASE_MAP_H = 912;
+const EXTENSION_H = 1440;
+
 /**
- * 挑战路线页：首个地图章节使用设计稿拆分出的真实美术层，交互热区和文案仍由代码驱动。
- * 新地图继续向章节上方追加，既保住当前稿的完成度，也不把整页做成无法扩展的死图。
+ * 挑战首页：顶部品牌、滚动地图、底部挑战控制台是三个独立区域。
+ *
+ * 关键约束：短屏只能压缩/裁切地图，摘要、难度、提示、开始按钮和次数必须作为一个
+ * 完整控制台固定在可视底部。后续地图按两站一段向上追加，页面本身不需要改布局。
  */
 export class HomeScreen implements Screen {
     readonly name = 'home';
-    // 头图自身从 y=778.5 开始；1700 高的纯色托底属于出血，不应在宽屏顶部露出来。
     readonly artTop = 778.5;
     readonly dimWorld = true;
 
+    private root: Node | null = null;
+    private mapViewport: Node | null = null;
     private mapContent: Node | null = null;
+    private controlDeck: Node | null = null;
+    private deckBg: Node | null = null;
+    private summaryFrame: Node | null = null;
+    private summaryLabel: Label | null = null;
+    private difficultyArt: Node | null = null;
+    private difficultyHits: Node[] = [];
+    private lockNote: Node | null = null;
+    private ctaArt: Node | null = null;
+    private ctaHit: Node | null = null;
+    private footerLabel: Label | null = null;
+
+    private contentBottom = -BASE_MAP_H / 2;
+    private contentTop = BASE_MAP_H / 2;
     private scrollY = 0;
     private minScroll = 0;
     private maxScroll = 0;
+    private userScrolled = false;
+    private mapDragging = false;
+    private dragDistance = 0;
+    private visibleBottom = -779.5;
 
     constructor(private data: HomeData) {}
 
     build(root: Node) {
-        const d = this.data;
-        // 图片异步载入前用深胡桃木兜底，避免首帧闪出游戏中的 3D 场景。
-        UIKit.panel(root, 760, 1700, 0, new Color(71, 39, 23), 0, 0);
+        this.root = root;
+        // 超高底色覆盖所有可见比例，宽屏两侧由路由层的暗木背景自然留空。
+        UIKit.panel(root, 760, 3600, 0, new Color(71, 39, 23), 0, this.artTop - 1800);
 
         this.buildMapViewport(root);
+        this.buildControlDeck(root);
 
-        // 底部整块取自选定设计稿，木纹、浮雕、轨道、按钮和阴影都保持原始质感。
-        UIKit.image(root, 'textures/challenge-ui/bottom-dynamic/texture',
-            720, 543, 0, -506);
-        this.buildChallengePanel(root);
-
-        UIKit.image(root, 'textures/challenge-ui/header-reference/texture', 720, 173, 0, 692);
-        UIKit.hitArea(root, 68, 76, 244, 716, () => this.showSettings(root));
-        UIKit.hitArea(root, 76, 76, 310, 716, () => {
-            d.soundOn = d.onToggleSound();
-            this.showSoundToast(root, d.soundOn);
+        // 标题与右上控制固定在最上层，地图滚动不会把设置和声音带走。
+        UIKit.image(root, 'textures/challenge-ui/header-reference/texture', 720, HEADER_H,
+            0, this.artTop - HEADER_H / 2);
+        UIKit.hitArea(root, 68, 76, 244, this.artTop - 62.5, () => this.showSettings());
+        UIKit.hitArea(root, 76, 76, 310, this.artTop - 62.5, () => {
+            this.data.soundOn = this.data.onToggleSound();
+            this.showSoundToast(this.data.soundOn);
         });
 
-        this.buildBottomDock(root);
+        // build 后立刻给一份标准竖屏布局；首个 sync 会用真实窗口尺寸覆盖它。
+        this.layout({ topY: this.artTop, bottomY: -779.5, width: 720, height: 1558 });
     }
 
-    private rebuild(root: Node) {
-        for (const child of [...root.children]) child.destroy();
-        this.build(root);
+    /** 固定头尾，把剩余高度全部交给可裁切地图。 */
+    layout(viewport: ScreenViewport) {
+        this.visibleBottom = viewport.bottomY;
+        // 控制台始终保留完整的信息层级；短屏只裁地图，不能再拿底部次数换空间。
+        const deckH = this.clamp(500 + (viewport.height - 1100) * 0.04, 500, 530);
+        const deckCenter = viewport.bottomY + deckH / 2;
+        this.place(this.controlDeck, 720, deckH, 0, deckCenter);
+        this.place(this.deckBg, 720, deckH, 0, 0);
+        this.layoutDeck(deckH);
+
+        const mapTop = viewport.topY - HEADER_H;
+        // 木框顶边向地图压 8px，形成“地图插在控制台后面”的层次，同时不盖住地图节点。
+        const mapBottom = viewport.bottomY + deckH - 8;
+        const mapH = Math.max(360, mapTop - mapBottom);
+        this.place(this.mapViewport, 720, mapH, 0, (mapTop + mapBottom) / 2);
+        this.updateScrollBounds(mapH);
     }
 
-    /** 短屏只裁地图与长背景，开局主操作始终吸附在安全区底部。 */
-    private buildBottomDock(root: Node) {
-        const dock = new Node('screenBottomDock');
-        dock.layer = Layers.Enum.UI_2D;
-        dock.setParent(root);
-        dock.addComponent(UITransform).setContentSize(720, 184);
-        dock.active = false;
+    private buildMapViewport(root: Node) {
+        const viewport = new Node('mapViewport');
+        viewport.layer = Layers.Enum.UI_2D;
+        viewport.setParent(root);
+        viewport.addComponent(UITransform).setContentSize(720, BASE_MAP_H);
+        viewport.addComponent(Mask).type = Mask.Type.GRAPHICS_RECT;
+        this.mapViewport = viewport;
 
-        UIKit.panel(dock, 720, 184, 0, new Color(70, 36, 20, 246), 0, 92);
-        UIKit.image(dock, 'textures/challenge-ui/cta-button/texture', 564, 143, 0, 94);
-        UIKit.hitArea(dock, 564, 143, 0, 94, this.data.onStart);
+        const content = new Node('mapScrollContent');
+        content.layer = Layers.Enum.UI_2D;
+        content.setParent(viewport);
+        this.mapContent = content;
+
+        const previewMaps = this.data.maps.slice(2);
+        // 即使当前只有两张可玩地图，也保留一段向上的路线，让“旅程会继续”在画面上成立。
+        const extensionCount = Math.max(1, Math.ceil(previewMaps.length / 2));
+        for (let i = 0; i < extensionCount; i++) {
+            UIKit.image(content, 'textures/challenge-ui/map-route-extension/texture',
+                720, EXTENSION_H, 0, BASE_MAP_H / 2 + EXTENSION_H / 2 + i * EXTENSION_H);
+        }
+
+        const selectedMap = this.data.maps.find(m => m.selected);
+        const body = selectedMap?.id === 'antique'
+            ? 'textures/challenge-ui/map-antique-body/texture'
+            : 'textures/challenge-ui/map-fruit-body/texture';
+        UIKit.image(content, body, 720, BASE_MAP_H, 0, 0);
+
+        // 首章的两站已经完整画进插画，只叠透明热区，避免额外图形破坏美术。
+        const fruit = this.data.maps[0];
+        const antique = this.data.maps[1];
+        if (fruit?.playable) UIKit.hitArea(content, 250, 240, -124, -144,
+            () => this.tapMap(fruit.id));
+        if (antique?.playable) UIKit.hitArea(content, 250, 240, 146, 228,
+            () => this.tapMap(antique.id));
+
+        // 配置中第 3 站起自动落到扩展路线；模型未齐的站点以锁定节点预告。
+        previewMaps.forEach((map, i) => {
+            const y = BASE_MAP_H / 2 + 350 + i * 520;
+            this.buildMapNode(content, map, map.routeX, y, i + 2);
+        });
+
+        this.contentTop = BASE_MAP_H / 2 + extensionCount * EXTENSION_H;
+        this.contentBottom = -BASE_MAP_H / 2;
+        content.addComponent(UITransform).setContentSize(720, this.contentTop - this.contentBottom);
+
+        viewport.on(NodeEventType.TOUCH_START, () => {
+            this.mapDragging = false;
+            this.dragDistance = 0;
+        });
+        viewport.on(NodeEventType.TOUCH_MOVE, (event: EventTouch) => {
+            const delta = event.getUIDelta();
+            this.dragDistance += Math.abs(delta.y);
+            if (this.dragDistance > 8) this.mapDragging = true;
+            this.userScrolled = true;
+            this.scrollY = this.clamp(this.scrollY + delta.y, this.minScroll, this.maxScroll);
+            this.mapContent?.setPosition(0, this.scrollY, 0);
+        });
+        viewport.on(NodeEventType.TOUCH_END, () => { this.mapDragging = false; });
+        viewport.on(NodeEventType.TOUCH_CANCEL, () => { this.mapDragging = false; });
     }
 
-    /** 设置入口使用独立页面内浮层，避免借用已隐藏的游玩 HUD 弹窗层。 */
-    private showSettings(root: Node) {
+    private buildControlDeck(root: Node) {
+        const deck = new Node('challengeControlDeck');
+        deck.layer = Layers.Enum.UI_2D;
+        deck.setParent(root);
+        deck.addComponent(UITransform).setContentSize(720, 430);
+        this.controlDeck = deck;
+
+        this.deckBg = UIKit.image(deck, 'textures/challenge-ui/control-deck-bg/texture',
+            720, 430, 0, 0);
+        this.summaryFrame = UIKit.image(deck, 'textures/challenge-ui/summary-frame-blank/texture',
+            620, 78, 0, 166);
+
+        const selectedLevel = this.data.levels.find(l => l.selected);
+        const detail = selectedLevel?.detail.replace(/ · 石头 \d+/, '') ?? '';
+        const compactDetail = detail.split(' · ').slice(1).join(' · ');
+        this.summaryLabel = UIKit.label(deck,
+            `${selectedLevel?.text ?? '标准'}挑战 · ${compactDetail}`,
+            25, new Color(116, 73, 42), 0, 166);
+
+        const selectedLevelIndex = Math.max(0, this.data.levels.findIndex(l => l.selected));
+        const difficultyTextures = [
+            'textures/challenge-ui/difficulty-easy-clean/texture',
+            'textures/challenge-ui/difficulty-normal-clean/texture',
+            'textures/challenge-ui/difficulty-master-clean/texture',
+        ];
+        this.difficultyArt = UIKit.image(deck,
+            difficultyTextures[selectedLevelIndex] ?? difficultyTextures[0], 600, 170, 0, 70);
+
+        const xs = [-220, 0, 220];
+        this.data.levels.forEach((lv, i) => {
+            const hit = UIKit.hitArea(deck, 176, 145, xs[i], 70, () => {
+                if (!this.mapDragging && lv.unlocked) this.data.onPickLevel(i);
+            });
+            this.difficultyHits.push(hit);
+        });
+
+        // 提示文字不用再烘焙进带图标的切图，避免小屏缩放后图标和文案互相挤压。
+        this.lockNote = UIKit.label(deck, '出发后地图与难度固定', 20,
+            new Color(116, 73, 42), 0, -12).node;
+        this.ctaArt = UIKit.image(deck, 'textures/challenge-ui/cta-button-clean/texture',
+            520, 136, 0, -91);
+        this.ctaHit = UIKit.hitArea(deck, 500, 112, 0, -91, this.data.onStart);
+
+        this.footerLabel = UIKit.label(deck,
+            `${this.data.dailyText}  ·  ${this.data.bestText}`,
+            20, new Color(116, 73, 42), 0, -190);
+    }
+
+    private layoutDeck(deckH: number) {
+        const s = this.clamp(deckH / 520, 0.96, 1.02);
+        this.place(this.summaryFrame, 620 * s, 78 * s, 0, 205 * s);
+        if (this.summaryLabel) {
+            this.summaryLabel.fontSize = Math.round(25 * s);
+            this.summaryLabel.lineHeight = Math.round(31 * s);
+            this.summaryLabel.node.setPosition(0, 205 * s, 0);
+        }
+        this.place(this.difficultyArt, 600 * s, 170 * s, 0, 108 * s);
+        const xs = [-220, 0, 220];
+        this.difficultyHits.forEach((hit, i) => this.place(hit, 176 * s, 145 * s,
+            xs[i] * s, 108 * s));
+        this.place(this.lockNote, 340 * s, 48 * s, 0, -16 * s);
+        this.place(this.ctaArt, 520 * s, 136 * s, 0, -112 * s);
+        this.place(this.ctaHit, 500 * s, 112 * s, 0, -112 * s);
+        if (this.footerLabel) {
+            this.footerLabel.fontSize = Math.round(20 * s);
+            this.footerLabel.lineHeight = Math.round(25 * s);
+            this.footerLabel.node.setPosition(0, -187 * s, 0);
+        }
+    }
+
+    /** 设置使用首页自己的浮层；卡片始终取当前可视范围中心，不受长地图滚动影响。 */
+    private showSettings() {
+        const root = this.root;
+        if (!root) return;
         root.getChildByName('homeSettings')?.destroy();
         const overlay = new Node('homeSettings');
         overlay.layer = Layers.Enum.UI_2D;
         overlay.setParent(root);
-        overlay.addComponent(UITransform).setContentSize(720, 1700);
+        const overlayH = this.artTop - this.visibleBottom + 300;
+        const centerY = (this.artTop + this.visibleBottom) / 2;
+        overlay.addComponent(UITransform).setContentSize(720, overlayH);
+        overlay.setPosition(0, centerY, 0);
 
-        const mask = UIKit.panel(overlay, 720, 1700, 0, new Color(20, 12, 8, 170), 0, -71.5);
+        const mask = UIKit.panel(overlay, 720, overlayH, 0, new Color(20, 12, 8, 170), 0, 0);
         mask.on(NodeEventType.TOUCH_END, () => overlay.isValid && overlay.destroy());
 
-        const card = UIKit.panel(overlay, 500, 360, 32, UIColors.cream, 0, 410,
+        const card = UIKit.panel(overlay, 500, 360, 32, UIColors.cream, 0, 0,
             UIColors.edge, 6);
         UIKit.label(card, '设 置', 44, UIColors.gold, 0, 118);
         const sound = UIKit.panel(card, 360, 82, 22, new Color(238, 220, 188), 0, 28,
@@ -108,117 +269,69 @@ export class HomeScreen implements Screen {
         UIKit.tap(close, () => overlay.isValid && overlay.destroy());
     }
 
-    private showSoundToast(root: Node, on: boolean) {
+    private showSoundToast(on: boolean) {
+        const root = this.root;
+        if (!root) return;
         root.getChildByName('soundToast')?.destroy();
         const toast = UIKit.panel(root, 250, 66, 24, new Color(48, 29, 18, 230),
-            0, 610, UIColors.edge, 3);
+            0, this.artTop - HEADER_H - 40, UIColors.edge, 3);
         toast.name = 'soundToast';
         UIKit.label(toast, on ? '声音已开启' : '声音已关闭', 24, UIColors.cream, 0, 0);
         setTimeout(() => toast.isValid && toast.destroy(), 1200);
     }
 
-    /**
-     * 第一章按设计稿拆成固定标题与地图 body，地图切换只替换 body。
-     * 后续新增地图时按章节追加同规格 segment，而不是回退到程序化圆点占位。
-     */
-    private buildMapViewport(root: Node) {
-        const viewport = new Node('mapViewport');
-        viewport.layer = Layers.Enum.UI_2D;
-        viewport.setParent(root);
-        viewport.setPosition(0, 201, 0);
-        viewport.addComponent(UITransform).setContentSize(720, 912);
-
-        const selectedMap = this.data.maps.find(m => m.selected);
-        const body = selectedMap?.id === 'antique'
-            ? 'textures/challenge-ui/map-antique-body/texture'
-            : 'textures/challenge-ui/map-fruit-body/texture';
-        UIKit.image(viewport, body, 720, 912, 0, 0);
-
-        // 首章两个节点已由插画完整绘制，只覆盖透明热区，不再叠加程序化圆圈和牌匾。
-        const fruit = this.data.maps[0];
-        const antique = this.data.maps[1];
-        if (fruit?.playable) UIKit.hitArea(viewport, 250, 240, -124, -144,
-            () => this.data.onPickMap(fruit.id));
-        if (antique?.playable) UIKit.hitArea(viewport, 250, 240, 146, 228,
-            () => this.data.onPickMap(antique.id));
+    private tapMap(id: string) {
+        if (this.mapDragging || this.dragDistance > 8) return;
+        this.data.onPickMap(id);
     }
 
-    private drawRoute(parent: Node, points: { x: number; y: number }[]) {
-        if (points.length < 2) return;
-        const n = new Node('route');
-        n.layer = Layers.Enum.UI_2D;
-        n.setParent(parent);
-        n.addComponent(UITransform).setContentSize(720, parent.getComponent(UITransform)?.height ?? 1200);
-        const g = n.addComponent(Graphics);
-        g.lineWidth = 18;
-        g.strokeColor = new Color(247, 232, 186, 238);
-        g.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-            // 路线用折线而非固定贴图：新增节点时它会自动连上，不需要重新出一张长图。
-            const mid = (points[i - 1].y + points[i].y) / 2;
-            g.lineTo(points[i - 1].x, mid);
-            g.lineTo(points[i].x, mid);
-            g.lineTo(points[i].x, points[i].y);
+    private updateScrollBounds(viewportH: number) {
+        this.minScroll = viewportH / 2 - this.contentTop;
+        this.maxScroll = -viewportH / 2 - this.contentBottom;
+        if (this.minScroll > this.maxScroll) {
+            const middle = (this.minScroll + this.maxScroll) / 2;
+            this.minScroll = middle;
+            this.maxScroll = middle;
         }
-        g.stroke();
+        if (!this.userScrolled) {
+            const selected = this.data.maps.find(m => m.selected)?.id;
+            // 水果篮靠下、古玩铺靠上；只在首进/重建时对准当前站，之后尊重玩家滚动位置。
+            const target = selected === 'antique' ? -150 : 160;
+            this.scrollY = this.clamp(target, this.minScroll, this.maxScroll);
+        } else {
+            this.scrollY = this.clamp(this.scrollY, this.minScroll, this.maxScroll);
+        }
+        this.mapContent?.setPosition(0, this.scrollY, 0);
     }
 
     private buildMapNode(parent: Node, map: MapChoice, x: number, y: number, index: number) {
         const selected = map.selected;
         const fill = map.playable
             ? (selected ? new Color(255, 210, 67) : new Color(255, 244, 214))
-            : new Color(205, 195, 165);
-        const marker = UIKit.panel(parent, selected ? 148 : 126, selected ? 148 : 126,
-            selected ? 74 : 63, fill, x, y, selected ? new Color(255, 250, 204) : UIColors.edge,
-            selected ? 10 : 5);
-        if (selected) {
-            // 选中节点用工程现有的大鹅真图作“玩家棋子”，对应设计稿里的旅行主角。
-            // 未选节点继续显示路线序号，节点再多也不会需要额外美术。
-            UIKit.image(marker, 'icons/goose/texture', 92, 92, 0, 5);
-        } else {
-            UIKit.label(marker, map.playable ? `${index + 1}` : '…', 40,
-                map.playable ? UIColors.text : UIColors.textLocked, 0, 3);
-        }
+            : new Color(218, 207, 180, 248);
+        const marker = UIKit.panel(parent, selected ? 142 : 116, selected ? 142 : 116,
+            selected ? 71 : 58, fill, x, y,
+            selected ? new Color(255, 250, 204) : UIColors.edgeSoft, selected ? 9 : 4);
+        if (selected) UIKit.image(marker, 'icons/goose/texture', 88, 88, 0, 4);
+        else UIKit.label(marker, map.playable ? `${index + 1}` : '…', 38,
+            map.playable ? UIColors.text : UIColors.textLocked, 0, 3);
 
-        const labelY = y - (selected ? 112 : 98);
-        const label = UIKit.panel(parent, 274, 84, 18,
-            map.playable ? new Color(255, 244, 214, 250) : new Color(224, 216, 191, 242),
+        const labelY = y - (selected ? 106 : 90);
+        const label = UIKit.panel(parent, 270, 78, 18,
+            map.playable ? new Color(255, 244, 214, 250) : new Color(230, 220, 196, 246),
             x, labelY, selected ? UIColors.gold : UIColors.edgeSoft, selected ? 5 : 3);
-        UIKit.label(label, map.name, 28, map.playable ? UIColors.text : UIColors.textLocked, 0, 15);
-        UIKit.label(label, map.tagline, 17, UIColors.textSoft, 0, -20);
-
+        UIKit.label(label, map.name, 27, map.playable ? UIColors.text : UIColors.textLocked, 0, 13);
+        UIKit.label(label, map.tagline, 16, UIColors.textSoft, 0, -18);
         if (map.playable) {
-            UIKit.tap(marker, () => this.data.onPickMap(map.id));
-            UIKit.tap(label, () => this.data.onPickMap(map.id));
+            UIKit.tap(marker, () => this.tapMap(map.id));
+            UIKit.tap(label, () => this.tapMap(map.id));
         }
     }
 
-    private buildChallengePanel(root: Node) {
-        const d = this.data;
-        const selectedMap = d.maps.find(m => m.selected);
-        const selectedLevel = d.levels.find(l => l.selected);
-        const detail = selectedLevel?.detail.replace(/ · 石头 \d+/, '') ?? '';
-        const compactDetail = detail.split(' · ').slice(1).join(' · ');
-        UIKit.label(root,
-            `${selectedLevel?.text ?? '标准'}挑战 · ${compactDetail}`,
-            26, new Color(116, 73, 42), 0, -324);
-
-        const selectedLevelIndex = Math.max(0, d.levels.findIndex(l => l.selected));
-        const difficultyTextures = [
-            'textures/challenge-ui/difficulty-easy-selected/texture',
-            'textures/challenge-ui/difficulty-normal-selected/texture',
-            'textures/challenge-ui/difficulty-master-selected/texture',
-        ];
-        UIKit.image(root, difficultyTextures[selectedLevelIndex] ?? difficultyTextures[0],
-            581, 164, 0, -451);
-
-        const xs = [-220, 0, 220];
-        d.levels.forEach((lv, i) => {
-            if (lv.unlocked) UIKit.hitArea(root, 176, 164, xs[i], -451, () => d.onPickLevel(i));
-        });
-
-        // 主按钮本身来自设计稿，点击区单独覆盖，避免再画一层粗糙的通用按钮。
-        UIKit.hitArea(root, 564, 143, 0, -648, d.onStart);
+    private place(node: Node | null, w: number, h: number, x: number, y: number) {
+        if (!node?.isValid) return;
+        node.setPosition(x, y, 0);
+        node.getComponent(UITransform)?.setContentSize(w, h);
     }
 
     private clamp(value: number, min: number, max: number) {
@@ -226,6 +339,9 @@ export class HomeScreen implements Screen {
     }
 
     dispose() {
+        this.root = null;
+        this.mapViewport = null;
         this.mapContent = null;
+        this.controlDeck = null;
     }
 }

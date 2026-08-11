@@ -1,5 +1,55 @@
 # Design QA
 
+## 2026-08-11 挑战首页独立分区重构终验
+
+### Evidence
+
+- Source visual truth: `design/challenge-home/challenge-home-standard.png`、`design/challenge-home/challenge-home-compact.png`。
+- Browser-rendered implementation: `design/challenge-home/runtime-390x844.png`、`design/challenge-home/runtime-347x602.png`、`design/challenge-home/runtime-1280x720.png`。
+- Full-view comparison: `design/challenge-home/qa-standard-comparison.png`。
+- State coverage: 水果篮/古玩铺、轻松/标准、地图上滑扩展、设置、声音提示、开始挑战、暂停与退出本局。
+
+### Findings and fixes
+
+- [P1, fixed] 原挑战信息与地图共用长图区域，短屏下摘要和次数会被主按钮或视口底边遮挡。首页改为固定标题、独立遮罩地图、固定完整控制台三段式结构；390×844 与 347×602 均能看到摘要、三档难度、固定提示、CTA、今日次数和成绩。
+- [P1, fixed] `mask` 引擎模块原先被裁掉，运行时地图遮罩无法实例化并停在加载页。已在 `game/settings/v2/packages/engine.json` 启用模块，最终浏览器控制台无 error。
+- [P1, fixed] 提示图标和文本在缩放后重合。最终使用独立动态文案“出发后地图与难度固定”，与难度轨道、CTA 保持明确间距。
+- [P2, fixed] 宽屏会露出挑战页后方内容。页面层现在按 720 宽安全画布居中缩放，1280×720 下左右只显示暗木背景，页面内容不会横向拉伸。
+- [P2, fixed] 后续地图没有增长空间。地图内容层会按配置自动追加路线延伸段和锁定预告节点；拖动后已看到“池塘农场”预告，固定头尾不受影响。
+
+### Required fidelity surfaces
+
+- Typography: 标题沿用插画切图；摘要、难度、提示、CTA、次数形成清晰字号层级，无截字或互相覆盖。
+- Spacing and layout: 三个固定区域边界稳定；小屏只缩短地图可视窗，不压缩或隐藏控制台字段。
+- Responsiveness: 390×844、347×602、1280×720 三档通过；宽屏居中留白，短屏底部完整。
+- Colors and surfaces: 使用木质、奶油、金黄、红绿难度色；控制台采用独立木框奶油底图，不再是粗糙纯色卡片。
+- Image quality: 标题、地图主体、地图延伸、难度轨道、CTA、控制台均使用真实 PNG 资源；透明边缘未见紫边、白边或裁切缺口。
+- Icons: 设置、声音、摘要日历/沙漏、三档星标均完整对齐；声音状态同时在设置层和顶部 toast 中反馈。
+- Copy: “出发后地图与难度固定”“今日剩余”“本关暂无成绩”等信息完整可读。
+- Accessibility: 主要按钮和三档难度保留大面积透明触控热区；遮罩层点击关闭，暂停菜单具有明确退出入口。
+
+### Primary interactions tested
+
+- 设置按钮打开完整遮罩层；设置层声音开/关可切换并即时更新文字。
+- 顶部声音按钮显示“声音已关闭”反馈。
+- 难度切到轻松后，摘要更新为 `轻松挑战 · 36 件 · 4:15`，选中轨道同步变绿。
+- 古玩铺站点切换后，白鹅与发光底座移动到古玩铺，水果篮保留但取消选中光效。
+- 地图向下拖动可查看向上延伸的新路线与“池塘农场”预告节点。
+- 点击“出发挑战”进入实际 3D 游玩页；暂停菜单显示“继续游戏 / 重开本关 / 声音 / 退出本局”。
+- 点击“退出本局”返回同一地图/难度状态，今日次数由 3/3 正确变为 2/3。
+- 最终浏览器控制台 error：0。
+
+### Verification
+
+- Cocos Web Mobile release build: finished successfully（构建器进度日志 `build Task (web-mobile) Finished`）。
+- `git diff --check`: passed。
+- TypeScript check: 仅保留项目原有 ES lib 配置导致的 4 个 `padStart/includes` TS2550；本次文件无新增类型错误。
+- P0/P1/P2 findings: none remaining。
+
+final result: passed
+
+---
+
 ## Source of visual truth
 
 - Reference screenshot: `C:\Users\Administrator\.codex\attachments\85100bee-3171-42d4-ae6f-d7024e43e035\image-1.png`

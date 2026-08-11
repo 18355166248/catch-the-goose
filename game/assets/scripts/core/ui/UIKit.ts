@@ -53,9 +53,14 @@ export class UIKit {
             const sprite = n.addComponent(Sprite);
             // Sprite 默认以 RAW 模式接收首张纹理，会把节点偷偷改回图片原始像素尺寸；
             // 先切 CUSTOM、赋帧后再恢复设计尺寸，才能让 853px 稿件严格落在 720 美术宽度上。
+            // 响应式页面可能在纹理回来前已经改过节点尺寸；先记住当前布局结果，避免
+            // 异步回调又把短屏控件恢复成 build 时的默认大小。
+            const transform = n.getComponent(UITransform);
+            const targetW = transform?.width ?? w;
+            const targetH = transform?.height ?? h;
             sprite.sizeMode = Sprite.SizeMode.CUSTOM;
             sprite.spriteFrame = frame;
-            n.getComponent(UITransform)?.setContentSize(w, h);
+            transform?.setContentSize(targetW, targetH);
             sprite.color = new Color(255, 255, 255, opacity);
         });
         return n;

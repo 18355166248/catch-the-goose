@@ -1033,7 +1033,9 @@ export class HudUI {
         // 整屏页面按 720 宽的设计稿独立适配：宽度最多放大到原稿尺寸，超宽屏居中留空；
         // 高度不足时保持宽度比例并从顶部开始渲染，只允许底部自然裁切，避免后续内容露到两侧。
         const frame = view.getFrameSize();
-        const pageScaleInFrame = Math.min(1, frame.width / 720);
+        // 页面至少保留 1100 个美术像素的可用高度。竖屏仍由宽度决定；横屏/超宽屏则
+        // 适当缩小整列并居中，左右留背景，避免固定头尾把中间地图挤成一条缝。
+        const pageScaleInFrame = Math.min(1, frame.width / 720, frame.height / 1100);
         // FIXED_WIDTH 会让逻辑坐标宽度恒为 390；先还原 contentRoot 在浏览器里的实际比例，
         // 再反算页面层缩放，才能把“最大 720px”落实到真实窗口，而不是逻辑画布。
         const contentScaleInFrame = (frame.width / s.width) * this.uiScale;
@@ -1049,9 +1051,10 @@ export class HudUI {
             this.screenLayer.setPosition(0, nextScreenOffsetY, 0);
             resized = true;
         }
-        // 原稿主按钮底边约为 -720；可视底边高于它时说明长页已被裁切，启用独立置底按钮。
+        // 把页面在 720 美术坐标中的真实可视底边交给活动页。首页会固定完整控制台并
+        // 将剩余空间用作地图裁切视口，不再额外覆盖一枚“短屏按钮”。
         const visibleBottomY = this.router.activeArtTop - frame.height / pageScaleInFrame;
-        this.router.layoutBottomDock(visibleBottomY, visibleBottomY > -720);
+        this.router.layoutVisibleArea(visibleBottomY);
         if (resized) {
             // Cocos Web 的降级编译不会正确展开 Map spread，使用 forEach 避免被转成 [].concat(map)。
             this.capturedModels.forEach((index, node) => {
