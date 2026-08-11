@@ -63,6 +63,30 @@ export interface Theme {
 }
 
 /**
+ * 挑战地图上的路线节点。玩法主题与地图展示刻意分开：前者决定实际加载哪些模型，
+ * 后者只决定首页路线怎么排、能不能进入。以后追加“池塘农场”时，只需先加一个路线节点；
+ * 模型齐备后再补 themeId 即可开放，不需要改页面代码。
+ */
+export interface ChallengeMapDef {
+    id: string;
+    name: string;
+    /** 对应 THEMES.id；缺省表示只展示预告、暂不可进入。 */
+    themeId?: string;
+    /** 节点在路线上的横向偏移，纵向位置按数组顺序自动向上延伸。 */
+    routeX: number;
+    /** 首页节点上的一句场景提示。 */
+    tagline: string;
+}
+
+/** 数组顺序就是旅行路线从下到上的顺序，追加地图只需继续 push。 */
+export const CHALLENGE_MAPS: ChallengeMapDef[] = [
+    { id: 'fruit', name: '水果篮', themeId: 'fruit', routeX: -148, tagline: '阳光野餐 · 缤纷水果' },
+    { id: 'antique', name: '古玩铺', themeId: 'antique', routeX: 150, tagline: '月色小铺 · 翡翠珍玩' },
+    { id: 'farm', name: '池塘农场', routeX: -126, tagline: '下一站 · 准备中' },
+    { id: 'dessert', name: '甜品小镇', routeX: 136, tagline: '更远的旅程 · 敬请期待' },
+];
+
+/**
  * 全部场景主题。追加一个主题即自动进入每日轮播，无需改玩法层。
  * 池塘农场/甜品店待模型就绪后按同结构继续追加。
  */
@@ -137,8 +161,8 @@ export function buildLevels(family: string[]): LevelDef[] {
         // （放大到能填满时单件宽达筐宽的 37%，读作"几个大球"）。36 件覆盖率 53%、
         // 堆顶中位 1.38 仍在筐内。种类仍是 4 种，每件仍有 7 秒余量，难度基本不变。
         { items: pick(4), groupsPerItem: 3, timeSec: 255, seed: 104729 },
-        // 第 2 关·正常：6 种 × 2 组 = 36 件 / 200s（~5.6s/件），引入同色系 + 1 块石头
-        { items: pick(6), groupsPerItem: 2, timeSec: 200, seed: 130363, distractors: 1,
+        // 第 2 关·标准：36 件 + 1 块石头 / 210s，与挑战页设计稿的 37 件、3:30 对齐。
+        { items: pick(6), groupsPerItem: 2, timeSec: 210, seed: 130363, distractors: 1,
           goldenGoose: true, frozen: 3 },
         // 第 3 关·地狱：9 种 × 2 组 = 54 件 / 165s（~3.1s/件），手速+决策双压 + 2 块石头
         { items: pick(9), groupsPerItem: 2, timeSec: 165, seed: 155921, distractors: 2,

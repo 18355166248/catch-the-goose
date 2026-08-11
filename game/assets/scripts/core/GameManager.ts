@@ -5,7 +5,9 @@ import {
     Layers, Color, Material, utils, primitives,
 } from 'cc';
 import { DebugViz } from './DebugViz';
-import { LEVELS, LevelDef, getActiveTheme, refreshLevels, THEMES, DISTRACTOR_ID } from './LevelConfig';
+import {
+    LEVELS, LevelDef, getActiveTheme, refreshLevels, THEMES, CHALLENGE_MAPS, DISTRACTOR_ID,
+} from './LevelConfig';
 import { SceneSkin, getSkin, DEFAULT_SKIN_ID } from './SceneSkin';
 import { ContainerBoundary, BoundaryDef } from './ContainerBoundary';
 import { SlotTray, TRAY_CAPACITY } from './SlotTray';
@@ -39,7 +41,7 @@ export class GameManager extends Component {
     @property(Label) msgLabel: Label | null = null;
 
     /** 关卡序号（0 起） */
-    @property levelIndex = 0;
+    @property levelIndex = 1;
 
     private tray = new SlotTray();
     private level!: LevelDef;
@@ -348,8 +350,14 @@ export class GameManager extends Component {
         this.loadBest();
         // 首页期间计时牌先显示本关时限，别停在 0:00。
         this.updateHud();
-        // 开局停在首页：交代今天的场景、关卡与玩法，玩家点「开始挑战」才扣次数、倒物件。
-        this.showHome();
+        // 首次启动先走独立引导页；完成后才进入挑战路线。两者都是真页面，不和游玩 HUD 共存。
+        if (SaveData.onboarded()) this.showHome();
+        else this.hud.showOnboarding({
+            onDone: () => {
+                SaveData.markOnboarded();
+                this.showHome();
+            },
+        });
         // 首屏加载页到此撤除：首页已经画完且可点。物件模型不在这一步加载——
         // 它们等玩家点「开始挑战」才按关卡拉取（startInitialRound），不该拖长首屏。
         (globalThis as any).__gooseBoot?.done();
@@ -363,28 +371,25 @@ export class GameManager extends Component {
      */
     private showHome() {
         const best = this.best;
-        const unlockedUpTo = (() => {
-            let n = 0;                       // 第 1 关（下标 0）恒开放
-            while (n + 1 < LEVELS.length && best[n]) n++;
-            return n;
-        })();
-        // 选中的难度不能停在没解锁的档上（换主题后成绩清零就会出现）。
-        if (this.levelIndex > unlockedUpTo) this.levelIndex = unlockedUpTo;
-
         this.hud?.showHome({
-            themes: THEMES.map(t => ({
-                id: t.id, name: t.name,
-                swatch: getSkin(t.skinId).swatch,
-                selected: t.id === getActiveTheme().id,
+            // 路线节点来自独立配置，预告地图可以先显示、等模型齐备后再补 themeId 开放。
+            maps: CHALLENGE_MAPS.map(m => ({
+                id: m.id,
+                name: m.name,
+                tagline: m.tagline,
+                routeX: m.routeX,
+                playable: !!m.themeId && THEMES.some(t => t.id === m.themeId),
+                selected: m.themeId === getActiveTheme().id,
             })),
             levels: LEVELS.map((lv, i) => {
-                const count = lv.items.length * lv.groupsPerItem * 3;
+                const count = lv.items.length * lv.groupsPerItem * 3 + (lv.distractors ?? 0);
                 const rock = lv.distractors ? ` · 石头 ${lv.distractors}` : '';
                 return {
                     text: GameManager.LEVEL_NAMES[i] ?? `第 ${i + 1} 关`,
                     detail: `${lv.items.length} 种 · ${count} 件 · ${GameManager.clock(lv.timeSec)}${rock}`,
                     stars: best[i]?.stars ?? 0,
-                    unlocked: i <= unlockedUpTo,
+                    // 开局页的职责就是让玩家自主选难度，三档始终可选；成绩只影响星级展示。
+                    unlocked: true,
                     selected: i === this.levelIndex,
                 };
             }),
@@ -392,9 +397,11 @@ export class GameManager extends Component {
             bestText: best[this.levelIndex]
                 ? `最佳 ${'★'.repeat(best[this.levelIndex].stars) || '—'} ${best[this.levelIndex].score ?? 0} 分`
                 : '本关暂无成绩',
-            propText: `移出 ×${this.propCounts.remove}　凑齐 ×${this.propCounts.magnet}　打乱 ×${this.propCounts.shuffle}`,
-            onPickTheme: id => {
-                this.applyTheme(id, false);  // 还在开始页挑场景，不入局
+            soundOn: this.audio?.soundOn ?? false,
+            onPickMap: id => {
+                const map = CHALLENGE_MAPS.find(m => m.id === id);
+                if (!map?.themeId) return;
+                this.applyTheme(map.themeId, false); // 还在路线页挑地图，不入局
                 this.showHome();             // 主题换了，物件族与成绩都变，整页重画
             },
             onPickLevel: i => {
@@ -403,12 +410,19 @@ export class GameManager extends Component {
                 this.updateHud();
                 this.showHome();
             },
-            onStart: () => void this.beginRound(),
+            onToggleSound: () => this.toggleSound(),
+            onStart: () => {
+                // 页面必须在这里显式收起：它不再是弹窗，不会因为按了按钮就自己消失。
+                // beginRound 只管开局，关页面是路由的事——两者分开才不会像旧实现那样
+                // 依赖"谁按的谁负责关"。
+                this.hud?.hideHome();
+                void this.beginRound();
+            },
         });
     }
 
-    /** 三关的难度名，与 LevelConfig 的设计注释一致。 */
-    private static readonly LEVEL_NAMES = ['送温暖', '正常', '地狱'];
+    /** 展示名称与挑战页设计稿保持一致，玩法参数仍由 LevelConfig 独立控制。 */
+    private static readonly LEVEL_NAMES = ['轻松', '标准', '大师'];
 
     /** 秒数 → m:ss。 */
     private static clock(sec: number): string {
@@ -679,8 +693,8 @@ export class GameManager extends Component {
         SaveData.setTheme(themeId);
         refreshLevels();                       // 先重建关卡表，下面才拿得到新物件族
         this.applySkin(getActiveTheme().skinId);
-        this.levelIndex = 0;                   // 物件族换了，从第 1 关重新开始
-        this.level = LEVELS[0];
+        // 场景与难度是两个独立选择，切地图不能偷偷把玩家选好的难度改回轻松。
+        this.level = LEVELS[this.levelIndex] ?? LEVELS[0];
         this.loadBest();                       // 成绩按主题分开存，换主题要重新读
         // restart=false 用于开始页：那里只是在挑场景，还没入局，不该把物件倒出来。
         if (restart) void this.resetLevel();
@@ -1935,8 +1949,45 @@ export class GameManager extends Component {
                 this.resumeFromPause();
                 void this.resetLevel();
             },
+            onExit: () => this.exitRoundToHome(),
             onToggleSound: () => this.toggleSound(),
         });
+    }
+
+    /**
+     * 主动退出不会结算成绩，也不会再次扣除挑战次数；但必须销毁节点和 Jolt 刚体两份状态，
+     * 否则返回首页后再次开局会撞上上一局遗留的“幽灵物件”。
+     */
+    private exitRoundToHome() {
+        this.playing = false;
+        this.paused = false;
+        this.interactionLocked = false;
+        this.combo = 0;
+        this.score = 0;
+        this.removedCount = 0;
+
+        this.hud?.hidePauseMenu();
+        this.hud?.setPaused(false);
+        this.hud?.setCombo(0, 0);
+        this.hud?.setScore(0);
+        this.hud?.setTimeUrgent(false);
+        this.hud?.clearHint();
+        this.hud?.clearFrostMarks();
+
+        for (const e of this.tray.entries) {
+            if (e.node.isValid) e.node.destroy();
+        }
+        for (const t of this.node.getComponentsInChildren(ItemTag)) {
+            if (t.node.isValid) t.node.destroy();
+        }
+        this.jolt.clearBodies();
+        this.tray.clear();
+        this.hud?.setTrayCount(0);
+        this.hud?.clearCapturedModels();
+
+        this.timeLeft = this.level.timeSec;
+        this.updateHud();
+        this.showHome();
     }
 
     /** 声音开关的唯一入口：HUD 声音键和暂停菜单都走这里，图标才不会和实际状态脱节。 */

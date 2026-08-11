@@ -20,6 +20,7 @@ export class SaveData {
     private static readonly PROPGIFT = 'goose_propgift_v1';
     private static readonly SOUND = 'goose_sound_v1';
     private static readonly TAUGHT = 'goose_taught_v1';
+    private static readonly ONBOARDED = 'goose_onboarded_v1';
 
     private static read(key: string): string | null {
         try { return sys.localStorage.getItem(key); } catch { return null; }
@@ -117,6 +118,14 @@ export class SaveData {
     }
     static markTaught(): void {
         SaveData.write(SaveData.TAUGHT, '1');
+    }
+
+    /** 首次启动的整页引导与首局中的动态提示是两件事，不能共用 TAUGHT。 */
+    static onboarded(): boolean {
+        return SaveData.read(SaveData.ONBOARDED) === '1';
+    }
+    static markOnboarded(): void {
+        SaveData.write(SaveData.ONBOARDED, '1');
     }
 
     /** 每日道具礼包：今天是否已领取（跨天自动重置）。 */

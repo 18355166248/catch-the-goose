@@ -3,8 +3,9 @@ import {
     NodeEventType, Widget, view, screen, Graphics, UIOpacity, resources,
     tween, v3, Vec3, Tween,
 } from 'cc';
-import { getSkin } from './SceneSkin';
-import { THEMES } from './LevelConfig';
+import { UIRouter } from './ui/UIRouter';
+import { HomeScreen, HomeData } from './ui/HomeScreen';
+import { OnboardingScreen, OnboardingData } from './ui/OnboardingScreen';
 
 export type PropKind = 'remove' | 'magnet' | 'shuffle';
 
@@ -78,8 +79,14 @@ export class HudUI {
     private canvasUT!: UITransform;
     private canvasNode!: Node;
     private contentRoot!: Node;
+    /** 游玩期 HUD（计时/得分/七格槽/道具栏/左侧按钮）。整屏页面显示时整层隐藏。 */
+    private gameLayer!: Node;
+    /** 挑战开始等整屏页面单独缩放，避免较矮窗口裁掉长图的标题和底部操作区。 */
+    private screenLayer!: Node;
     private contentUT!: UITransform;
     private uiScale = 1;
+    private screenScale = 1;
+    private screenOffsetY = 0;
     private progressFill!: UITransform;
     private trayDangerGlow!: Node;
     private trayDangerOpacity!: UIOpacity;
@@ -111,7 +118,8 @@ export class HudUI {
     private timerUrgent = false;
     private resultRoot: Node | null = null;
     private pauseRoot: Node | null = null;
-    private homeRoot: Node | null = null;
+    /** 页面路由。开始页等整屏页面走它，弹窗（暂停/结算/提示）仍走 makeModal。 */
+    private router!: UIRouter;
     private hintRoot: Node | null = null;
     private comboPopRoot: Node | null = null;
     private capturedModels = new Map<Node, number>();
@@ -148,6 +156,20 @@ export class HudUI {
         this.contentRoot.setParent(canvasNode);
         this.contentUT = this.contentRoot.addComponent(UITransform);
         this.contentUT.setContentSize(720, 1280);
+
+        // 内容根下再分两层，因为「开始页」这类整屏页面显示时，游玩 HUD（计时、七格槽、
+        // 道具栏）必须整体隐藏——它们不属于那一页。分层之后切页面只是开关一个节点，
+        // 不用逐个记住谁该显谁该藏。
+        this.gameLayer = new Node('HudGame');
+        this.gameLayer.layer = Layers.Enum.UI_2D;
+        this.gameLayer.setParent(this.contentRoot);
+        this.gameLayer.addComponent(UITransform).setContentSize(720, 1280);
+
+        this.screenLayer = new Node('HudScreens');
+        this.screenLayer.layer = Layers.Enum.UI_2D;
+        this.screenLayer.setParent(this.contentRoot);
+        this.screenLayer.addComponent(UITransform).setContentSize(720, 1280);
+        this.router = new UIRouter(this.screenLayer, 720, 1280);
 
         const cream = new Color(255, 247, 218);
 
@@ -367,7 +389,7 @@ export class HudUI {
     private burstAt(pos: Vec3, color: Color, count: number, radius: number, dotR: number) {
         const root = new Node('burst');
         root.layer = Layers.Enum.UI_2D;
-        root.setParent(this.contentRoot);
+        root.setParent(this.gameLayer);
         root.setPosition(pos);
 
         const ring = new Node('ring');
@@ -422,7 +444,7 @@ export class HudUI {
             // 借一个空节点做定时器：粒子本身生命周期很短，必须错开撒才有"连绵"感。
             const timer = new Node('celebrate');
             timer.layer = Layers.Enum.UI_2D;
-            timer.setParent(this.contentRoot);
+            timer.setParent(this.gameLayer);
             tween(timer).delay(i * 0.11).call(() => {
                 this.burstAt(pos, gold ? new Color(255, 205, 64, 255) : new Color(255, 246, 200, 255),
                     12, 92, 8);
@@ -503,7 +525,7 @@ export class HudUI {
         const root = new Node('toast');
         this.toastRoot = root;
         root.layer = Layers.Enum.UI_2D;
-        root.setParent(this.contentRoot);
+        root.setParent(this.gameLayer);
         root.setPosition(0, -this.contentUT.height / 2 + 336, 3);
         const op = root.addComponent(UIOpacity);
 
@@ -526,7 +548,7 @@ export class HudUI {
         const root = new Node('comboPop');
         this.comboPopRoot = root;
         root.layer = Layers.Enum.UI_2D;
-        root.setParent(this.contentRoot);
+        root.setParent(this.gameLayer);
         root.setPosition(0, -this.contentUT.height / 2 + 262, 2);
         const op = root.addComponent(UIOpacity);
 
@@ -560,7 +582,7 @@ export class HudUI {
         if (screenPositions.length === 0) return;
         const root = new Node('hint');
         root.layer = Layers.Enum.UI_2D;
-        root.setParent(this.contentRoot);
+        root.setParent(this.gameLayer);
         this.hintRoot = root;
         for (const sp of screenPositions) {
             const n = new Node('ring');
@@ -603,7 +625,7 @@ export class HudUI {
             if (!n || !n.isValid) {
                 n = new Node('frostMark');
                 n.layer = Layers.Enum.UI_2D;
-                n.setParent(this.contentRoot);
+                n.setParent(this.gameLayer);
 
                 // 三层叠出层次：深色底 → 浅冰蓝主体 → 亮白芯。
                 // 单层纯白线条在堆里是"一枚贴上去的图标"，压在浅色物件（橙子、香蕉）
@@ -651,7 +673,7 @@ export class HudUI {
     frostBreak(screenPos: Vec3) {
         const root = new Node('frostBreak');
         root.layer = Layers.Enum.UI_2D;
-        root.setParent(this.contentRoot);
+        root.setParent(this.gameLayer);
         root.setPosition(this.screenToContent(screenPos));
         for (let i = 0; i < 7; i++) {
             const a = (Math.PI * 2 * i) / 7 + Math.random() * 0.5;
@@ -679,7 +701,7 @@ export class HudUI {
     speechPop(screenPos: Vec3, text: string) {
         const root = new Node('speech');
         root.layer = Layers.Enum.UI_2D;
-        root.setParent(this.contentRoot);
+        root.setParent(this.gameLayer);
         root.setPosition(this.screenToContent(screenPos));
         const op = root.addComponent(UIOpacity);
 
@@ -736,7 +758,7 @@ export class HudUI {
     private makeModal(name: string, onMaskTap?: () => void): Node {
         const root = new Node(name);
         root.layer = Layers.Enum.UI_2D;
-        root.setParent(this.contentRoot);
+        root.setParent(this.gameLayer);
 
         const mask = new Node('mask');
         mask.layer = Layers.Enum.UI_2D;
@@ -822,131 +844,36 @@ export class HudUI {
     // ---------- 首页 / 暂停菜单 ----------
 
     /**
-     * 开始页：进入即停在这里，选好场景与难度，点「开始挑战」才扣次数、倒物件。
-     *
-     * 场景在这里定死、进局后不可改，是有意的：场景决定**物件族**，中途换等于换了牌组，
-     * 成绩也就失去可比性。历史实现把换肤入口放在游玩页，且只改外观不改物件族，
-     * 于是能切出「翡翠碗装水果」这种不搭的组合——那个入口已随本页移走。
-     *
-     * 难度是「先解锁再自选」：打通过的档位可以直接选，没通关的锁着。纯自选会让
-     * 三关阶梯失去意义（玩家只会刷最简单那档），纯顺序又不给重玩自由。
+     * 开始页。整屏页面，由 {@link UIRouter} 承载——不再是盖在游玩场景上的弹窗。
+     * 页面内容见 {@link HomeScreen}，这里只负责把它交给路由。
      */
-    showHome(opts: {
-        themes: { id: string; name: string; swatch: [Color, Color]; selected: boolean }[];
-        levels: { text: string; detail: string; stars: number; unlocked: boolean; selected: boolean }[];
-        dailyText: string; bestText: string; propText: string;
-        onPickTheme: (id: string) => void;
-        onPickLevel: (index: number) => void;
-        onStart: () => void;
-    }) {
-        this.hideHome();
-        const root = this.makeModal('homeRoot');
-        this.homeRoot = root;
-
-        const W = 620, H = 900;
-        this.makePanelChild(root, W + 12, H + 12, 36, new Color(52, 27, 15, 235), 0, -8);
-        const panel = this.makePanelChild(root, W, H, 32, new Color(255, 244, 214), 0, 0,
-            new Color(196, 130, 64), 6);
-
-        this.addLabel(panel, '抓住大鹅', 58, new Color(240, 150, 26), 0, H / 2 - 70, true);
-        this.addLabel(panel, '点相同的物件收进底部 7 格，凑齐 3 个消除',
-            20, new Color(158, 122, 82), 0, H / 2 - 118, true);
-
-        // ---- 选择场景 ----
-        this.sectionLabel(panel, '选择场景', -W / 2 + 40, H / 2 - 168);
-        opts.themes.forEach((t, i) => {
-            const cw = 268, ch = 104;
-            const x = (i % 2 - 0.5) * (cw + 16);
-            const y = H / 2 - 250 - Math.floor(i / 2) * (ch + 14);
-            const card = this.makePanelChild(panel, cw, ch, 18, new Color(250, 238, 210), x, y,
-                t.selected ? new Color(240, 150, 26) : new Color(198, 168, 120), t.selected ? 6 : 3);
-            this.makePanelChild(card, 44, 62, 10, t.swatch[0], -88, 0, new Color(255, 255, 255, 120), 2);
-            this.makePanelChild(card, 22, 62, 7, t.swatch[1], -52, 0);
-            this.addLabel(card, t.name, 24, new Color(102, 57, 28), 32, 16, true);
-            this.addLabel(card, t.selected ? '使用中' : '点击切换', 17,
-                t.selected ? new Color(52, 148, 68) : new Color(158, 122, 82), 32, -18, true);
-            this.tapCard(card, () => opts.onPickTheme(t.id));
-        });
-
-        // ---- 选择难度 ----
-        const rowsTop = H / 2 - 250 - Math.ceil(opts.themes.length / 2) * 118 - 4;
-        this.sectionLabel(panel, '选择难度', -W / 2 + 40, rowsTop);
-        opts.levels.forEach((lv, i) => {
-            const rw = 552, rh = 82;
-            const y = rowsTop - 58 - i * (rh + 10);
-            // 未解锁：整行压暗并去掉描边，点了也没反应——比弹一句「未解锁」更省事。
-            const fill = lv.unlocked ? new Color(250, 238, 210) : new Color(238, 226, 202);
-            const card = this.makePanelChild(panel, rw, rh, 18, fill, 0, y,
-                lv.selected ? new Color(240, 150, 26) : new Color(198, 168, 120), lv.selected ? 6 : 3);
-            const textCol = lv.unlocked ? new Color(102, 57, 28) : new Color(176, 156, 128);
-            // 两行文字都要左对齐并限宽，否则 Label 以自身中心为锚点、长文本会向左溢出卡片。
-            // （踩过：详情行的「N 种」被挤到框外挂在左边。）
-            for (const [text, size, col, dy] of [
-                [lv.text, 25, textCol, 16] as const,
-                [lv.detail, 17, new Color(158, 122, 82), -16] as const,
-            ]) {
-                const l = this.addLabel(card, text, size, col, -rw / 2 + 26, dy, false);
-                l.horizontalAlign = Label.HorizontalAlign.LEFT;
-                l.overflow = Label.Overflow.NONE;
-                l.node.getComponent(UITransform)?.setAnchorPoint(0, 0.5);
-            }
-            // 星级 = 该档历史最佳，同时兼作解锁指示（灰星 = 没通关过）。
-            for (let s = 0; s < 3; s++) {
-                this.addLabel(card, '★', 24,
-                    s < lv.stars ? new Color(240, 150, 26) : new Color(224, 203, 160),
-                    rw / 2 - 96 + s * 30, 0, false);
-            }
-            if (!lv.unlocked) this.addLabel(card, '未解锁', 16, new Color(176, 156, 128), rw / 2 - 150, 0, false);
-            else this.tapCard(card, () => opts.onPickLevel(i));
-        });
-
-        // ---- 开始 ----
-        this.makeButton(panel, '开始挑战', 340, 92, 0, -H / 2 + 150, new Color(255, 207, 55), () => {
-            this.hideHome();
-            opts.onStart();
-        }, 34);
-        this.addLabel(panel, opts.dailyText, 19, new Color(158, 122, 82), -130, -H / 2 + 88, true);
-        this.addLabel(panel, opts.bestText, 19, new Color(158, 122, 82), 130, -H / 2 + 88, true);
-        // 道具存量：选难度时得知道手上有多少底牌，否则要进局才看得到。纯展示，点不了。
-        this.addLabel(panel, opts.propText, 18, new Color(158, 122, 82), 0, -H / 2 + 46, true);
+    showHome(data: HomeData) {
+        this.gameLayer.active = false;
+        this.router.go(new HomeScreen(data));
     }
 
-    /** 分区小标题。左对齐锚点，避免长短文字左边缘对不齐。 */
-    private sectionLabel(parent: Node, text: string, x: number, y: number) {
-        const l = this.addLabel(parent, text, 20, new Color(158, 122, 82), x, y, false);
-        l.horizontalAlign = Label.HorizontalAlign.LEFT;
-        l.node.getComponent(UITransform)?.setAnchorPoint(0, 0.5);
+    /** 首次启动引导同样走整屏路由，完成后由 GameManager 决定进入哪一页。 */
+    showOnboarding(data: OnboardingData) {
+        this.gameLayer.active = false;
+        this.router.go(new OnboardingScreen(data));
     }
 
-    /** 卡片点击：按下缩一点、松手弹回。 */
-    private tapCard(card: Node, onTap: () => void) {
-        card.on(NodeEventType.TOUCH_START, () => {
-            tween(card).stop();
-            tween(card).to(0.06, { scale: v3(0.96, 0.96, 1) }).start();
-        });
-        card.on(NodeEventType.TOUCH_END, () => {
-            tween(card).to(0.08, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
-            onTap();
-        });
-        card.on(NodeEventType.TOUCH_CANCEL, () => {
-            tween(card).to(0.08, { scale: v3(1, 1, 1) }, { easing: 'backOut' }).start();
-        });
-    }
-
+    /** 收起当前页面，回到纯游玩视图。 */
     hideHome() {
-        this.dismissModal(this.homeRoot);
-        this.homeRoot = null;
+        this.router.clear();
+        this.gameLayer.active = true;
     }
 
-    /** 暂停菜单：继续 / 重开本关 / 音效开关。取代原先只有一个「暂停」字的空转状态。 */
+    /** 暂停菜单：继续 / 重开 / 声音 / 退出本局。 */
     showPauseMenu(opts: {
-        soundOn: boolean; onResume: () => void; onRestart: () => void; onToggleSound: () => boolean;
+        soundOn: boolean; onResume: () => void; onRestart: () => void;
+        onExit: () => void; onToggleSound: () => boolean;
     }) {
         this.hidePauseMenu();
         const root = this.makeModal('pauseRoot', () => opts.onResume());
         this.pauseRoot = root;
 
-        const W = 500, H = 430;
+        const W = 500, H = 560;
         this.makePanelChild(root, W + 12, H + 12, 34, new Color(52, 27, 15, 235), 0, -8);
         const panel = this.makePanelChild(root, W, H, 30, new Color(255, 244, 214), 0, 0,
             new Color(196, 130, 64), 6);
@@ -954,12 +881,14 @@ export class HudUI {
 
         // 这个开关同时管音效与 BGM，写「音效」会让人以为背景音乐另有开关
         const soundText = (on: boolean) => `声音  ${on ? '开' : '关'}`;
-        this.makeButton(panel, '继续游戏', 320, 84, 0, 58, new Color(126, 217, 87), () => opts.onResume(), 30);
-        this.makeButton(panel, '重开本关', 320, 80, 0, -42, new Color(255, 207, 55), () => opts.onRestart());
-        const sound = this.makeButton(panel, soundText(opts.soundOn), 320, 72, 0, -136,
+        this.makeButton(panel, '继续游戏', 320, 84, 0, 112, new Color(126, 217, 87), () => opts.onResume(), 30);
+        this.makeButton(panel, '重开本关', 320, 76, 0, 18, new Color(255, 207, 55), () => opts.onRestart());
+        const sound = this.makeButton(panel, soundText(opts.soundOn), 320, 72, 0, -76,
             new Color(226, 208, 180), () => {
                 sound.label.string = soundText(opts.onToggleSound());
             }, 25);
+        this.makeButton(panel, '退出本局', 320, 72, 0, -170,
+            new Color(228, 150, 118), () => opts.onExit(), 26);
     }
 
     hidePauseMenu() {
@@ -1101,6 +1030,28 @@ export class HudUI {
             this.contentUT.setContentSize(contentW, contentH);
             resized = true;
         }
+        // 整屏页面按 720 宽的设计稿独立适配：宽度最多放大到原稿尺寸，超宽屏居中留空；
+        // 高度不足时保持宽度比例并从顶部开始渲染，只允许底部自然裁切，避免后续内容露到两侧。
+        const frame = view.getFrameSize();
+        const pageScaleInFrame = Math.min(1, frame.width / 720);
+        // FIXED_WIDTH 会让逻辑坐标宽度恒为 390；先还原 contentRoot 在浏览器里的实际比例，
+        // 再反算页面层缩放，才能把“最大 720px”落实到真实窗口，而不是逻辑画布。
+        const contentScaleInFrame = (frame.width / s.width) * this.uiScale;
+        const nextScreenScale = pageScaleInFrame / contentScaleInFrame;
+        const nextScreenOffsetY = contentH / 2 - nextScreenScale * this.router.activeArtTop;
+        if (Math.abs(this.screenScale - nextScreenScale) > 0.001) {
+            this.screenScale = nextScreenScale;
+            this.screenLayer.setScale(nextScreenScale, nextScreenScale, 1);
+            resized = true;
+        }
+        if (Math.abs(this.screenOffsetY - nextScreenOffsetY) > 0.5) {
+            this.screenOffsetY = nextScreenOffsetY;
+            this.screenLayer.setPosition(0, nextScreenOffsetY, 0);
+            resized = true;
+        }
+        // 原稿主按钮底边约为 -720；可视底边高于它时说明长页已被裁切，启用独立置底按钮。
+        const visibleBottomY = this.router.activeArtTop - frame.height / pageScaleInFrame;
+        this.router.layoutBottomDock(visibleBottomY, visibleBottomY > -720);
         if (resized) {
             // Cocos Web 的降级编译不会正确展开 Map spread，使用 forEach 避免被转成 [].concat(map)。
             this.capturedModels.forEach((index, node) => {
@@ -1117,7 +1068,7 @@ export class HudUI {
     captureModel(node: Node, screenPos: Vec3, index: number) {
         const iconNode = new Node(`tray-${node.name}`);
         iconNode.layer = Layers.Enum.UI_2D;
-        iconNode.setParent(this.contentRoot);
+        iconNode.setParent(this.gameLayer);
         iconNode.addComponent(UITransform).setContentSize(78, 64);
 
         // Sprite 放在独立子节点上：父节点始终是槽位中心，子节点只负责修正素材透明边距。
@@ -1485,7 +1436,7 @@ export class HudUI {
         stroke?: Color, strokeW = 0, halign?: HorizontalAlign): Node {
         const n = new Node('panel');
         n.layer = Layers.Enum.UI_2D;
-        n.setParent(this.contentRoot);
+        n.setParent(this.gameLayer);
         n.addComponent(UITransform).setContentSize(w, h);
         const g = n.addComponent(Graphics);
         HudUI.paintPanel(g, w, h, r, fill, stroke, strokeW);
@@ -1882,7 +1833,7 @@ export class HudUI {
         align: { top?: number; bottom?: number; centerY?: number }): Label {
         const n = new Node('float');
         n.layer = Layers.Enum.UI_2D;
-        n.setParent(this.contentRoot);
+        n.setParent(this.gameLayer);
         const l = n.addComponent(Label);
         l.string = text;
         l.fontSize = size;
