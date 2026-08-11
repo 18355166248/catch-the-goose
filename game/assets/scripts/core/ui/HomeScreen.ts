@@ -1,5 +1,5 @@
 import {
-    Node, Color, Layers, UITransform, NodeEventType, Mask, EventTouch, Label,
+    Node, Color, Layers, UITransform, NodeEventType, Mask, EventTouch, EventMouse, Label, Graphics,
 } from 'cc';
 import { Screen, ScreenViewport } from './UIRouter';
 import { UIKit, UIColors } from './UIKit';
@@ -53,6 +53,7 @@ export class HomeScreen implements Screen {
     private ctaArt: Node | null = null;
     private ctaHit: Node | null = null;
     private footerLabel: Label | null = null;
+    private soundStateArt: Node | null = null;
 
     private contentBottom = -BASE_MAP_H / 2;
     private contentTop = BASE_MAP_H / 2;
@@ -78,8 +79,10 @@ export class HomeScreen implements Screen {
         UIKit.image(root, 'textures/challenge-ui/header-reference/texture', 720, HEADER_H,
             0, this.artTop - HEADER_H / 2);
         UIKit.hitArea(root, 68, 76, 244, this.artTop - 62.5, () => this.showSettings());
+        this.soundStateArt = this.buildSoundState(root);
         UIKit.hitArea(root, 76, 76, 310, this.artTop - 62.5, () => {
             this.data.soundOn = this.data.onToggleSound();
+            this.drawSoundState();
             this.showSoundToast(this.data.soundOn);
         });
 
@@ -150,20 +153,74 @@ export class HomeScreen implements Screen {
         this.contentBottom = -BASE_MAP_H / 2;
         content.addComponent(UITransform).setContentSize(720, this.contentTop - this.contentBottom);
 
-        viewport.on(NodeEventType.TOUCH_START, () => {
+        const onDragStart = () => {
             this.mapDragging = false;
             this.dragDistance = 0;
-        });
-        viewport.on(NodeEventType.TOUCH_MOVE, (event: EventTouch) => {
+        };
+        const onDragMove = (event: EventTouch) => {
             const delta = event.getUIDelta();
             this.dragDistance += Math.abs(delta.y);
             if (this.dragDistance > 8) this.mapDragging = true;
             this.userScrolled = true;
             this.scrollY = this.clamp(this.scrollY + delta.y, this.minScroll, this.maxScroll);
             this.mapContent?.setPosition(0, this.scrollY, 0);
-        });
-        viewport.on(NodeEventType.TOUCH_END, () => { this.mapDragging = false; });
-        viewport.on(NodeEventType.TOUCH_CANCEL, () => { this.mapDragging = false; });
+        };
+        const onDragEnd = () => { this.mapDragging = false; };
+
+        // 地图内部有站点热区和多张 Sprite。使用捕获阶段监听，保证从插画或站点上起手都能拖动，
+        // 不会因为子节点成为触摸目标而丢掉 MOVE；桌面端同时支持滚轮查看长地图。
+        viewport.on(NodeEventType.TOUCH_START, onDragStart, this, true);
+        viewport.on(NodeEventType.TOUCH_MOVE, onDragMove, this, true);
+        viewport.on(NodeEventType.TOUCH_END, onDragEnd, this, true);
+        viewport.on(NodeEventType.TOUCH_CANCEL, onDragEnd, this, true);
+        viewport.on(NodeEventType.MOUSE_WHEEL, (event: EventMouse) => {
+            const direction = Math.sign(event.getScrollY());
+            if (!direction) return;
+            this.userScrolled = true;
+            this.scrollY = this.clamp(this.scrollY - direction * 96, this.minScroll, this.maxScroll);
+            this.mapContent?.setPosition(0, this.scrollY, 0);
+        }, this, true);
+    }
+
+    /** 顶部声音键直接呈现当前状态：开启只显示绿点，静音显示红色斜杠和红点。 */
+    private buildSoundState(root: Node) {
+        const state = new Node('homeSoundState');
+        state.layer = Layers.Enum.UI_2D;
+        state.setParent(root);
+        state.setPosition(310, this.artTop - 62.5, 0);
+        state.addComponent(UITransform).setContentSize(76, 76);
+        state.addComponent(Graphics);
+        this.soundStateArt = state;
+        this.drawSoundState();
+        return state;
+    }
+
+    private drawSoundState() {
+        const graphics = this.soundStateArt?.getComponent(Graphics);
+        if (!graphics) return;
+        graphics.clear();
+
+        if (this.data.soundOn) {
+            graphics.fillColor = new Color(74, 157, 67);
+        } else {
+            // 先画浅色垫线再画红色斜杠，压在深色扬声器上仍然清楚。
+            graphics.lineWidth = 11;
+            graphics.strokeColor = new Color(255, 239, 196);
+            graphics.moveTo(-17, 18);
+            graphics.lineTo(19, -18);
+            graphics.stroke();
+            graphics.lineWidth = 7;
+            graphics.strokeColor = new Color(181, 63, 43);
+            graphics.moveTo(-17, 18);
+            graphics.lineTo(19, -18);
+            graphics.stroke();
+            graphics.fillColor = new Color(190, 66, 45);
+        }
+        graphics.circle(25, -25, 8);
+        graphics.fill();
+        graphics.lineWidth = 3;
+        graphics.strokeColor = new Color(255, 239, 196);
+        graphics.stroke();
     }
 
     private buildControlDeck(root: Node) {
@@ -262,6 +319,7 @@ export class HomeScreen implements Screen {
         UIKit.tap(sound, () => {
             this.data.soundOn = this.data.onToggleSound();
             soundLabel.string = `声音  ${this.data.soundOn ? '开' : '关'}`;
+            this.drawSoundState();
         });
         const close = UIKit.panel(card, 260, 72, 20, UIColors.goldFill, 0, -92,
             UIColors.edge, 4);
@@ -343,5 +401,6 @@ export class HomeScreen implements Screen {
         this.mapViewport = null;
         this.mapContent = null;
         this.controlDeck = null;
+        this.soundStateArt = null;
     }
 }
