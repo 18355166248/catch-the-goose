@@ -118,6 +118,8 @@ export class JoltWorld {
         this.phys.SetPhysicsSettings(ps);
 
         this.ready = true;
+        // 预览页能返回 200 也可能缺少胶水脚本；保留明确的成功信号供启动自检与回归验收。
+        console.log('[JoltWorld] ✅ Jolt Physics 初始化完成');
     }
 
     // ---------- 静态几何（地板与围栏） ----------
@@ -405,6 +407,53 @@ export class JoltWorld {
             new J.Vec3(center.x + radius, center.y + radius, center.z + radius));
         this.bi.ActivateBodiesInAABox(wake, new J.BroadPhaseLayerFilter(), new J.ObjectLayerFilter());
         J.destroy(wake);
+    }
+
+    /**
+     * 摘件后给最近的少量刚体施加真实碰撞冲量。
+     *
+     * 只唤醒休眠体在平铺容器里经常没有可见位移；这里的轻量向外/向上冲量会交给 Jolt
+     * 继续求解接触链，因此相邻件会碰开、回落，而不是在渲染层做与碰撞体脱节的假 Tween。
+     */
+    kickAround(center: Vec3, radius: number, strength: number, maxBodies = 5) {
+        if (!this.ready || radius <= 0 || strength <= 0) return;
+        const J = this.J;
+        const nearby = this.bodies
+            .filter(it => !it.removed)
+            .map(it => {
+                const dx = it.curP.x - center.x;
+                const dy = it.curP.y - center.y;
+                const dz = it.curP.z - center.z;
+                // 竖向距离折半：压在移除点上方的件应优先参与碰撞反馈。
+                return { it, dx, dy, dz, d: Math.sqrt(dx * dx + dz * dz + dy * dy * 0.25) };
+            })
+            .filter(v => v.d > 0.001 && v.d < radius)
+            .sort((a, b) => a.d - b.d)
+            .slice(0, Math.max(1, maxBodies));
+
+        nearby.forEach((v, index) => {
+            const horizontal = Math.hypot(v.dx, v.dz);
+            // 完全同轴时按稳定 key 选方向，避免 NaN，也保证同一关回放方向一致。
+            const angle = (v.it.key * 2.399963 + index * 0.73) % (Math.PI * 2);
+            const ux = horizontal > 0.001 ? v.dx / horizontal : Math.cos(angle);
+            const uz = horizontal > 0.001 ? v.dz / horizontal : Math.sin(angle);
+            const falloff = 1 - 0.48 * (v.d / radius);
+            const impulse = new J.Vec3(
+                ux * strength * falloff,
+                strength * (1.02 + (index % 2) * 0.12) * falloff,
+                uz * strength * falloff,
+            );
+            const angular = new J.Vec3(
+                -uz * strength * 0.34 * falloff,
+                (index % 2 ? 1 : -1) * strength * 0.18 * falloff,
+                ux * strength * 0.34 * falloff,
+            );
+            this.bi.ActivateBody(v.it.body.GetID());
+            v.it.body.AddImpulse(impulse);
+            v.it.body.AddAngularImpulse(angular);
+            J.destroy(impulse);
+            J.destroy(angular);
+        });
     }
 
     // ---------- 步进与同步 ----------

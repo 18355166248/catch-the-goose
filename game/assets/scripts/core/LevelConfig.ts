@@ -64,7 +64,7 @@ export interface Theme {
 
 /**
  * 挑战地图上的路线节点。玩法主题与地图展示刻意分开：前者决定实际加载哪些模型，
- * 后者只决定首页路线怎么排、能不能进入。以后追加“池塘农场”时，只需先加一个路线节点；
+ * 后者只决定首页路线怎么排、能不能进入。以后追加新站时，只需先加一个路线节点；
  * 模型齐备后再补 themeId 即可开放，不需要改页面代码。
  */
 export interface ChallengeMapDef {
@@ -82,13 +82,12 @@ export interface ChallengeMapDef {
 export const CHALLENGE_MAPS: ChallengeMapDef[] = [
     { id: 'fruit', name: '水果篮', themeId: 'fruit', routeX: -148, tagline: '阳光野餐 · 缤纷水果' },
     { id: 'antique', name: '古玩铺', themeId: 'antique', routeX: 150, tagline: '月色小铺 · 翡翠珍玩' },
-    { id: 'farm', name: '池塘农场', routeX: -126, tagline: '下一站 · 准备中' },
-    { id: 'dessert', name: '甜品小镇', routeX: 136, tagline: '更远的旅程 · 敬请期待' },
+    { id: 'farm', name: '池塘农场', themeId: 'farm', routeX: -126, tagline: '晨光池畔 · 丰收派对' },
+    { id: 'dessert', name: '甜品小镇', themeId: 'dessert', routeX: 136, tagline: '金色午后 · 甜蜜巡游' },
 ];
 
 /**
  * 全部场景主题。追加一个主题即自动进入每日轮播，无需改玩法层。
- * 池塘农场/甜品店待模型就绪后按同结构继续追加。
  */
 export const THEMES: Theme[] = [
     {
@@ -105,7 +104,7 @@ export const THEMES: Theme[] = [
          *   slice(0,4) 金薄片(铜钱) / 紫珠环(手串) / 浅绿多面体(宝石) / 深绿葫芦
          *     —— 四者颜色两两分明，且形状分属盘、环、晶、瓶，俯视轮廓也互不相似；
          *   第 5~6 件是同色系的两个环（玉镯纯浅绿、扳指绿环带金内圈），靠内圈区分；
-         *   压轴放吉祥物大鹅。
+         *   后段加入方形玉玺与细长如意，最终压轴放吉祥物大鹅。
          *
          * 删过四件，都是**模型本身不合格**，不是配色问题：
          *   pingankou 与干扰物 rock 同为无彩灰（饱和度 0.02 / 0.01），只差明度，堆里易误拿；
@@ -117,11 +116,30 @@ export const THEMES: Theme[] = [
          *   候选池里的 yushi / mile 与 pixiu 同批，一样糊，补不了位；只有 banzhi（扳指）
          *     干净，提上来补一个，所以是删二补一。
          *
-         * 因此本族 7 件：第 3 关 pick(9) 实际取满 7 种 × 2 组 = 42 件。
-         * 要再扩就得有新模型进来——池子里已经没有能用的了。
+         * 2026-08-11 用 Blender 程序化新建 yuxi / ruyi 补齐两种，不复用上述低质候选；
+         * 本族现有完整 9 件，第 3 关与其他主题一致为 54 个可消件 + 2 块石头。
          */
         family: ['tongqian', 'bracelet', 'baoshi', 'hulu',
-                 'yuzhuo', 'banzhi', 'goose'],
+                 'yuzhuo', 'banzhi', 'yuxi', 'ruyi', 'goose'],
+    },
+    {
+        id: 'farm', name: '池塘农场', skinId: 'picnic',
+        /**
+         * 前四件严格按橙 / 黄 / 紫 / 绿分色，并分别用长锥、长椭球、葫芦形、动物轮廓，
+         * 保证教学关在密堆俯视下也不会误认。后五件开始复用橙黄与圆形轮廓，逐步要求
+         * 玩家结合形状判断；第 3 关刚好吃满 9 种，不再出现古玩铺只有 7 种的梯度塌陷。
+         */
+        family: ['carrot', 'corn', 'eggplant', 'frog',
+                 'pumpkin', 'mushroom', 'koi', 'lotus', 'duck'],
+    },
+    {
+        id: 'dessert', name: '甜品小镇', skinId: 'dessert',
+        /**
+         * 教学关用粉色高筒 / 棕色圆环 / 薄荷三角 / 紫色圆饼建立四种强轮廓；
+         * 后段加入同为米黄色的曲奇、蛋糕、布丁、可颂，靠形状而非色相提升辨识难度。
+         */
+        family: ['cupcake', 'donut', 'icecream', 'macaron',
+                 'cookie', 'cake_slice', 'candy', 'pudding', 'croissant'],
     },
 ];
 

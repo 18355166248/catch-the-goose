@@ -352,9 +352,15 @@ export class HomeScreen implements Screen {
             this.maxScroll = middle;
         }
         if (!this.userScrolled) {
-            const selected = this.data.maps.find(m => m.selected)?.id;
-            // 水果篮靠下、古玩铺靠上；只在首进/重建时对准当前站，之后尊重玩家滚动位置。
-            const target = selected === 'antique' ? -150 : 160;
+            const selectedIndex = this.data.maps.findIndex(m => m.selected);
+            // 前两站画在首章底图里；第 3 站起由 buildMapNode 按固定节距向上生成。
+            // 选中扩展站时必须按同一公式把它拉回视口中央，否则开放后的农场仍停在屏外，
+            // 看起来会像“选中了水果篮”。之后的手动拖动仍由 userScrolled 完整保留。
+            const target = selectedIndex <= 0
+                ? 160
+                : selectedIndex === 1
+                    ? -150
+                    : -(BASE_MAP_H / 2 + 350 + (selectedIndex - 2) * 520) + 80;
             this.scrollY = this.clamp(target, this.minScroll, this.maxScroll);
         } else {
             this.scrollY = this.clamp(this.scrollY, this.minScroll, this.maxScroll);

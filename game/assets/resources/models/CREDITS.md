@@ -17,3 +17,16 @@
 
 导入后均经处理：合并网格、归一化到最大边 = 1.0、纯色不透明材质（翡翠绿 / 金色），
 以贴合本作美术。原始下载件未纳入版本库。
+
+## 本项目原创程序化模型
+
+池塘农场的 `carrot`、`corn`、`eggplant`、`frog`、`pumpkin`、`mushroom`、`koi`、
+`lotus`、`duck` 与 `basket_farm` 均由 `scripts/gen_farm_theme.py` 在 Blender 中生成，
+不依赖第三方模型或贴图。完整设计与复现记录见 `design/farm-theme/README.md`。
+
+甜品小镇的 `cupcake`、`donut`、`icecream`、`macaron`、`cookie`、`cake_slice`、
+`candy`、`pudding`、`croissant` 与 `tray_dessert` 同样是原创程序化模型，生成脚本为
+`scripts/gen_dessert_theme.py`，设计记录见 `design/dessert-theme/README.md`。
+
+古玩铺补充的 `yuxi` 与 `ruyi` 由 `scripts/gen_antique_additions.py` 生成，用于把大师关
+补齐到 9 种；设计记录见 `design/antique-additions/README.md`。

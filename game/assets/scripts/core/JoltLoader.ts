@@ -41,7 +41,9 @@ export function loadJolt(): Promise<JoltAPI> {
             // jolt-glue.<hash>.js，而这个路径是写死的。**构建请勿开 md5Cache**——
             // 缓存问题用开发服务器的 no-store 头解决，见 tools/serve.py。
             throw new Error(`Jolt 胶水加载失败（${url}）。`
-                + `若构建开了 md5Cache，文件已被改名，请关掉它。原始错误：${e}`);
+                + `Cocos Creator 的“浏览器预览”不会复制 build-templates，请改用 `
+                + `tools/build-web.sh 构建后通过 tools/serve.py 访问；`
+                + `若构建开了 md5Cache，文件也会被改名，请关掉它。原始错误：${e}`);
         });
     }
     return cached;

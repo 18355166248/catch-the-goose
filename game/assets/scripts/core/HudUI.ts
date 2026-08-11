@@ -304,9 +304,11 @@ export class HudUI {
 
         // 道具栏受 SHOW_PROPS 总开关控制，当前开启。
         if (HudUI.SHOW_PROPS) {
-        // 不再铺底部台面板。设计稿里三枚道具键与收集槽是**各自独立**的控件，
-        // 直接浮在背景上（键之间看得到桌面/野餐布），靠各自的金边和投影立轮廓。
-        // 原先那条横贯全宽的台面把三枚键焊成一整块灰绿色板，正是"底部糊成一片"的来源。
+        // 底部置物架承接三枚道具键，进入关卡后必须始终可见；两层木板分别提供投影和台面，
+        // 避免按钮直接悬浮在地图背景上。它只托住道具栏，不上移遮挡七格收集槽。
+        this.makePanel(760, 128, 28, new Color(52, 30, 22, 224), { bottom: -18 }, 0);
+        this.makePanel(752, 120, 25, new Color(86, 50, 35, 246), { bottom: -12 }, 0,
+            HudUI.GOLD_EDGE, 2);
 
         // 三枚道具键统一「深红木面 + 暖金图标」，靠**形状**区分功能，不靠颜色。
         //
@@ -1133,9 +1135,13 @@ export class HudUI {
     }
 
     private slotIconPosition(index: number): Vec3 {
+        // 槽位面板的 Widget 挂在固定 720×1280 的 gameLayer 上，图标也是它的子节点；
+        // 这里过去误用会随设备纵横比变化的 contentRoot 高度，短屏时两套坐标系相差
+        // 约 140 个美术像素，拾取图标就被推到下方“移出”按钮上。必须用共同父层高度。
+        const gameHeight = this.gameLayer.getComponent(UITransform)?.height ?? 1280;
         return v3(
             (index - 3) * HudUI.SLOT_STEP,
-            -this.contentUT.height / 2 + HudUI.TRAY_CENTER_Y,
+            -gameHeight / 2 + HudUI.TRAY_CENTER_Y,
             1,
         );
     }

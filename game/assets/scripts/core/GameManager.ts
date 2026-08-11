@@ -228,7 +228,7 @@ export class GameManager extends Component {
     private static readonly THAW_PER_MATCH = 1;
     /** 逐件投放间隔(秒/件):越小灌入越快、总时长越短,但同时在场刚体更多、穿插更深。
      *  0.03→0.05:同帧在场的动态刚体更少,求解器有余量把相邻件分开,少锁死互插。 */
-    private static readonly SPAWN_INTERVAL = 0.05;
+    private static readonly SPAWN_INTERVAL = 0.06;
     /** 兜底强制冻结延迟(末件投放后再等这么久整堆硬冻)。巡检自锁通常早已完成,这里只兜底。 */
     private static readonly SETTLE_BACKSTOP = 1.0;
     /**
@@ -239,15 +239,24 @@ export class GameManager extends Component {
      */
     private static readonly SPAWN_FREEZE_DELAY = 0.9;
     /** 出生缩放弹大("从小变大"):spawn 时缩放起始比例(相对目标),越小弹得越夸张。 */
-    private static readonly SPAWN_POP_FROM = 0.3;
-    /** 弹大时长(秒)。必须显著短于落体时间(~0.6s),保证长大发生在无接触的自由下落段,不推挤邻居。 */
-    private static readonly SPAWN_POP_TIME = 0.15;
+    private static readonly SPAWN_POP_FROM = 0.16;
+    /**
+     * 弹大总时长(秒)。0.15s 在手机上通常只跨 9 帧，又和同时发生的下落重叠，体感近似闪现；
+     * 拉到 0.28s 并做“过冲 → 回弹 → 落稳”三段，仍短于主要接触阶段，不会改动物理代理。
+     */
+    private static readonly SPAWN_POP_TIME = 0.28;
     /**
      * 圆形/环形物件:用圆柱碰撞体而非方盒。方盒的四个空角埋在堆里会被邻居深插 → 求解器狂弹 →
      * 高速抖(尤以手串等环形最明显)。圆柱无角、贴合圆盘轮廓,密堆时接触干净、抖动大减。
      * 非圆形物件(鹅/佛像/葫芦等)仍用方盒。
      */
-    private static readonly ROUND_ITEMS = new Set(['banzhi', 'bracelet', 'pingankou', 'tongqian', 'yuzhuo']);
+    private static readonly ROUND_ITEMS = new Set([
+        'banzhi', 'bracelet', 'pingankou', 'tongqian', 'yuzhuo',
+        // 农场主题的圆盘/球形件用圆柱代理，密堆时避免方盒空角互插后持续弹跳。
+        'pumpkin', 'mushroom', 'lotus',
+        // 甜品主题的圆饼/杯状件同理；细长糖果和三角蛋糕仍保留方盒轮廓。
+        'cupcake', 'donut', 'macaron', 'cookie', 'pudding',
+    ]);
     /**
      * ⚠️ 临时开关：关掉每日 3 次的免费挑战限制（见 ensureDaily / consumeDaily）。
      * 物理迁移的测试期打开，方便反复重开关卡。**上线前必须改回 false**。
@@ -407,6 +416,11 @@ export class GameManager extends Component {
             onPickLevel: i => {
                 this.levelIndex = i;
                 this.level = LEVELS[i];
+                // 首页切难度发生在 spawn 之前，但计时与关卡牌是独立缓存状态；只换 level
+                // 会让大师配置实际倒出 56 件，HUD 却仍显示上一局的“第 2 关 / 3:30”。
+                // 在用户选择这一刻同步重置，首页摘要与进局后的运行状态才是同一份关卡。
+                this.timeLeft = this.level.timeSec;
+                this.hud?.setLevel(this.levelIndex + 1);
                 this.updateHud();
                 this.showHome();
             },
@@ -479,6 +493,23 @@ export class GameManager extends Component {
 
     /** 首次进入关卡的统一入口：确认有次数后再扣减、加载和生成。 */
     private async startInitialRound() {
+        // 这个入口也会在“退出本局 → 返回地图 → 再次出发”时复用，不能只依赖构造初值。
+        // 上一局的救场、提示和连击状态必须在生成新堆前归零，避免重进后继承半局状态。
+        this.rescueUsed = false;
+        this.loseReason = '';
+        this.rockWarned = false;
+        this.frozenWarned = false;
+        this.frozenTags = [];
+        this.frostMarksShown = false;
+        this.interactionLocked = false;
+        this.score = 0;
+        this.combo = 0;
+        this.lastMatchAt = -99;
+        this.idleTime = 0;
+        this.physAccum = 0;
+        this.hud?.clearFrostMarks();
+        this.hud?.setCombo(0, 0);
+        this.hud?.setScore(0);
         this.consumeDaily();
         await this.prefabs.loadAll(this.levelPrefabIds());
         this.spawnItems();
@@ -1089,8 +1120,16 @@ export class GameManager extends Component {
                 // 弹大变化：弹大全程 0.15s 在半空无接触段，代理略大于视觉不会推挤邻居。
                 for (const child of n.children) {
                     child.setScale(GameManager.SPAWN_POP_FROM, GameManager.SPAWN_POP_FROM, GameManager.SPAWN_POP_FROM);
-                    tween(child).to(GameManager.SPAWN_POP_TIME, { scale: v3(1, 1, 1) },
-                        { easing: 'backOut' }).start();
+                    // 三段弹性出现比一次 backOut 更容易在密堆里看见：先略微超过最终尺寸，
+                    // 再收一下并落稳。只缩放视觉子树，Jolt 碰撞体始终保持最终尺寸。
+                    tween(child)
+                        .to(GameManager.SPAWN_POP_TIME * 0.55, { scale: v3(1.10, 1.10, 1.10) },
+                            { easing: 'backOut' })
+                        .to(GameManager.SPAWN_POP_TIME * 0.22, { scale: v3(0.96, 0.96, 0.96) },
+                            { easing: 'quadInOut' })
+                        .to(GameManager.SPAWN_POP_TIME * 0.23, { scale: v3(1, 1, 1) },
+                            { easing: 'sineOut' })
+                        .start();
                 }
                 // 物件投平面阴影
                 for (const mr of n.getComponentsInChildren(MeshRenderer)) {
@@ -1328,6 +1367,10 @@ export class GameManager extends Component {
      */
     private syncFrostMarks() {
         if (!this.hud || !this.cam) return;
+        // 退出、重开会先销毁物件节点；即使调用方漏清数组，也不能让失效 Component
+        // 在 update 中每帧抛错。这里同步修剪残留引用，保证 HUD 和玩法循环继续运行。
+        this.frozenTags = this.frozenTags.filter(t =>
+            !!t && t.isValid && !!t.node && t.node.isValid && !t.picked && t.frozen);
         if (!this.frozenTags.length) {
             if (this.frostMarksShown) {
                 this.hud.setFrostMarks([]);
@@ -1337,7 +1380,6 @@ export class GameManager extends Component {
         }
         const marks: { key: string; screenPos: Vec3 }[] = [];
         for (const t of this.frozenTags) {
-            if (!t.node.isValid || t.picked || !t.frozen) continue;
             const sp = v3();
             this.cam.worldToScreen(t.node.worldPosition, sp);
             marks.push({ key: t.node.uuid, screenPos: sp });
@@ -1490,6 +1532,10 @@ export class GameManager extends Component {
         }
 
         const { matched, full, index } = this.tray.add(tag.id, node);
+        // 摘件后除了唤醒接触岛，再给最近几件一个很小的真实冲量。仅 Activate 在平铺容器里
+        // 往往没有可见位移，玩家会误以为碰撞效果消失；冲量会经过 Jolt 接触求解传递，
+        // 读作相邻物件被碰开，而不是旧版直接改 Transform 的假晃动。三消成立时稍加强。
+        this.jolt.kickAround(removedPos, this.itemScale * 2.75, matched ? 1.15 : 0.82, matched ? 7 : 5);
         this.audio?.play(tag.id === 'goose' ? 'honk' : 'pick');
         this.hud?.pickBurst(screenPos);
         // 抓到吉祥物大鹅时给一句台词——游戏叫《抓住大鹅》，它不该跟一颗苹果一个待遇。
@@ -1502,14 +1548,7 @@ export class GameManager extends Component {
         }
         this.hud?.captureModel(node, screenPos, index);
         this.reflowTray();
-        // 这里**不需要**再补一次唤醒：JoltWorld.remove 已按被摘刚体的包围盒唤醒了接触岛
-        // （实测摘掉堆底一件即唤醒 31 件里的 22 件，塌落范围正好是局部）。
-        // 早先在这儿按 itemScale*2.2 又唤醒了一圈，结果把 31 件全唤醒 = 整堆重启，
-        // 正是自己注释里警告的"看着像地震"。
-        //
-        // 旧实现这里是「settleNearRemoved 挑 1~2 件手动沉降 + jiggleAround 给其余邻居做
-        // 假装晃动的 tween」——因为 Bullet 下整堆早被冻成 KINEMATIC，不伪造反馈就纹丝不动、
-        // 手感像点贴图。现在塌落是真的物理结果，假动作全部删掉。
+        // 不再额外 wakeAll：kickAround 只取 5 个近邻（三消时 7 个），避免整堆重启成地震。
         void removedPos;
         this.scheduleOnce(() => this.audio?.play('drop', 0.5), 0.3);
 
@@ -1896,6 +1935,7 @@ export class GameManager extends Component {
         this.rockWarned = false;
         this.frozenWarned = false;
         this.frozenTags = [];
+        this.frostMarksShown = false;
         this.hud?.clearFrostMarks();
         this.interactionLocked = false;
         this.hud?.hideResult();
@@ -1972,6 +2012,10 @@ export class GameManager extends Component {
         this.hud?.setScore(0);
         this.hud?.setTimeUrgent(false);
         this.hud?.clearHint();
+        // 冰封引用属于本局状态，必须在销毁物件前一起清空；否则返回地图再入局时，
+        // update 会访问上一局已经销毁的 ItemTag，导致后续 HUD（含底部置物区）停止同步。
+        this.frozenTags = [];
+        this.frostMarksShown = false;
         this.hud?.clearFrostMarks();
 
         for (const e of this.tray.entries) {

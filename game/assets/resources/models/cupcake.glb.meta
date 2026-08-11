@@ -1,0 +1,144 @@
+{
+  "ver": "2.3.14",
+  "importer": "gltf",
+  "imported": true,
+  "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894",
+  "files": [],
+  "subMetas": {
+    "fe6ae": {
+      "importer": "gltf-mesh",
+      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@fe6ae",
+      "displayName": "",
+      "id": "fe6ae",
+      "name": "Cone.mesh",
+      "userData": {
+        "gltfIndex": 0,
+        "triangleCount": 1304
+      },
+      "ver": "1.1.1",
+      "imported": true,
+      "files": [
+        ".bin",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "76be4": {
+      "importer": "gltf-material",
+      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@76be4",
+      "displayName": "",
+      "id": "76be4",
+      "name": "cup_paper.material",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "53f92": {
+      "importer": "gltf-material",
+      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@53f92",
+      "displayName": "",
+      "id": "53f92",
+      "name": "cup_cake.material",
+      "userData": {
+        "gltfIndex": 1
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f24a7": {
+      "importer": "gltf-material",
+      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@f24a7",
+      "displayName": "",
+      "id": "f24a7",
+      "name": "cup_frosting.material",
+      "userData": {
+        "gltfIndex": 2
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "46ccd": {
+      "importer": "gltf-material",
+      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@46ccd",
+      "displayName": "",
+      "id": "46ccd",
+      "name": "cup_cherry.material",
+      "userData": {
+        "gltfIndex": 3
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "93c74": {
+      "importer": "gltf-scene",
+      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@93c74",
+      "displayName": "",
+      "id": "93c74",
+      "name": "cupcake.prefab",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "imageMetas": [],
+    "lods": {
+      "enable": false,
+      "hasBuiltinLOD": false,
+      "options": [
+        {
+          "screenRatio": 0.25,
+          "faceCount": 1
+        },
+        {
+          "screenRatio": 0.125,
+          "faceCount": 0.25
+        },
+        {
+          "screenRatio": 0.01,
+          "faceCount": 0.1
+        }
+      ]
+    },
+    "assetFinder": {
+      "meshes": [
+        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@fe6ae"
+      ],
+      "skeletons": [],
+      "textures": [],
+      "materials": [
+        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@76be4",
+        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@53f92",
+        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@f24a7",
+        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@46ccd"
+      ],
+      "scenes": [
+        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@93c74"
+      ]
+    }
+  }
+}

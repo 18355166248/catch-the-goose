@@ -45,12 +45,9 @@ export interface SceneSkin {
 }
 
 /**
- * 三套皮肤。背景图为「不带置物筐」的纯场景（四周陈设 + 中央留空），由 SceneBackground
+ * 四套皮肤。背景图为「不带置物筐」的纯场景（四周陈设 + 中央留空），由 SceneBackground
  * 全屏等比铺满、不变形、随设备自适应；中央置物筐是独立的 3D 模型（containerModel），
  * 按皮肤加载并自动缩放到 CONTAINER_SPAN，隐形物理围栏保证物件精确落在筐内。
- *
- * 尚未配模型的皮肤留空 containerModel，中央暂无可见容器，
- * 物件仍由隐形围栏 + 平面阴影表现。
  */
 const WHITE = () => new Color(255, 255, 255);
 
@@ -82,11 +79,22 @@ export const SKINS: SceneSkin[] = [
         },
     },
     {
-        // 藤编方托盘模型待出（见 container-model-prompts.md 第 3 条），暂无可见容器。
         id: 'picnic', name: '户外野餐',
         swatch: [new Color(198, 158, 108), new Color(120, 150, 78)],
         backdrop: WHITE(),
-        backdropTex: 'bg_picnic',
+        // 池塘农场背景由原创概念图切为 720×1280；中央刻意留空，3D 篮筐和物件不会
+        // 与背景里的装饰物争夺“可点击”语义。低矮藤编篮沿用默认矩形边界。
+        backdropTex: 'bg_farm',
+        containerModel: 'basket_farm',
+    },
+    {
+        id: 'dessert', name: '甜品小镇',
+        swatch: [new Color(236, 153, 174), new Color(202, 154, 82)],
+        // 场景图的中央鹅卵石广场承接独立陶瓷托盘，建筑与甜品造型只围在四周；
+        // 这样背景保持主题感，又不会在可点击区域制造真假甜点混淆。
+        backdrop: WHITE(),
+        backdropTex: 'bg_dessert',
+        containerModel: 'tray_dessert',
     },
 ];
 

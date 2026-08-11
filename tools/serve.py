@@ -12,4 +12,5 @@ class NoCache(SimpleHTTPRequestHandler):
         super().end_headers()
 
 H = functools.partial(NoCache, directory='game/build/web-mobile')
-ThreadingHTTPServer(('0.0.0.0', 5185), H).serve_forever()
+# 开发预览只允许本机访问，避免把未发布的游戏代码和资源暴露到局域网。
+ThreadingHTTPServer(('127.0.0.1', 5185), H).serve_forever()
