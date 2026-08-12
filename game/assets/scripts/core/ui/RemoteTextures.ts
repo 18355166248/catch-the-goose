@@ -20,7 +20,13 @@
  */
 export const RemoteTextures = {
     /** 首页路线上每个站点的木框底座（含圆章内芯与羊皮纸名牌）。 */
-    stationFrame: 'https://audiopaytest.cos.tx.xmcdn.com/storages/b007-audiotest/64/2C/GAqSoUUOUgqAAAMP7wACEWUL.png',
+    stationFrame: {
+        remote: 'https://audiopaytest.cos.tx.xmcdn.com/storages/b007-audiotest/64/2C/GAqSoUUOUgqAAAMP7wACEWUL.png',
+        fallback: 'textures/challenge-ui/fallback/station-frame/texture',
+    },
     /** 选中态的手绘勾章：站点右上角与难度档位各用一次。 */
-    selectionBadge: 'https://audiopaytest.cos.tx.xmcdn.com/storages/ec09-audiotest/C1/DE/GAqSpGcOUgqAAAA0pwACEWUM.png',
+    selectionBadge: {
+        remote: 'https://audiopaytest.cos.tx.xmcdn.com/storages/ec09-audiotest/C1/DE/GAqSpGcOUgqAAAA0pwACEWUM.png',
+        fallback: 'textures/challenge-ui/fallback/selection-badge/texture',
+    },
 } as const;

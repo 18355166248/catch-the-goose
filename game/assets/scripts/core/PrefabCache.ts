@@ -19,13 +19,17 @@ export class PrefabCache {
     }
 
     /** 批量加载并缓存；已缓存的 id 自动跳过。 */
-    async loadAll(ids: string[]): Promise<void> {
-        await Promise.all(ids
+    async loadAll(ids: string[]): Promise<string[]> {
+        const requested = Array.from(new Set(ids));
+        await Promise.all(requested
             .filter(id => !this.cache.has(id))
             .map(async id => {
                 const prefab = await PrefabCache.loadOne(id);
                 if (prefab) this.cache.set(id, prefab);
             }));
+        // 失败项显式交给玩法层。过去这里返回 void，玩法层会静默跳过缺失模型，
+        // 关卡件数随网络/资源错误缩水，玩家甚至可能拿到一个“更容易”的坏关卡。
+        return requested.filter(id => !this.cache.has(id));
     }
 
     /** 单个 glb 预制体：先试路径，再退回 uuid。失败返回 null（调用方决定降级策略）。 */

@@ -37,6 +37,9 @@ export function loadJolt(): Promise<JoltAPI> {
     if (!cached) {
         const url = new URL('jolt-glue.js', location.href).href;
         cached = nativeImport(url).then(m => m.default()).catch(e => {
+            // 失败不能缓存成永久 rejected Promise：启动页的“重新加载”会整页刷新，但本局内
+            // 的自动重试与测试注入也必须能重新发起请求，而不是立刻拿到同一个旧错误。
+            cached = null;
             // 这里最常见的死法是 404：构建若开了 md5Cache，产物根目录的文件会被改名成
             // jolt-glue.<hash>.js，而这个路径是写死的。**构建请勿开 md5Cache**——
             // 缓存问题用开发服务器的 no-store 头解决，见 tools/serve.py。

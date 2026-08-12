@@ -13,7 +13,8 @@ export interface BestRecord { stars: number; progress: number; score?: number; }
 export class SaveData {
     private static readonly LEVEL = 'goose_level_v1';
     private static readonly DAILY = 'goose_daily_v1';
-    private static readonly BEST = 'goose_best_v1';
+    private static readonly BEST_LEGACY = 'goose_best_v1';
+    private static readonly BEST = 'goose_best_v2';
     private static readonly SKIN = 'goose_skin_v1';
     private static readonly THEME = 'goose_theme_v1';
     private static readonly PROP = 'goose_props_v1';
@@ -64,11 +65,24 @@ export class SaveData {
         SaveData.write(SaveData.DAILY, JSON.stringify({ date: SaveData.todayKey(), left }));
     }
 
-    static getBest(): Record<number, BestRecord> {
-        return SaveData.readJson<Record<number, BestRecord>>(SaveData.BEST, {});
+    static getBest(themeId: string): Record<number, BestRecord> {
+        const all = SaveData.readJson<Record<string, Record<number, BestRecord>>>(SaveData.BEST, {});
+        if (all[themeId]) return all[themeId];
+
+        // v1 只按难度存成绩，四个主题会互相覆盖。升级时把旧成绩归到玩家当前主题，
+        // 既不丢历史数据，也不把一张地图的纪录复制成四张地图都已通关。
+        const legacy = SaveData.readJson<Record<number, BestRecord>>(SaveData.BEST_LEGACY, {});
+        if (Object.keys(all).length === 0 && Object.keys(legacy).length > 0) {
+            all[themeId] = legacy;
+            SaveData.write(SaveData.BEST, JSON.stringify(all));
+            return legacy;
+        }
+        return {};
     }
-    static setBest(best: Record<number, BestRecord>): void {
-        SaveData.write(SaveData.BEST, JSON.stringify(best));
+    static setBest(themeId: string, best: Record<number, BestRecord>): void {
+        const all = SaveData.readJson<Record<string, Record<number, BestRecord>>>(SaveData.BEST, {});
+        all[themeId] = best;
+        SaveData.write(SaveData.BEST, JSON.stringify(all));
     }
 
     static getSkin(): string | null {
