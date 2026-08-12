@@ -39,7 +39,7 @@ export class UIKit {
      * 不让一个美术资源 404 把首次启动卡成空白页。
      */
     static image(parent: Node, resourcePath: string, w: number, h: number,
-        x: number, y: number, opacity = 255): Node {
+        x: number, y: number, opacity = 255, tint?: Color): Node {
         const n = new Node('image');
         n.layer = Layers.Enum.UI_2D;
         n.setParent(parent);
@@ -61,7 +61,10 @@ export class UIKit {
             sprite.sizeMode = Sprite.SizeMode.CUSTOM;
             sprite.spriteFrame = frame;
             transform?.setContentSize(targetW, targetH);
-            sprite.color = new Color(255, 255, 255, opacity);
+            // tint 是乘法叠色，只能压暗不能提亮：用它把「非当前项」调灰，
+            // 让保持原色的当前项自己跳出来，比给当前项加特效省一张图。
+            const t = tint ?? Color.WHITE;
+            sprite.color = new Color(t.r, t.g, t.b, opacity);
         });
         return n;
     }
@@ -99,6 +102,31 @@ export class UIKit {
             g.strokeColor = stroke;
             g.stroke();
         }
+        return n;
+    }
+
+    /**
+     * 选中态的暖金辉光，垫在美术切图**之下**，只从切图轮廓四周透出来。
+     *
+     * 为什么不是「一层实心 + 描边」：Graphics 没有模糊也没有阴影，硬边压在手绘底图上
+     * 会读成贴纸；这里用三层逐级放大、逐级变淡的圆角块手工羽化。w≈h 时是圆形光晕，
+     * 扁矩形时是胶囊——站点圆章和难度名牌共用这一个原语，选中语言才是同一套。
+     *
+     * spread 是最外圈探出切图轮廓的距离：浅色羊皮纸控制台上 22 就够看，
+     * 压在满是绿地和石径的地图插画上要给到 38 才不会被背景吃掉。
+     */
+    static glow(parent: Node, w: number, h: number, x: number, y: number,
+        spread = 22, color = new Color(255, 206, 96)): Node {
+        const n = new Node('selectGlow');
+        n.layer = Layers.Enum.UI_2D;
+        n.setParent(parent);
+        n.setPosition(x, y, 0);
+        n.addComponent(UITransform).setContentSize(w + spread, h + spread);
+        ([[1, 34], [0.55, 66], [0.18, 104]] as const).forEach(([k, alpha]) => {
+            const pad = spread * k;
+            UIKit.panel(n, w + pad, h + pad, (Math.min(w, h) + pad) / 2,
+                new Color(color.r, color.g, color.b, alpha), 0, 0);
+        });
         return n;
     }
 

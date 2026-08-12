@@ -1,5 +1,18 @@
 # Design QA
 
+## 2026-08-11 挑战首页连续地图视觉重构
+
+- [P1, fixed] 旧地图把 `map-route-extension` 直接叠在首章插画上，两张图各自携带纸张边缘、
+  桌布与海岸线，农场到古玩铺之间出现贯穿全宽的硬切。现改为单张 724×2172 连续长卷，
+  河流、石径、植被与羊皮纸外框从水果篮连续到甜品小镇，内部没有分段边框。
+- [P1, fixed] 农场与甜品原为通用河谷上的白色编号圆片，与水果篮/古玩铺的建筑地标不在同一
+  完成度。新版背景为四站分别绘制水果野餐、古玩铺、池塘农场与甜品村；代码节点同步换成
+  苹果、玉玺、小鸭、纸杯蛋糕图标及绿/翡翠/嫩绿/莓粉主题描边。
+- 四站统一使用“主题圆章 + 羊皮纸名称牌 + 站号徽章 + 副标题”，选中态增加金色光晕，
+  未选态仍保持主题识别，不再退回纯数字占位。
+- 519×906 浏览器逐站拖动并验证甜品选中态；古玩铺上下过渡无横向接缝，农场与甜品地标、
+  节点、路线对应正确；Cocos Web 构建通过，最终控制台 0 warning / 0 error。
+
 ## 2026-08-11 堆积与消除碰撞动画回归
 
 - [P1, fixed] Jolt 迁移后只在摘件时唤醒局部接触岛；平铺容器里休眠件没有足够势能，
@@ -230,6 +243,65 @@ final result: passed
 - 确认返回地图页、暂停层消失、再次开局无遗留物件。
 
 final result: blocked
+
+---
+
+# 2026-08-12 地图站点与难度选中态 v2 验收
+
+## Evidence
+
+- Source visual truth: 当前首页既有木质羊皮纸风格、第三套童话浮雕圆章与三张难度选中切图。
+- Browser-rendered implementation: `/Users/xmly/Swell/code/catch-the-goose/qa-selection-states-v2.png`
+- Viewport: 656×1111 CSS px，devicePixelRatio 0.67；Cocos 720px 美术画布按窗口等比缩放。
+- State: 水果篮选中、标准难度选中。
+- Focused evidence: 地图圆章右上角与标准难度圆章右上角均显示同款古金绿勾徽章。
+
+## Findings
+
+- 地图选中态不再销毁重建站点，不再缩放/回弹/扩散涟漪；仅同步切换常驻金圈、绿勾章和非选中透明度。
+- 难度三张切图预加载后同步显隐，不再交叉淡入；托底和绿勾章直接换位，不再弹跳。
+- 当前项通过原切图高亮 + 暖金托底 + 常驻绿勾三重表达，静止状态已能明确识别。
+- 页面截图无布局跳变、遮挡、裁切和透明背景色残留；浏览器 console warning/error 为 0。
+
+## Required fidelity surfaces
+
+- Fonts and typography: 未改动站名、难度名和摘要行字体；无换行或截断。
+- Spacing and layout rhythm: 选中前后控件尺寸固定；勾章贴圆章右上角，不挤压标题和图标。
+- Colors and visual tokens: 古金、米白与祖母绿延续现有木质羊皮纸配色，非选中项仅降低整体透明度。
+- Image quality and asset fidelity: 选中徽章使用 imagegen 生成的透明 PNG，非 Graphics 临时图形；小尺寸下勾形仍清楚。
+- Copy and content: 页面文案与挑战参数未改动。
+
+## Primary interactions tested
+
+- 刷新首页并等待资源完成加载。
+- 点击难度区域并截取点击后状态；切换过程无页面级淡入、缩放或重建。
+- 检查浏览器控制台：0 warning / 0 error。
+
+## Comparison history
+
+- Pass 1 [P1]: 站点选中依赖整站放大、涟漪回弹，难度依赖交叉淡入和托底弹跳；动效结束后常驻选中态仍弱。Fix: 统一改为固定尺寸、常驻绿勾与非选中退后。
+- Pass 2: 浏览器复核显示两组选择控件状态清楚且布局稳定，无剩余 P0/P1/P2。
+
+final result: passed
+
+---
+
+# 2026-08-11 四站节点 v3 与点击无闪烁验收
+
+## Findings
+
+- 四个站点统一升级为“木质金边圆章 + 羊皮纸名牌 + 关卡号插槽”组件，各站使用独立主题图标和内圈色。
+- 选中态仅保留静态金色光圈，不改变底座尺寸，不添加瞬时白光。
+- 点击站点不再调用 `UIKit.tap` 按压缩放；选图后只局部重建站点层，不再走 `UIRouter` 整页 0→1 淡入。
+- 地图拖动阶段依旧通过位移阈值屏蔽误点，不改变原有滚动手感。
+
+## Evidence
+
+- 站点组件源图：`design/home-map/station-frame-v3-source.png`。
+- 运行时透明资产：`game/assets/resources/textures/challenge-ui/station-frame-v3.png`。
+- Web 构建：`tools/build-web.sh`通过，Cocos 脚本包与 Jolt 资源完整。
+
+final result: passed
 
 ---
 
@@ -526,5 +598,37 @@ final result: passed
 完整证据、必查视觉面与交互清单见上文“2026-08-11 游戏内退出挑战验收”。代码及 Web 构建已包含“退出本局”和完整清理回首页逻辑，但浏览器安全策略阻止了本地预览刷新，因此缺少刷新后暂停菜单截图与点击证据。
 
 Blocker: 请在已打开的本地预览中手动刷新一次；之后需要验证“开始挑战 → 暂停 → 退出本局 → 返回地图页”。
+
+final result: blocked
+
+---
+
+# 2026-08-12 第三套童话浮雕圆章验收
+
+## Evidence
+
+- Source visual truth: `/Users/xmly/.codex/generated_images/019ff0d5-07c1-7c22-b438-c2adca09b33b/exec-aa127565-bd44-4df9-9679-7a1e8e213c39.png`
+- Runtime assets: `game/assets/resources/textures/challenge-ui/station-medallion-{fruit,antique,farm,dessert}-v4.png`
+- Intended state: 首页水果篮站点选中，四站均使用同尺寸圆形画芯，选中态不缩放。
+- Implementation screenshot: unavailable；本地预览 `http://localhost:5185/` 被当前浏览器安全策略阻止访问。
+
+## Findings
+
+- 四个 512×512 画芯已从用户选定方案分别提取，去除品红背景与外层重复木框，透明圆边完整。
+- 代码统一使用 120×120、圆心 `(0, 49)`，与站点底座的金边圆章内圈对齐；选中和未选中尺寸保持一致。
+- Cocos Web 构建完成，`jolt-glue.js` 与玩法脚本包检查通过。
+- [BLOCKED] 缺少浏览器渲染截图，因此无法完成最终的圆心偏移、边缘露底、缩小时清晰度与点击状态视觉对比。
+
+## Required fidelity surfaces
+
+- Fonts and typography: 本次未修改站名、标语与关卡号排版。
+- Spacing and layout rhythm: 代码尺寸和圆心已统一；浏览器像素级确认被阻断。
+- Colors and visual tokens: 使用选定第三套原始配色，不再叠加旧版纯色圆底。
+- Image quality and asset fidelity: 画芯为 512×512 透明 PNG；源图细节与主题主体均保留。
+- Copy and content: 本次未修改页面文案。
+
+## Primary interactions tested
+
+- Web 构建通过；浏览器交互与点击前后截图因安全策略未能执行。
 
 final result: blocked

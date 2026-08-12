@@ -1,5 +1,6 @@
 import {
     Node, Color, Layers, UITransform, NodeEventType, Mask, EventTouch, EventMouse, Label, Graphics,
+    UIOpacity, tween, Tween, v3,
 } from 'cc';
 import { Screen, ScreenViewport } from './UIRouter';
 import { UIKit, UIColors } from './UIKit';
@@ -26,8 +27,56 @@ export interface HomeData {
 }
 
 const HEADER_H = 173;
-const BASE_MAP_H = 912;
-const EXTENSION_H = 1440;
+const MAP_ART_H = 2160;
+
+/**
+ * 三档难度是三张独立生成的切图，画布高度（368/334/322）和内部元素大小都对不齐。
+ * 旧实现把三张统统拉成 600×170：easy 被压扁 7.6%、master 被拉高 5.6%，
+ * 于是每次换难度整条难度条都在缩放跳动——用户看到的「页面闪动」有一半来自这里。
+ *
+ * 这里改成按各自比例铺开，再用 midY（切图里未选中档位的内容中心）把三张对到同一条
+ * 基线上。切换时三张预加载切图同步显隐，不再交叉淡入或重建节点。
+ */
+const DIFFICULTY_ART = [
+    { path: 'textures/challenge-ui/difficulty-easy-clean/texture', w: 1200, h: 368, midY: 198.5 },
+    { path: 'textures/challenge-ui/difficulty-normal-clean/texture', w: 1200, h: 334, midY: 177.5 },
+    { path: 'textures/challenge-ui/difficulty-master-clean/texture', w: 1200, h: 322, midY: 168.5 },
+];
+/** 难度条显示宽度，以及三档圆章在这个宽度下的中心 x——由切图量出，别再手调。 */
+const DIFFICULTY_W = 600;
+const DIFFICULTY_XS = [-242, 0, 242];
+/**
+ * 难度条中心在控制台里的基线，以及选中托底相对它的位置和尺寸（贴着切图里的名牌胶囊）。
+ * 切图坐标 y 向下增大、UI 坐标 y 向上为正，凡是从切图量来的偏移都要翻号再用。
+ */
+const DIFFICULTY_Y = 108;
+const PLATE = { y: -45, w: 132, h: 62 };
+/** 未选中/未开放站点整体退后一级；选中项不再通过缩放改变占位。 */
+const STATION_IDLE_OPACITY = 190;
+const STATION_LOCKED_OPACITY = 145;
+
+const MAP_STATIONS: Record<string, {
+    y: number;
+    icon: string;
+    edge: Color;
+}> = {
+    fruit: {
+        y: -790, icon: 'textures/challenge-ui/station-medallion-fruit-v4/texture',
+        edge: new Color(99, 157, 67),
+    },
+    antique: {
+        y: -245, icon: 'textures/challenge-ui/station-medallion-antique-v4/texture',
+        edge: new Color(57, 133, 91),
+    },
+    farm: {
+        y: 315, icon: 'textures/challenge-ui/station-medallion-farm-v4/texture',
+        edge: new Color(92, 156, 76),
+    },
+    dessert: {
+        y: 840, icon: 'textures/challenge-ui/station-medallion-dessert-v4/texture',
+        edge: new Color(211, 111, 101),
+    },
+};
 
 /**
  * 挑战首页：顶部品牌、滚动地图、底部挑战控制台是三个独立区域。
@@ -47,16 +96,21 @@ export class HomeScreen implements Screen {
     private deckBg: Node | null = null;
     private summaryFrame: Node | null = null;
     private summaryLabel: Label | null = null;
-    private difficultyArt: Node | null = null;
+    private difficultyArts: Node[] = [];
+    private selectPlate: Node | null = null;
+    private difficultyBadge: Node | null = null;
     private difficultyHits: Node[] = [];
+    private selectedLevel = 0;
+    private deckScale = 1;
     private lockNote: Node | null = null;
     private ctaArt: Node | null = null;
     private ctaHit: Node | null = null;
     private footerLabel: Label | null = null;
     private soundStateArt: Node | null = null;
+    private mapStations: Node[] = [];
 
-    private contentBottom = -BASE_MAP_H / 2;
-    private contentTop = BASE_MAP_H / 2;
+    private contentBottom = -MAP_ART_H / 2;
+    private contentTop = MAP_ART_H / 2;
     private scrollY = 0;
     private minScroll = 0;
     private maxScroll = 0;
@@ -112,7 +166,9 @@ export class HomeScreen implements Screen {
         const viewport = new Node('mapViewport');
         viewport.layer = Layers.Enum.UI_2D;
         viewport.setParent(root);
-        viewport.addComponent(UITransform).setContentSize(720, BASE_MAP_H);
+        // build 阶段先给标准竖屏高度，layout 随后会用真实窗口覆盖；不能误用长卷自身高度，
+        // 否则首帧遮罩会把整张地图当作可视区闪出来。
+        viewport.addComponent(UITransform).setContentSize(720, 912);
         viewport.addComponent(Mask).type = Mask.Type.GRAPHICS_RECT;
         this.mapViewport = viewport;
 
@@ -121,41 +177,23 @@ export class HomeScreen implements Screen {
         content.setParent(viewport);
         this.mapContent = content;
 
-        const previewMaps = this.data.maps.slice(2);
-        // 即使当前只有两张可玩地图，也保留一段向上的路线，让“旅程会继续”在画面上成立。
-        const extensionCount = Math.max(1, Math.ceil(previewMaps.length / 2));
-        for (let i = 0; i < extensionCount; i++) {
-            UIKit.image(content, 'textures/challenge-ui/map-route-extension/texture',
-                720, EXTENSION_H, 0, BASE_MAP_H / 2 + EXTENSION_H / 2 + i * EXTENSION_H);
-        }
+        // 四站共用一张连续长卷。旧实现把首章图和扩展图上下硬拼，图内自带的桌布、海岸线
+        // 和纸张边缘会横穿地图；站点越往上，断层越明显。长卷只保留最外层羊皮纸边框，
+        // 河流与石径从水果篮一直连续到甜品小镇，不再依赖任何可见接缝。
+        UIKit.image(content, 'textures/challenge-ui/map-continuous-v2/texture',
+            720, MAP_ART_H, 0, 0);
 
-        const selectedMap = this.data.maps.find(m => m.selected);
-        const body = selectedMap?.id === 'antique'
-            ? 'textures/challenge-ui/map-antique-body/texture'
-            : 'textures/challenge-ui/map-fruit-body/texture';
-        UIKit.image(content, body, 720, BASE_MAP_H, 0, 0);
+        this.buildMapStations();
 
-        // 首章的两站已经完整画进插画，只叠透明热区，避免额外图形破坏美术。
-        const fruit = this.data.maps[0];
-        const antique = this.data.maps[1];
-        if (fruit?.playable) UIKit.hitArea(content, 250, 240, -124, -144,
-            () => this.tapMap(fruit.id));
-        if (antique?.playable) UIKit.hitArea(content, 250, 240, 146, 228,
-            () => this.tapMap(antique.id));
-
-        // 配置中第 3 站起自动落到扩展路线；模型未齐的站点以锁定节点预告。
-        previewMaps.forEach((map, i) => {
-            const y = BASE_MAP_H / 2 + 350 + i * 520;
-            this.buildMapNode(content, map, map.routeX, y, i + 2);
-        });
-
-        this.contentTop = BASE_MAP_H / 2 + extensionCount * EXTENSION_H;
-        this.contentBottom = -BASE_MAP_H / 2;
+        this.contentTop = MAP_ART_H / 2;
+        this.contentBottom = -MAP_ART_H / 2;
         content.addComponent(UITransform).setContentSize(720, this.contentTop - this.contentBottom);
 
         const onDragStart = () => {
             this.mapDragging = false;
             this.dragDistance = 0;
+            // 上一次选站的缓动滚动还没走完就上手拖，两边会各自 setPosition 互相拉扯。
+            Tween.stopAllByTarget(content);
         };
         const onDragMove = (event: EventTouch) => {
             const delta = event.getUIDelta();
@@ -235,25 +273,28 @@ export class HomeScreen implements Screen {
         this.summaryFrame = UIKit.image(deck, 'textures/challenge-ui/summary-frame-blank/texture',
             620, 78, 0, 166);
 
-        const selectedLevel = this.data.levels.find(l => l.selected);
-        const detail = selectedLevel?.detail.replace(/ · 石头 \d+/, '') ?? '';
-        const compactDetail = detail.split(' · ').slice(1).join(' · ');
-        this.summaryLabel = UIKit.label(deck,
-            `${selectedLevel?.text ?? '标准'}挑战 · ${compactDetail}`,
+        this.selectedLevel = Math.max(0, this.data.levels.findIndex(l => l.selected));
+        this.summaryLabel = UIKit.label(deck, this.summaryTextOf(this.selectedLevel),
             25, new Color(116, 73, 42), 0, 166);
 
-        const selectedLevelIndex = Math.max(0, this.data.levels.findIndex(l => l.selected));
-        const difficultyTextures = [
-            'textures/challenge-ui/difficulty-easy-clean/texture',
-            'textures/challenge-ui/difficulty-normal-clean/texture',
-            'textures/challenge-ui/difficulty-master-clean/texture',
-        ];
-        this.difficultyArt = UIKit.image(deck,
-            difficultyTextures[selectedLevelIndex] ?? difficultyTextures[0], 600, 170, 0, 70);
+        // 选中档位的辉光垫在难度切图之下，只从名牌胶囊四周透出来。不叠在切图之上：
+        // 三张切图各自烘焙了选中态，再盖一层实心色块会和它们打架。
+        this.selectPlate = UIKit.glow(deck, PLATE.w, PLATE.h, 0, 0);
 
-        const xs = [-220, 0, 220];
+        // 三档切图全部建好、只靠透明度切换。换难度时若临时新建节点，纹理回调要等下一帧，
+        // 中间会露出一帧空白——那一帧就是「闪」。
+        this.difficultyArts = DIFFICULTY_ART.map((art, i) => {
+            const node = UIKit.image(deck, art.path, DIFFICULTY_W, art.h * (DIFFICULTY_W / art.w),
+                0, DIFFICULTY_Y);
+            node.addComponent(UIOpacity).opacity = i === this.selectedLevel ? 255 : 0;
+            return node;
+        });
+        // 勾章必须在三张难度切图之后创建，才能稳定压在当前档位右上角。
+        this.difficultyBadge = UIKit.image(deck,
+            'textures/challenge-ui/selection-badge-v1/texture', 68, 68, 0, 0);
+
         this.data.levels.forEach((lv, i) => {
-            const hit = UIKit.hitArea(deck, 176, 145, xs[i], 70, () => {
+            const hit = UIKit.hitArea(deck, 190, 150, DIFFICULTY_XS[i], DIFFICULTY_Y, () => {
                 if (!this.mapDragging && lv.unlocked) this.data.onPickLevel(i);
             });
             this.difficultyHits.push(hit);
@@ -273,16 +314,28 @@ export class HomeScreen implements Screen {
 
     private layoutDeck(deckH: number) {
         const s = this.clamp(deckH / 520, 0.96, 1.02);
+        this.deckScale = s;
         this.place(this.summaryFrame, 620 * s, 78 * s, 0, 205 * s);
         if (this.summaryLabel) {
             this.summaryLabel.fontSize = Math.round(25 * s);
             this.summaryLabel.lineHeight = Math.round(31 * s);
             this.summaryLabel.node.setPosition(0, 205 * s, 0);
         }
-        this.place(this.difficultyArt, 600 * s, 170 * s, 0, 108 * s);
-        const xs = [-220, 0, 220];
-        this.difficultyHits.forEach((hit, i) => this.place(hit, 176 * s, 145 * s,
-            xs[i] * s, 108 * s));
+        this.difficultyArts.forEach((node, i) => {
+            const art = DIFFICULTY_ART[i];
+            const k = DIFFICULTY_W / art.w;
+            // 对齐的是内容中心而不是画布中心，三张画布高度不同才不会互相错位。
+            this.place(node, DIFFICULTY_W * s, art.h * k * s, 0,
+                (DIFFICULTY_Y + (art.midY - art.h / 2) * k) * s);
+        });
+        // 托底是 Graphics 画的固定路径，改 contentSize 不会重画，只能整体缩放。
+        this.selectPlate?.setScale(s, s, 1);
+        this.selectPlate?.setPosition(DIFFICULTY_XS[this.selectedLevel] * s,
+            (DIFFICULTY_Y + PLATE.y) * s, 0);
+        this.place(this.difficultyBadge, 68 * s, 68 * s,
+            (DIFFICULTY_XS[this.selectedLevel] + 63) * s, (DIFFICULTY_Y + 50) * s);
+        this.difficultyHits.forEach((hit, i) => this.place(hit, 190 * s, 150 * s,
+            DIFFICULTY_XS[i] * s, DIFFICULTY_Y * s));
         this.place(this.lockNote, 340 * s, 48 * s, 0, -16 * s);
         this.place(this.ctaArt, 520 * s, 136 * s, 0, -112 * s);
         this.place(this.ctaHit, 500 * s, 112 * s, 0, -112 * s);
@@ -291,6 +344,53 @@ export class HomeScreen implements Screen {
             this.footerLabel.lineHeight = Math.round(25 * s);
             this.footerLabel.node.setPosition(0, -187 * s, 0);
         }
+    }
+
+    /** 摘要行的文案只依赖静态关卡配置，页面自己就能算，不用为了换一行字重建整页。 */
+    private summaryTextOf(index: number) {
+        const level = this.data.levels[index];
+        const detail = level?.detail.replace(/ · 石头 \d+/, '') ?? '';
+        const compactDetail = detail.split(' · ').slice(1).join(' · ');
+        return `${level?.text ?? '标准'}挑战 · ${compactDetail}`;
+    }
+
+    /**
+     * 首页内切换难度：和 {@link selectMap} 一样只做局部更新。
+     *
+     * 旧链路是回 GameManager 再 showHome()，等于整页重建 + 路由淡入淡出，点一下难度
+     * 连地图带控制台一起闪一次——切换本身反而看不清楚。这里只换三张切图的透明度、
+     * 挪一下选中托底、刷新摘要与成绩行。
+     */
+    selectLevel(index: number, bestText: string) {
+        if (!this.controlDeck?.isValid || !this.data.levels[index]) return;
+        if (index === this.selectedLevel) return;
+        this.data.levels.forEach((lv, i) => { lv.selected = i === index; });
+        this.selectedLevel = index;
+
+        this.data.bestText = bestText;
+        if (this.footerLabel) {
+            this.footerLabel.string = `${this.data.dailyText}  ·  ${bestText}`;
+        }
+        if (this.summaryLabel) this.summaryLabel.string = this.summaryTextOf(index);
+
+        // 三张纹理在进入首页时已经全部加载；切换时同步改透明度，不做交叉淡入，
+        // 避免两个完整难度条短暂叠在一起产生“整页闪了一下”的错觉。
+        this.difficultyArts.forEach((node, i) => {
+            const op = node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity);
+            Tween.stopAllByTarget(op);
+            op.opacity = i === index ? 255 : 0;
+        });
+
+        const s = this.deckScale;
+        const plate = this.selectPlate;
+        if (plate?.isValid) {
+            // 选中托底与勾章直接落位，不缩放、不弹跳；静止状态本身就必须足够清楚。
+            Tween.stopAllByTarget(plate);
+            plate.setPosition(DIFFICULTY_XS[index] * s, (DIFFICULTY_Y + PLATE.y) * s, 0);
+            plate.setScale(s, s, 1);
+        }
+        this.place(this.difficultyBadge, 68 * s, 68 * s,
+            (DIFFICULTY_XS[index] + 63) * s, (DIFFICULTY_Y + 50) * s);
     }
 
     /** 设置使用首页自己的浮层；卡片始终取当前可视范围中心，不受长地图滚动影响。 */
@@ -343,6 +443,68 @@ export class HomeScreen implements Screen {
         this.data.onPickMap(id);
     }
 
+    /**
+     * 首页内切换地图只更新四个站点，不再让路由销毁并淡入整页。
+     * 旧链路会同时触发 UIKit.tap 缩放和 UIRouter 0→1 淡入，视觉上就是点击后白闪一下。
+     */
+    selectMap(id: string, bestText: string) {
+        if (!this.mapContent?.isValid) return;
+        let changed = false;
+        this.data.maps.forEach(map => {
+            const next = map.id === id;
+            changed ||= map.selected !== next;
+            map.selected = next;
+        });
+        if (!changed) return;
+
+        this.data.bestText = bestText;
+        if (this.footerLabel) {
+            this.footerLabel.string = `${this.data.dailyText}  ·  ${bestText}`;
+        }
+        // 不销毁重建四个站点：即使纹理已缓存，重新挂 Sprite 仍可能空一帧。
+        // 只切换常驻勾章、金圈和整体层级，选中反馈立即出现且地图不会闪。
+        this.refreshMapStationStates();
+
+        // 选中后平稳把目标放回视口中心；只改地图内容位置，不做页面级淡入淡出。
+        const station = MAP_STATIONS[id];
+        if (station) {
+            this.scrollY = this.clamp(-station.y + 34, this.minScroll, this.maxScroll);
+            // 瞬移会让整张地图跳一下，读起来又像闪；缓动过去顺带交代了「去了哪一站」。
+            Tween.stopAllByTarget(this.mapContent);
+            tween(this.mapContent)
+                .to(0.28, { position: v3(0, this.scrollY, 0) }, { easing: 'quadOut' })
+                .start();
+        }
+    }
+
+    private buildMapStations() {
+        const content = this.mapContent;
+        if (!content?.isValid) return;
+        this.mapStations.forEach(node => node.isValid && node.destroy());
+        this.mapStations = [];
+        this.data.maps.forEach((map, index) => {
+            const station = MAP_STATIONS[map.id];
+            if (!station) return;
+            this.mapStations.push(this.buildMapNode(content, map, map.routeX, station.y, index));
+        });
+    }
+
+    /** 更新现有站点状态，不重建节点和纹理。 */
+    private refreshMapStationStates() {
+        this.mapStations.forEach((node, index) => {
+            const map = this.data.maps[index];
+            if (!map || !node.isValid) return;
+            const selected = map.selected;
+            const opacity = node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity);
+            opacity.opacity = !map.playable ? STATION_LOCKED_OPACITY
+                : (selected ? 255 : STATION_IDLE_OPACITY);
+            const ring = node.getChildByName('selectedRing');
+            if (ring) ring.active = selected;
+            const badge = node.getChildByName('selectedBadge');
+            if (badge) badge.active = selected;
+        });
+    }
+
     private updateScrollBounds(viewportH: number) {
         this.minScroll = viewportH / 2 - this.contentTop;
         this.maxScroll = -viewportH / 2 - this.contentBottom;
@@ -353,14 +515,10 @@ export class HomeScreen implements Screen {
         }
         if (!this.userScrolled) {
             const selectedIndex = this.data.maps.findIndex(m => m.selected);
-            // 前两站画在首章底图里；第 3 站起由 buildMapNode 按固定节距向上生成。
-            // 选中扩展站时必须按同一公式把它拉回视口中央，否则开放后的农场仍停在屏外，
-            // 看起来会像“选中了水果篮”。之后的手动拖动仍由 userScrolled 完整保留。
-            const target = selectedIndex <= 0
-                ? 160
-                : selectedIndex === 1
-                    ? -150
-                    : -(BASE_MAP_H / 2 + 350 + (selectedIndex - 2) * 520) + 80;
+            // 选中站点始终回到地图视口的视觉中心；站点坐标只维护在 MAP_STATIONS，
+            // 避免背景、点击区与自动滚动各存一套魔法数字，改图后再次错位。
+            const selectedId = this.data.maps[selectedIndex]?.id;
+            const target = -(MAP_STATIONS[selectedId]?.y ?? MAP_STATIONS.fruit.y) + 34;
             this.scrollY = this.clamp(target, this.minScroll, this.maxScroll);
         } else {
             this.scrollY = this.clamp(this.scrollY, this.minScroll, this.maxScroll);
@@ -368,28 +526,57 @@ export class HomeScreen implements Screen {
         this.mapContent?.setPosition(0, this.scrollY, 0);
     }
 
-    private buildMapNode(parent: Node, map: MapChoice, x: number, y: number, index: number) {
+    private buildMapNode(parent: Node, map: MapChoice, x: number, y: number, index: number): Node {
+        const station = MAP_STATIONS[map.id] ?? MAP_STATIONS.fruit;
         const selected = map.selected;
-        const fill = map.playable
-            ? (selected ? new Color(255, 210, 67) : new Color(255, 244, 214))
-            : new Color(218, 207, 180, 248);
-        const marker = UIKit.panel(parent, selected ? 142 : 116, selected ? 142 : 116,
-            selected ? 71 : 58, fill, x, y,
-            selected ? new Color(255, 250, 204) : UIColors.edgeSoft, selected ? 9 : 4);
-        if (selected) UIKit.image(marker, 'icons/goose/texture', 88, 88, 0, 4);
-        else UIKit.label(marker, map.playable ? `${index + 1}` : '…', 38,
-            map.playable ? UIColors.text : UIColors.textLocked, 0, 3);
+        const stationRoot = new Node(`mapStation-${map.id}`);
+        stationRoot.layer = Layers.Enum.UI_2D;
+        stationRoot.setParent(parent);
+        stationRoot.setPosition(x, y, 0);
+        stationRoot.addComponent(UITransform).setContentSize(336, 252);
 
-        const labelY = y - (selected ? 106 : 90);
-        const label = UIKit.panel(parent, 270, 78, 18,
-            map.playable ? new Color(255, 244, 214, 250) : new Color(230, 220, 196, 246),
-            x, labelY, selected ? UIColors.gold : UIColors.edgeSoft, selected ? 5 : 3);
-        UIKit.label(label, map.name, 27, map.playable ? UIColors.text : UIColors.textLocked, 0, 13);
-        UIKit.label(label, map.tagline, 16, UIColors.textSoft, 0, -18);
+        // 四站共用木金底座，圆章内直接放完整主题画芯。画芯已在资源阶段裁成同直径透明圆，
+        // 这里保持相同尺寸和中心点，避免换站时因缩放差异产生跳闪。
+        // 圆章内芯在美术稿里是 459px 直径、中心 (721.5, 371)，换算到 330×247 的显示尺寸
+        // 就是直径 105、中心 (0, 39)；画芯与选中光圈都按这组数字对齐，不能再各写一套。
+        // 选中项保持原尺寸，未选中项只整体退后；尺寸不变就不会在点击时产生跳闪。
+        const stationOpacity = stationRoot.addComponent(UIOpacity);
+        stationOpacity.opacity = !map.playable ? STATION_LOCKED_OPACITY
+            : (selected ? 255 : STATION_IDLE_OPACITY);
+        UIKit.image(stationRoot, 'textures/challenge-ui/station-frame-v3/texture',
+            330, 247, 0, 0);
+        // 选中光圈必须画在底座之后：底座圆章内芯是不透明的羊皮纸面，先画就会被整块盖住，
+        // 只剩超出木框的那一段露在画芯上方——旧实现（直径 178）漏出的就是这道半圈白弧。
+        const selectedRing = UIKit.panel(stationRoot, 108, 108, 54,
+            new Color(255, 210, 63, 65), 0, 39, new Color(255, 249, 206, 245), 5);
+        selectedRing.name = 'selectedRing';
+        selectedRing.active = selected;
+        UIKit.image(stationRoot, station.icon, 98, 98, 0, 39,
+            map.playable ? 255 : 118);
+        // 手绘勾章是选中状态的主要识别信号，固定在圆章右上角，不依赖动画才能看见。
+        const selectedBadge = UIKit.image(stationRoot,
+            'textures/challenge-ui/selection-badge-v1/texture', 68, 68, 66, 82);
+        selectedBadge.name = 'selectedBadge';
+        selectedBadge.active = selected;
+
+        // 左侧圆章已经烘焙在底座里，只叠站号；站号槽内芯中心在美术稿的 (224, 800.5)，
+        // 对应显示坐标 (-114, -58.5)，照抄这组数字才能让数字落在圆心而不是压到左上边。
+        // 标题区保持充足留白，不再额外套矩形描边。
+        // 文字是 Label，不吃 Sprite 的叠色：底座压暗了字还留在原色，会浮在灰面上格外扎眼。
+        // 未选中的站连字一起往后退，整块才是一个层次。
+        UIKit.label(stationRoot, `${index + 1}`, 23,
+            !map.playable ? UIColors.textLocked : station.edge,
+            -114, -58.5);
+        UIKit.label(stationRoot, map.name, 29,
+            !map.playable ? UIColors.textLocked : UIColors.text,
+            18, -43);
+        UIKit.label(stationRoot, map.tagline, 16,
+            UIColors.textSoft, 18, -78);
         if (map.playable) {
-            UIKit.tap(marker, () => this.tapMap(map.id));
-            UIKit.tap(label, () => this.tapMap(map.id));
+            // 地图节点不要复用 UIKit.tap：按下缩放会让整块底座闪一下，且与拖地图手势抢反馈。
+            stationRoot.on(NodeEventType.TOUCH_END, () => this.tapMap(map.id));
         }
+        return stationRoot;
     }
 
     private place(node: Node | null, w: number, h: number, x: number, y: number) {
@@ -406,7 +593,11 @@ export class HomeScreen implements Screen {
         this.root = null;
         this.mapViewport = null;
         this.mapContent = null;
+        this.mapStations = [];
         this.controlDeck = null;
+        this.difficultyArts = [];
+        this.selectPlate = null;
+        this.difficultyBadge = null;
         this.soundStateArt = null;
     }
 }

@@ -378,6 +378,14 @@ export class GameManager extends Component {
      * 难度「先解锁再自选」：第 1 关恒开放，之后每一关要前一关有过成绩才解锁。
      * 这样既保留三关阶梯，又让打过的档位可以直接重玩。
      */
+    /** 首页成绩行：三处（进页、切地图、切难度）都要用同一份口径，别各写一遍。 */
+    private bestTextOf(index: number) {
+        const best = this.best[index];
+        return best
+            ? `最佳 ${'★'.repeat(best.stars) || '—'} ${best.score ?? 0} 分`
+            : '本关暂无成绩';
+    }
+
     private showHome() {
         const best = this.best;
         this.hud?.showHome({
@@ -403,15 +411,15 @@ export class GameManager extends Component {
                 };
             }),
             dailyText: `今日剩余 ${this.dailyLeft}/${GameManager.DAILY_FREE}`,
-            bestText: best[this.levelIndex]
-                ? `最佳 ${'★'.repeat(best[this.levelIndex].stars) || '—'} ${best[this.levelIndex].score ?? 0} 分`
-                : '本关暂无成绩',
+            bestText: this.bestTextOf(this.levelIndex),
             soundOn: this.audio?.soundOn ?? false,
             onPickMap: id => {
                 const map = CHALLENGE_MAPS.find(m => m.id === id);
                 if (!map?.themeId) return;
                 this.applyTheme(map.themeId, false); // 还在路线页挑地图，不入局
-                this.showHome();             // 主题换了，物件族与成绩都变，整页重画
+                // 地图背景和控制台都不需要重建；整页重画会叠加按压缩放与路由淡入，
+                // 形成用户看到的“点一下闪一下”。只刷新站点层和当前主题成绩。
+                this.hud?.selectHomeMap(id, this.bestTextOf(this.levelIndex));
             },
             onPickLevel: i => {
                 this.levelIndex = i;
@@ -422,7 +430,8 @@ export class GameManager extends Component {
                 this.timeLeft = this.level.timeSec;
                 this.hud?.setLevel(this.levelIndex + 1);
                 this.updateHud();
-                this.showHome();
+                // 和选地图同理：整页重建会把地图和控制台一起闪掉，反而看不清换了哪一档。
+                this.hud?.selectHomeLevel(i, this.bestTextOf(i));
             },
             onToggleSound: () => this.toggleSound(),
             onStart: () => {

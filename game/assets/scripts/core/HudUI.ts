@@ -87,6 +87,8 @@ export class HudUI {
     private uiScale = 1;
     private screenScale = 1;
     private screenOffsetY = 0;
+    /** 当前首页实例；地图切换只刷新站点层，避免整页路由重建产生闪白。 */
+    private homeScreen: HomeScreen | null = null;
     private progressFill!: UITransform;
     private trayDangerGlow!: Node;
     private trayDangerOpacity!: UIOpacity;
@@ -851,17 +853,30 @@ export class HudUI {
      */
     showHome(data: HomeData) {
         this.gameLayer.active = false;
-        this.router.go(new HomeScreen(data));
+        this.homeScreen = new HomeScreen(data);
+        this.router.go(this.homeScreen);
+    }
+
+    /** 首页内切换地图：保留背景、标题和控制台，只换四站选中状态。 */
+    selectHomeMap(id: string, bestText: string) {
+        this.homeScreen?.selectMap(id, bestText);
+    }
+
+    /** 首页内切换难度：同样只更新控制台，不重建整页。 */
+    selectHomeLevel(index: number, bestText: string) {
+        this.homeScreen?.selectLevel(index, bestText);
     }
 
     /** 首次启动引导同样走整屏路由，完成后由 GameManager 决定进入哪一页。 */
     showOnboarding(data: OnboardingData) {
         this.gameLayer.active = false;
+        this.homeScreen = null;
         this.router.go(new OnboardingScreen(data));
     }
 
     /** 收起当前页面，回到纯游玩视图。 */
     hideHome() {
+        this.homeScreen = null;
         this.router.clear();
         this.gameLayer.active = true;
     }
