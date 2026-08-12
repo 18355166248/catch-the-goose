@@ -251,7 +251,7 @@ export class GameManager extends Component {
      * 非圆形物件(鹅/佛像/葫芦等)仍用方盒。
      */
     private static readonly ROUND_ITEMS = new Set([
-        'banzhi', 'bracelet', 'pingankou', 'tongqian', 'yuzhuo',
+        'banzhi', 'bracelet', 'tongqian', 'yuzhuo',
         // 农场主题的圆盘/球形件用圆柱代理，密堆时避免方盒空角互插后持续弹跳。
         'pumpkin', 'mushroom', 'lotus',
         // 甜品主题的圆饼/杯状件同理；细长糖果和三角蛋糕仍保留方盒轮廓。
@@ -1420,7 +1420,7 @@ export class GameManager extends Component {
 
     /** 限制初始倾斜，避免钱币/玉环直立后高速翻滚造成旋转穿透。 */
     private setNaturalRotation(node: Node, id: string, random: () => number = Math.random) {
-        const flat = id === 'banzhi' || id === 'bracelet' || id === 'pingankou'
+        const flat = id === 'banzhi' || id === 'bracelet'
             || id === 'tongqian' || id === 'yuzhuo';
         // 薄片起始更贴近水平(20°→12°):配合下落只保留竖轴自转,落下即拍平叠摞,
         // 不会立起来边缘着地。非薄片保持较大随机倾斜的自然感。
