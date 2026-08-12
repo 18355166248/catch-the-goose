@@ -910,7 +910,10 @@ export class GameManager extends Component {
         const b = this.measureLocalAabb(n);
         if (!b) { console.warn(`[GameManager] 置物筐 ${id} 无网格包围盒，按原样摆放`); return; }
         const w = b.max.x - b.min.x, d = b.max.z - b.min.z, h = b.max.y - b.min.y;
-        const s = GameManager.CONTAINER_SPAN / Math.max(w, d, 1e-3);
+        // 带外置把手的容器会扩大 AABB，但把手不属于可玩内区；允许皮肤声明更大的视觉宽度，
+        // 保证内盘仍与固定物理边界对齐。未知/旧皮肤继续使用 4.0，玩法尺寸不受影响。
+        const visualSpan = this.currentSkin().containerSpan ?? GameManager.CONTAINER_SPAN;
+        const s = visualSpan / Math.max(w, d, 1e-3);
         n.setScale(s, s, s);
 
         // 缩放后，把模型自身中心平移到 boundary 中心，底部坐到 CONTAINER_BOTTOM_Y。

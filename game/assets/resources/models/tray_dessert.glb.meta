@@ -29,12 +29,55 @@
       "name": "tray_footMesh.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 9480
+        "triangleCount": 11254
       },
       "ver": "1.1.1",
       "imported": true,
       "files": [
         ".bin",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "9dfe3": {
+      "importer": "gltf-embeded-image",
+      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@9dfe3",
+      "displayName": "",
+      "id": "9dfe3",
+      "name": "tray-liner-v1.image",
+      "userData": {
+        "gltfIndex": 0,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".jpg",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "e39f7": {
+      "importer": "texture",
+      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@e39f7",
+      "displayName": "",
+      "id": "e39f7",
+      "name": "UnnamedTexture.texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "linear",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@9dfe3"
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
         ".json"
       ],
       "subMetas": {}
@@ -55,12 +98,12 @@
       ],
       "subMetas": {}
     },
-    "fdea0": {
+    "5a176": {
       "importer": "gltf-material",
-      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@fdea0",
+      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@5a176",
       "displayName": "",
-      "id": "fdea0",
-      "name": "tray_blush.material",
+      "id": "5a176",
+      "name": "tray_cream.material",
       "userData": {
         "gltfIndex": 1
       },
@@ -71,12 +114,12 @@
       ],
       "subMetas": {}
     },
-    "bb9c0": {
+    "9ed2f": {
       "importer": "gltf-material",
-      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@bb9c0",
+      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@9ed2f",
       "displayName": "",
-      "id": "bb9c0",
-      "name": "tray_liner_cream.material",
+      "id": "9ed2f",
+      "name": "tray_strawberry.material",
       "userData": {
         "gltfIndex": 2
       },
@@ -87,12 +130,12 @@
       ],
       "subMetas": {}
     },
-    "ded7c": {
+    "4361f": {
       "importer": "gltf-material",
-      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@ded7c",
+      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@4361f",
       "displayName": "",
-      "id": "ded7c",
-      "name": "tray_liner_berry.material",
+      "id": "4361f",
+      "name": "tray_leaf.material",
       "userData": {
         "gltfIndex": 3
       },
@@ -119,12 +162,12 @@
       ],
       "subMetas": {}
     },
-    "fe460": {
+    "271ed": {
       "importer": "gltf-material",
-      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@fe460",
+      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@271ed",
       "displayName": "",
-      "id": "fe460",
-      "name": "tray_mint.material",
+      "id": "271ed",
+      "name": "tray_rose_enamel.material",
       "userData": {
         "gltfIndex": 5
       },
@@ -151,14 +194,30 @@
       ],
       "subMetas": {}
     },
-    "a1228": {
+    "38e33": {
       "importer": "gltf-material",
-      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@a1228",
+      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@38e33",
       "displayName": "",
-      "id": "a1228",
-      "name": "tray_blush_dark.material",
+      "id": "38e33",
+      "name": "tray_quilt_light.material",
       "userData": {
         "gltfIndex": 7
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "b5c2f": {
+      "importer": "gltf-material",
+      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@b5c2f",
+      "displayName": "",
+      "id": "b5c2f",
+      "name": "tray_painted_linerMaterial.material",
+      "userData": {
+        "gltfIndex": 8
       },
       "ver": "1.0.14",
       "imported": true,
@@ -169,7 +228,12 @@
     }
   },
   "userData": {
-    "imageMetas": [],
+    "imageMetas": [
+      {
+        "name": "tray-liner-v1",
+        "uri": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@9dfe3"
+      }
+    ],
     "lods": {
       "enable": false,
       "hasBuiltinLOD": false,
@@ -193,16 +257,19 @@
         "dbfd0edc-5797-4245-a874-e77f3e9c7b50@f37d1"
       ],
       "skeletons": [],
-      "textures": [],
+      "textures": [
+        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@e39f7"
+      ],
       "materials": [
         "dbfd0edc-5797-4245-a874-e77f3e9c7b50@0ad08",
-        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@fdea0",
-        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@bb9c0",
-        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@ded7c",
+        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@5a176",
+        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@9ed2f",
+        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@4361f",
         "dbfd0edc-5797-4245-a874-e77f3e9c7b50@944e5",
-        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@fe460",
+        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@271ed",
         "dbfd0edc-5797-4245-a874-e77f3e9c7b50@06b88",
-        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@a1228"
+        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@38e33",
+        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@b5c2f"
       ],
       "scenes": [
         "dbfd0edc-5797-4245-a874-e77f3e9c7b50@59992"
