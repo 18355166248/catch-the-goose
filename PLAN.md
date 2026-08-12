@@ -352,6 +352,12 @@ CocosCreator --project <repo>/game --build \
   （设计参考稿和过程切图被放进了这个全量打包目录），2026-08-11 清回 **6.5MB**：
   参考图移去 `design/challenge-home/reference/`，过程切图删除，留用的 11 张按显示尺寸
   重采样、其中 6 张全不透明插画转 JPEG。做法与判据见提交 5448f9f。
+- 2026-08-12 再次按运行时引用审计资源：删除 3 张已被连续长卷替代的地图分片和未启用的
+  `bg_picnic`，站点圆章按 98px 实际显示尺寸从 512² 收敛到 320²；难度条、CTA、摘要框
+  在保持尺寸的前提下转为 256 色 PNG，逐张 PSNR 为 37–38dB，圆章量化只有约 32.5dB
+  因而没有继续压色。`resources` 从约 11MB 降到 7.7MB，release/WASM 产物从约 19MB
+  降到 14.8MB；浏览器实测三档切换正常、控制台无 error。模型侧 40 个在用 GLB 合计
+  约 1.97MB / 5.99 万三角面，无动画和骨骼，暂不为小体积收益冒碰撞轮廓变化风险。
 
 自测基建：`scratchpad/regress2.py`（无头 Chrome + CDP，9 项断言）；注意 Creator 仅窗口获焦时重编译，脚本会自动 AppActivate 触发。
 
