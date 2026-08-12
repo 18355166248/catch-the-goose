@@ -29,7 +29,7 @@
       "name": "tray_footMesh.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 4116
+        "triangleCount": 9480
       },
       "ver": "1.1.1",
       "imported": true,
@@ -55,6 +55,54 @@
       ],
       "subMetas": {}
     },
+    "fdea0": {
+      "importer": "gltf-material",
+      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@fdea0",
+      "displayName": "",
+      "id": "fdea0",
+      "name": "tray_blush.material",
+      "userData": {
+        "gltfIndex": 1
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "bb9c0": {
+      "importer": "gltf-material",
+      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@bb9c0",
+      "displayName": "",
+      "id": "bb9c0",
+      "name": "tray_liner_cream.material",
+      "userData": {
+        "gltfIndex": 2
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "ded7c": {
+      "importer": "gltf-material",
+      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@ded7c",
+      "displayName": "",
+      "id": "ded7c",
+      "name": "tray_liner_berry.material",
+      "userData": {
+        "gltfIndex": 3
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "944e5": {
       "importer": "gltf-material",
       "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@944e5",
@@ -62,7 +110,23 @@
       "id": "944e5",
       "name": "tray_gold.material",
       "userData": {
-        "gltfIndex": 1
+        "gltfIndex": 4
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "fe460": {
+      "importer": "gltf-material",
+      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@fe460",
+      "displayName": "",
+      "id": "fe460",
+      "name": "tray_mint.material",
+      "userData": {
+        "gltfIndex": 5
       },
       "ver": "1.0.14",
       "imported": true,
@@ -78,23 +142,7 @@
       "id": "06b88",
       "name": "tray_porcelain.material",
       "userData": {
-        "gltfIndex": 2
-      },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
-    "fdea0": {
-      "importer": "gltf-material",
-      "uuid": "dbfd0edc-5797-4245-a874-e77f3e9c7b50@fdea0",
-      "displayName": "",
-      "id": "fdea0",
-      "name": "tray_blush.material",
-      "userData": {
-        "gltfIndex": 3
+        "gltfIndex": 6
       },
       "ver": "1.0.14",
       "imported": true,
@@ -110,7 +158,7 @@
       "id": "a1228",
       "name": "tray_blush_dark.material",
       "userData": {
-        "gltfIndex": 4
+        "gltfIndex": 7
       },
       "ver": "1.0.14",
       "imported": true,
@@ -148,9 +196,12 @@
       "textures": [],
       "materials": [
         "dbfd0edc-5797-4245-a874-e77f3e9c7b50@0ad08",
-        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@944e5",
-        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@06b88",
         "dbfd0edc-5797-4245-a874-e77f3e9c7b50@fdea0",
+        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@bb9c0",
+        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@ded7c",
+        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@944e5",
+        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@fe460",
+        "dbfd0edc-5797-4245-a874-e77f3e9c7b50@06b88",
         "dbfd0edc-5797-4245-a874-e77f3e9c7b50@a1228"
       ],
       "scenes": [

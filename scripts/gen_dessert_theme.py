@@ -281,8 +281,12 @@ def dessert_tray():
     gold = base.material("tray_gold", (0.91, 0.57, 0.12, 1), 0.24)
     gold.node_tree.nodes["Principled BSDF"].inputs["Metallic"].default_value = 0.55
 
-    # 旧版是三块方板叠在一起，俯视会像 UI 面板。这里用一体式圆角托盘：暗粉脚座提供悬浮
-    # 阴影，奶油瓷胎承重，浅粉内盘压低到物理停靠面以下，物件不会像贴在色块上。
+    liner_cream = base.material("tray_liner_cream", (1.0, 0.87, 0.67, 1), 0.52)
+    liner_berry = base.material("tray_liner_berry", (0.78, 0.24, 0.40, 1), 0.48)
+    mint = base.material("tray_mint", (0.32, 0.72, 0.57, 1), 0.44)
+
+    # 游戏相机接近正俯视，靠侧面厚度表达精致感几乎看不见。因此第二版把主要信息放在顶面：
+    # 深莓色外轮廓、奶油瓷胎、金色管边与格纹衬纸必须在约 320px 宽时仍能一眼分层。
     parts = [
         rounded_prism("tray_foot", 2.82, 2.38, 0.38, -0.34, -0.18,
                       porcelain_shadow, 0.055),
@@ -299,11 +303,41 @@ def dessert_tray():
                      0.59, 0.72, gold, 0.018),
     ]
 
-    # 四角糖珠是托盘的识别细节，放在宽瓷沿上而非内盘，不与可点击甜品争夺语义。
+    # 格纹衬纸完全低于物理停靠面，只提供顶视材质节奏，不会改变物件碰撞或把小物件顶起。
+    # 6×5 的大格在手机上仍清楚，比高频细纹更耐缩放。
+    tile_w, tile_h = 0.43, 0.41
+    for row in range(-2, 3):
+        for col in range(-3, 4):
+            x, y = col * 0.75, row * 0.78
+            mat = liner_cream if (row + col) % 2 == 0 else blush
+            parts.append(base.cube("liner_tile", (x, y, 0.105),
+                                   (tile_w, tile_h, 0.018), mat, 0.055))
+
+    # 四角从小金点改成甜品店徽章：莓果底、奶油芯、金珠与薄荷叶。它们位于宽瓷沿上，
+    # 不进入可点击物件区；正俯视时会成为四个明确锚点，托盘不再像通用 UI 方框。
     for x in (-2.78, 2.78):
         for y in (-2.38, 2.38):
-            parts.append(base.sphere("corner_pearl", (x, y, 0.68),
-                                     (0.12, 0.12, 0.10), gold, 12, 8))
+            parts.extend([
+                base.cylinder("corner_badge", (x, y, 0.70), 0.22, 0.08,
+                              liner_berry, 16),
+                base.cylinder("corner_cream", (x, y, 0.755), 0.12, 0.07,
+                              liner_cream, 16),
+                base.sphere("corner_pearl", (x, y, 0.82),
+                            (0.065, 0.065, 0.05), gold, 10, 6),
+            ])
+            leaf = base.ico("corner_leaf", (x + (-0.17 if x > 0 else 0.17), y, 0.78),
+                            (0.14, 0.07, 0.035), mint, 1)
+            leaf.rotation_euler = (0, 0, math.radians(32 if x * y > 0 else -32))
+            parts.append(leaf)
+
+    # 左右双耳让外轮廓从“矩形板”变成真正的上菜托盘；耳环在默认矩形围栏之外，
+    # 只承担视觉，不会挤占物件容纳面积。
+    for side in (-1, 1):
+        # 手柄不越过原 3.17 的宽度预算，否则运行时按最大边缩放会反向压小整个内盘。
+        parts.append(torus("serving_handle", (2.94 * side, 0, 0.43),
+                           0.15, 0.055, gold, rotation=(0, 0, math.radians(90))))
+        parts.append(base.sphere("handle_mount", (2.86 * side, 0, 0.43),
+                                 (0.13, 0.20, 0.10), liner_berry, 12, 8))
     return base.join(parts, "tray_dessert")
 
 
