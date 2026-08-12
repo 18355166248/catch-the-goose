@@ -13,7 +13,7 @@
       "name": "Cube.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 3996
+        "triangleCount": 3980
       },
       "ver": "1.1.1",
       "imported": true,
@@ -23,12 +23,12 @@
       ],
       "subMetas": {}
     },
-    "3fa54": {
+    "ac580": {
       "importer": "gltf-material",
-      "uuid": "91f335fa-a03a-4201-9278-098958c78d15@3fa54",
+      "uuid": "91f335fa-a03a-4201-9278-098958c78d15@ac580",
       "displayName": "",
-      "id": "3fa54",
-      "name": "basket_wicker.material",
+      "id": "ac580",
+      "name": "basket_shadow.material",
       "userData": {
         "gltfIndex": 0
       },
@@ -55,14 +55,30 @@
       ],
       "subMetas": {}
     },
-    "855cb": {
+    "c01e3": {
       "importer": "gltf-material",
-      "uuid": "91f335fa-a03a-4201-9278-098958c78d15@855cb",
+      "uuid": "91f335fa-a03a-4201-9278-098958c78d15@c01e3",
       "displayName": "",
-      "id": "855cb",
-      "name": "basket_light.material",
+      "id": "c01e3",
+      "name": "basket_honey.material",
       "userData": {
         "gltfIndex": 2
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "773ed": {
+      "importer": "gltf-material",
+      "uuid": "91f335fa-a03a-4201-9278-098958c78d15@773ed",
+      "displayName": "",
+      "id": "773ed",
+      "name": "basket_straw.material",
+      "userData": {
+        "gltfIndex": 3
       },
       "ver": "1.0.14",
       "imported": true,
@@ -115,9 +131,10 @@
       "skeletons": [],
       "textures": [],
       "materials": [
-        "91f335fa-a03a-4201-9278-098958c78d15@3fa54",
+        "91f335fa-a03a-4201-9278-098958c78d15@ac580",
         "91f335fa-a03a-4201-9278-098958c78d15@feb5f",
-        "91f335fa-a03a-4201-9278-098958c78d15@855cb"
+        "91f335fa-a03a-4201-9278-098958c78d15@c01e3",
+        "91f335fa-a03a-4201-9278-098958c78d15@773ed"
       ],
       "scenes": [
         "91f335fa-a03a-4201-9278-098958c78d15@c59a6"

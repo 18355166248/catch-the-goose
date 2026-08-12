@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 import os
+import sys
 from pathlib import Path
 
 import bpy
@@ -346,25 +347,61 @@ def duck():
 
 
 def harvest_basket():
-    dark = material("basket_dark", C["wood"], 0.76)
-    wicker = material("basket_wicker", C["wicker"], 0.70)
-    light = material("basket_light", C["wicker_light"], 0.67)
-    parts = [cube("base", (0, 0, -0.12), (2.95, 2.65, 0.12), wicker, 0.08)]
-    # 交错的底部藤条在俯视下提供真实编织尺度，但保持低矮，不遮挡可点击物件。
-    for i in range(-6, 7):
-        parts.append(cube("weave_x", (0, i * 0.38, 0.02), (2.76, 0.085, 0.055),
-                          light if i % 2 else dark, 0.035))
-    for i in range(-7, 8):
-        parts.append(cube("weave_y", (i * 0.37, 0, 0.08), (0.075, 2.47, 0.05),
-                          dark if i % 2 else light, 0.03))
-    # 四周双层低矮篮沿；默认矩形物理边界负责实际碰撞，模型只承担视觉。
-    for z, thickness, mat in [(0.26, 0.13, dark), (0.49, 0.11, light)]:
+    # 容器在游戏里只有约 320px 宽，精致感主要来自清楚的三层关系：深色内衬托住
+    # 交错编织、立桩形成侧壁节奏、双层包边压住轮廓。不能靠贴满细线堆细节，缩小后会糊。
+    shadow = material("basket_shadow", (0.24, 0.085, 0.025, 1), 0.82)
+    dark = material("basket_dark", (0.43, 0.18, 0.045, 1), 0.72)
+    wicker = material("basket_honey", (0.72, 0.38, 0.095, 1), 0.66)
+    light = material("basket_straw", (0.92, 0.66, 0.27, 1), 0.62)
+    parts = [
+        cube("shadow_plinth", (0, 0, -0.20), (3.02, 2.68, 0.10), shadow, 0.16),
+        cube("woven_liner", (0, 0, -0.075), (2.82, 2.48, 0.055), dark, 0.12),
+    ]
+
+    # 短藤片按经纬交替铺陈，和旧版贯穿整筐的横竖栅格不同；每格方向翻转后才会读成
+    # 真正的压一挑一编织，而不是铁丝网。底面始终低于 y=0 的物理停靠面，不顶起物件。
+    for row in range(-5, 6):
+        for col in range(-6, 7):
+            horizontal = (row + col) % 2 == 0
+            sx, sy = (0.205, 0.105) if horizontal else (0.105, 0.205)
+            parts.append(cube(
+                "weave_tile",
+                (col * 0.42, row * 0.42, 0.01 + (0.012 if horizontal else 0)),
+                (sx, sy, 0.035),
+                light if horizontal else wicker,
+                0,
+            ))
+
+    # 四边立桩给侧壁真实高度，间距略宽于底部纹理，避免缩小后形成摩尔纹。
+    for col in range(-6, 7):
+        x = col * 0.43
+        for y in (-2.55, 2.55):
+            parts.append(cube("wall_stake", (x, y, 0.34), (0.075, 0.10, 0.38),
+                              light if col % 2 else wicker, 0))
+    for row in range(-5, 6):
+        y = row * 0.44
+        for x in (-2.90, 2.90):
+            parts.append(cube("wall_stake", (x, y, 0.34), (0.10, 0.075, 0.38),
+                              wicker if row % 2 else light, 0))
+
+    # 下束带收住侧壁，顶部用深色承托 + 蜂蜜色包边形成厚实的手工篮沿。
+    for z, thickness, mat in [
+        (0.14, 0.095, dark),
+        (0.66, 0.15, shadow),
+        (0.72, 0.105, light),
+    ]:
         parts.extend([
-            cube("rim", (0, 2.66, z), (3.12, thickness, thickness), mat, 0.08),
-            cube("rim", (0, -2.66, z), (3.12, thickness, thickness), mat, 0.08),
-            cube("rim", (3.01, 0, z), (thickness, 2.54, thickness), mat, 0.08),
-            cube("rim", (-3.01, 0, z), (thickness, 2.54, thickness), mat, 0.08),
+            cube("rim", (0, 2.66, z), (3.10, thickness, thickness), mat, 0.09),
+            cube("rim", (0, -2.66, z), (3.10, thickness, thickness), mat, 0.09),
+            cube("rim", (3.01, 0, z), (thickness, 2.55, thickness), mat, 0.09),
+            cube("rim", (-3.01, 0, z), (thickness, 2.55, thickness), mat, 0.09),
         ])
+
+    # 四角包柱遮住四组直条的拼缝，也让外轮廓在农场浅色背景上保持完整。
+    for x in (-3.00, 3.00):
+        for y in (-2.65, 2.65):
+            parts.append(cylinder("corner_wrap", (x, y, 0.34), 0.16, 0.88,
+                                  dark, 12))
     return join(parts, "basket_farm")
 
 
@@ -382,11 +419,13 @@ BUILDERS = [
 
 
 if __name__ == "__main__":
-    for model_name, builder in BUILDERS:
-        wipe()
-        model = builder()
-        export_glb(model, model_name)
-        render_icon(model, model_name)
+    # 容器精修时使用 --container-only，避免无关的 9 个物件和图标被 Blender 重导出。
+    if "--container-only" not in sys.argv:
+        for model_name, builder in BUILDERS:
+            wipe()
+            model = builder()
+            export_glb(model, model_name)
+            render_icon(model, model_name)
 
     wipe()
     basket = harvest_basket()

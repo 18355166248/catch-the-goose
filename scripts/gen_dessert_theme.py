@@ -69,6 +69,88 @@ def wedge(name, loc, scale, mat):
     return obj
 
 
+def rounded_loop(half_w: float, half_h: float, radius: float, segments: int = 7):
+    """逆时针生成圆角矩形轮廓；比给方块套 bevel 更容易保持四角半径一致。"""
+    points = []
+    for cx, cy, start in [
+        (half_w - radius, half_h - radius, 0),
+        (-half_w + radius, half_h - radius, 90),
+        (-half_w + radius, -half_h + radius, 180),
+        (half_w - radius, -half_h + radius, 270),
+    ]:
+        for step in range(segments + 1):
+            angle = math.radians(start + 90 * step / segments)
+            points.append((cx + math.cos(angle) * radius,
+                           cy + math.sin(angle) * radius))
+    return points
+
+
+def rounded_prism(name, half_w, half_h, radius, z_bottom, z_top, mat, bevel=0.04):
+    loop = rounded_loop(half_w, half_h, radius)
+    count = len(loop)
+    verts = [(x, y, z_bottom) for x, y in loop] + [(x, y, z_top) for x, y in loop]
+    faces = [tuple(reversed(range(count))), tuple(range(count, count * 2))]
+    for i in range(count):
+        j = (i + 1) % count
+        faces.append((i, j, count + j, count + i))
+    mesh = bpy.data.meshes.new(name + "Mesh")
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    obj.data.materials.append(mat)
+    if bevel:
+        modifier = obj.modifiers.new("soft_porcelain_edge", "BEVEL")
+        modifier.width = bevel
+        modifier.segments = 2
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
+    bpy.ops.object.shade_smooth()
+    return obj
+
+
+def rounded_ring(name, outer, inner, z_bottom, z_top, mat, bevel=0.035):
+    """带真实内侧面的圆角矩形环，避免旧版四根直条在角上露接缝。"""
+    outer_loop = rounded_loop(*outer)
+    inner_loop = rounded_loop(*inner)
+    count = len(outer_loop)
+    verts = (
+        [(x, y, z_bottom) for x, y in outer_loop]
+        + [(x, y, z_top) for x, y in outer_loop]
+        + [(x, y, z_bottom) for x, y in inner_loop]
+        + [(x, y, z_top) for x, y in inner_loop]
+    )
+    faces = []
+    for i in range(count):
+        j = (i + 1) % count
+        ob_i, ob_j = i, j
+        ot_i, ot_j = count + i, count + j
+        ib_i, ib_j = count * 2 + i, count * 2 + j
+        it_i, it_j = count * 3 + i, count * 3 + j
+        faces.extend([
+            (ob_i, ob_j, ot_j, ot_i),
+            (ot_i, ot_j, it_j, it_i),
+            (ib_j, ib_i, it_i, it_j),
+            (ob_j, ob_i, ib_i, ib_j),
+        ])
+    mesh = bpy.data.meshes.new(name + "Mesh")
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    obj.data.materials.append(mat)
+    if bevel:
+        modifier = obj.modifiers.new("rounded_rim", "BEVEL")
+        modifier.width = bevel
+        modifier.segments = 2
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
+    bpy.ops.object.shade_smooth()
+    return obj
+
+
 def cupcake():
     paper = base.material("cup_paper", C["lemon"], 0.70)
     cake = base.material("cup_cake", C["biscuit"], 0.62)
@@ -192,18 +274,36 @@ def croissant():
 
 
 def dessert_tray():
-    porcelain = base.material("tray_porcelain", C["white"], 0.26)
-    pink = base.material("tray_pink", C["pink_light"], 0.42)
-    gold = base.material("tray_gold", C["gold"], 0.36)
-    parts = [base.cube("base", (0, 0, -0.12), (3.0, 2.70, 0.13), porcelain, 0.18),
-             base.cube("inset", (0, 0, 0.015), (2.74, 2.44, 0.045), pink, 0.14)]
-    for z, thickness, mat in [(0.18, 0.13, porcelain), (0.38, 0.08, gold)]:
-        parts.extend([
-            base.cube("rim", (0, 2.68, z), (3.10, thickness, thickness), mat, 0.09),
-            base.cube("rim", (0, -2.68, z), (3.10, thickness, thickness), mat, 0.09),
-            base.cube("rim", (3.04, 0, z), (thickness, 2.57, thickness), mat, 0.09),
-            base.cube("rim", (-3.04, 0, z), (thickness, 2.57, thickness), mat, 0.09),
-        ])
+    porcelain = base.material("tray_porcelain", (1.0, 0.91, 0.76, 1), 0.24)
+    porcelain_shadow = base.material("tray_porcelain_shadow", (0.72, 0.49, 0.43, 1), 0.46)
+    blush = base.material("tray_blush", (0.98, 0.61, 0.69, 1), 0.38)
+    blush_dark = base.material("tray_blush_dark", (0.72, 0.20, 0.34, 1), 0.42)
+    gold = base.material("tray_gold", (0.91, 0.57, 0.12, 1), 0.24)
+    gold.node_tree.nodes["Principled BSDF"].inputs["Metallic"].default_value = 0.55
+
+    # 旧版是三块方板叠在一起，俯视会像 UI 面板。这里用一体式圆角托盘：暗粉脚座提供悬浮
+    # 阴影，奶油瓷胎承重，浅粉内盘压低到物理停靠面以下，物件不会像贴在色块上。
+    parts = [
+        rounded_prism("tray_foot", 2.82, 2.38, 0.38, -0.34, -0.18,
+                      porcelain_shadow, 0.055),
+        rounded_prism("tray_body", 3.04, 2.64, 0.48, -0.24, 0.04,
+                      porcelain, 0.075),
+        rounded_prism("tray_well", 2.66, 2.26, 0.32, 0.00, 0.085,
+                      blush, 0.045),
+        # 宽瓷沿有完整内侧面和高度，近边能挡住少量物件、远边能接住高光，立体感才成立。
+        rounded_ring("porcelain_rim", (3.13, 2.73, 0.50), (2.67, 2.27, 0.30),
+                     -0.01, 0.62, porcelain, 0.045),
+        rounded_ring("blush_inlay", (2.93, 2.53, 0.40), (2.76, 2.36, 0.33),
+                     0.43, 0.59, blush_dark, 0.025),
+        rounded_ring("gold_piping", (3.17, 2.77, 0.51), (3.03, 2.63, 0.45),
+                     0.59, 0.72, gold, 0.018),
+    ]
+
+    # 四角糖珠是托盘的识别细节，放在宽瓷沿上而非内盘，不与可点击甜品争夺语义。
+    for x in (-2.78, 2.78):
+        for y in (-2.38, 2.38):
+            parts.append(base.sphere("corner_pearl", (x, y, 0.68),
+                                     (0.12, 0.12, 0.10), gold, 12, 8))
     return base.join(parts, "tray_dessert")
 
 
@@ -221,11 +321,13 @@ BUILDERS = [
 
 
 if __name__ == "__main__":
-    for model_name, builder in BUILDERS:
-        base.wipe()
-        model = builder()
-        base.export_glb(model, model_name)
-        base.render_icon(model, model_name)
+    # 容器精修时使用 --container-only，避免重导出无关甜品和槽位图标。
+    if "--container-only" not in sys.argv:
+        for model_name, builder in BUILDERS:
+            base.wipe()
+            model = builder()
+            base.export_glb(model, model_name)
+            base.render_icon(model, model_name)
 
     base.wipe()
     tray = dessert_tray()

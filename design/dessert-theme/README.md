@@ -26,6 +26,8 @@
 - 9 张 192×192 透明槽位图标。
 
 模型全部为原创程序化几何，物件最大边归一化为 1.0，单件不超过 1.5k 面。
+陶瓷托盘采用一体圆角瓷胎、内凹粉盘、完整内侧壁、金色管边和四角糖珠，约 4.1k 三角面；
+只重生成容器时在命令末尾追加 `-- --container-only`。
 
 ```bash
 /Applications/Blender.app/Contents/MacOS/Blender --background \
