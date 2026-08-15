@@ -24,6 +24,12 @@ export interface SceneSkin {
      */
     containerModel?: string;
     /**
+     * 容器含外置把手/耳朵时的视觉总宽；缺省 4.0。只影响模型显示缩放，不改物理边界。
+     * 设计稿若把装饰伸到可玩内区之外，需要同步放大视觉总宽，避免按完整 AABB 缩放后
+     * 反而把内盘压小，出现物件落在盘沿外的错觉。
+     */
+    containerSpan?: number;
+    /**
      * 承载物边界（换成圆锅/圆碗/圆筐等造型时声明）。留空 = 沿用默认矩形边界。
      * 声明后物理围栏、逃逸判定、视觉兜底、投放种子全部按该形状生效，物品不会离开容器。
      * 需与 containerModel 的开口对齐。
@@ -95,6 +101,8 @@ export const SKINS: SceneSkin[] = [
         backdrop: WHITE(),
         backdropTex: 'bg_dessert',
         containerModel: 'tray_dessert',
+        // 设计稿的双侧把手会扩大模型 AABB；5.0 让内盘仍覆盖原来的矩形物理边界。
+        containerSpan: 5.0,
     },
 ];
 

@@ -69,6 +69,122 @@ def wedge(name, loc, scale, mat):
     return obj
 
 
+def rounded_loop(half_w: float, half_h: float, radius: float,
+                 lobe: float = 0.0, segments: int = 7):
+    """逆时针生成圆角矩形轮廓；lobe 将四角中段外推，形成设计稿的波浪瓷胎。"""
+    points = []
+    for cx, cy, start in [
+        (half_w - radius, half_h - radius, 0),
+        (-half_w + radius, half_h - radius, 90),
+        (-half_w + radius, -half_h + radius, 180),
+        (half_w - radius, -half_h + radius, 270),
+    ]:
+        for step in range(segments + 1):
+            angle = math.radians(start + 90 * step / segments)
+            corner_radius = radius + lobe * math.sin(math.pi * step / segments)
+            points.append((cx + math.cos(angle) * corner_radius,
+                           cy + math.sin(angle) * corner_radius))
+    return points
+
+
+def rounded_prism(name, half_w, half_h, radius, z_bottom, z_top, mat,
+                  bevel=0.04, lobe=0.0):
+    loop = rounded_loop(half_w, half_h, radius, lobe)
+    count = len(loop)
+    verts = [(x, y, z_bottom) for x, y in loop] + [(x, y, z_top) for x, y in loop]
+    faces = [tuple(reversed(range(count))), tuple(range(count, count * 2))]
+    for i in range(count):
+        j = (i + 1) % count
+        faces.append((i, j, count + j, count + i))
+    mesh = bpy.data.meshes.new(name + "Mesh")
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    obj.data.materials.append(mat)
+    if bevel:
+        modifier = obj.modifiers.new("soft_porcelain_edge", "BEVEL")
+        modifier.width = bevel
+        modifier.segments = 2
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
+    bpy.ops.object.shade_smooth()
+    return obj
+
+
+def rounded_ring(name, outer, inner, z_bottom, z_top, mat, bevel=0.035):
+    """带真实内侧面的圆角矩形环，避免旧版四根直条在角上露接缝。"""
+    outer_loop = rounded_loop(*outer)
+    inner_loop = rounded_loop(*inner)
+    count = len(outer_loop)
+    verts = (
+        [(x, y, z_bottom) for x, y in outer_loop]
+        + [(x, y, z_top) for x, y in outer_loop]
+        + [(x, y, z_bottom) for x, y in inner_loop]
+        + [(x, y, z_top) for x, y in inner_loop]
+    )
+    faces = []
+    for i in range(count):
+        j = (i + 1) % count
+        ob_i, ob_j = i, j
+        ot_i, ot_j = count + i, count + j
+        ib_i, ib_j = count * 2 + i, count * 2 + j
+        it_i, it_j = count * 3 + i, count * 3 + j
+        faces.extend([
+            (ob_i, ob_j, ot_j, ot_i),
+            (ot_i, ot_j, it_j, it_i),
+            (ib_j, ib_i, it_i, it_j),
+            (ob_j, ob_i, ib_i, ib_j),
+        ])
+    mesh = bpy.data.meshes.new(name + "Mesh")
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    obj.data.materials.append(mat)
+    if bevel:
+        modifier = obj.modifiers.new("rounded_rim", "BEVEL")
+        modifier.width = bevel
+        modifier.segments = 2
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
+    bpy.ops.object.shade_smooth()
+    return obj
+
+
+def textured_quad(name, width, height, z, image_path):
+    """创建水平不透明贴图面；用于把确认稿的盘心材质烘到低模容器顶面。"""
+    hw, hh = width * 0.5, height * 0.5
+    mesh = bpy.data.meshes.new(name + "Mesh")
+    mesh.from_pydata([(-hw, -hh, z), (hw, -hh, z), (hw, hh, z), (-hw, hh, z)],
+                     [], [(0, 1, 2, 3)])
+    mesh.update()
+    uv_layer = mesh.uv_layers.new(name="UVMap")
+    for loop, uv in zip(mesh.loops, [(0, 0), (1, 0), (1, 1), (0, 1)]):
+        uv_layer.data[loop.index].uv = uv
+
+    mat = bpy.data.materials.new(name + "Material")
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    bsdf = nodes.get("Principled BSDF")
+    image_node = nodes.new("ShaderNodeTexImage")
+    image_node.image = bpy.data.images.load(str(image_path), check_existing=True)
+    # 显式把 UVMap 接入纹理向量；仅创建 mesh UV 在 Blender 5 glTF 导出器中会生成
+    # texCoord=-1，Cocos 因而只能显示材质底色。
+    uv_node = nodes.new("ShaderNodeUVMap")
+    uv_node.uv_map = uv_layer.name
+    mat.node_tree.links.new(uv_node.outputs["UV"], image_node.inputs["Vector"])
+    mat.node_tree.links.new(image_node.outputs["Color"], bsdf.inputs["Base Color"])
+    bsdf.inputs["Roughness"].default_value = 0.48
+
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    obj.data.materials.append(mat)
+    return obj
+
+
 def cupcake():
     paper = base.material("cup_paper", C["lemon"], 0.70)
     cake = base.material("cup_cake", C["biscuit"], 0.62)
@@ -192,18 +308,78 @@ def croissant():
 
 
 def dessert_tray():
-    porcelain = base.material("tray_porcelain", C["white"], 0.26)
-    pink = base.material("tray_pink", C["pink_light"], 0.42)
-    gold = base.material("tray_gold", C["gold"], 0.36)
-    parts = [base.cube("base", (0, 0, -0.12), (3.0, 2.70, 0.13), porcelain, 0.18),
-             base.cube("inset", (0, 0, 0.015), (2.74, 2.44, 0.045), pink, 0.14)]
-    for z, thickness, mat in [(0.18, 0.13, porcelain), (0.38, 0.08, gold)]:
-        parts.extend([
-            base.cube("rim", (0, 2.68, z), (3.10, thickness, thickness), mat, 0.09),
-            base.cube("rim", (0, -2.68, z), (3.10, thickness, thickness), mat, 0.09),
-            base.cube("rim", (3.04, 0, z), (thickness, 2.57, thickness), mat, 0.09),
-            base.cube("rim", (-3.04, 0, z), (thickness, 2.57, thickness), mat, 0.09),
-        ])
+    porcelain = base.material("tray_porcelain", (1.0, 0.88, 0.70, 1), 0.25)
+    porcelain_shadow = base.material("tray_porcelain_shadow", (0.52, 0.24, 0.22, 1), 0.48)
+    blush = base.material("tray_quilt_light", (1.0, 0.66, 0.72, 1), 0.43)
+    blush_alt = base.material("tray_quilt_dark", (0.92, 0.46, 0.58, 1), 0.46)
+    rose = base.material("tray_rose_enamel", (0.58, 0.055, 0.16, 1), 0.30)
+    berry = base.material("tray_strawberry", (0.82, 0.045, 0.055, 1), 0.34)
+    cream = base.material("tray_cream", (1.0, 0.91, 0.70, 1), 0.38)
+    leaf_green = base.material("tray_leaf", (0.16, 0.48, 0.12, 1), 0.54)
+    gold = base.material("tray_gold", (0.78, 0.36, 0.045, 1), 0.25)
+    gold.node_tree.nodes["Principled BSDF"].inputs["Metallic"].default_value = 0.55
+
+    # 按确认稿建立“暗色脚座 → 波浪奶油瓷胎 → 深玫红珐琅 → 菱格软垫”四层顶视结构。
+    # 这些层次都能被近正俯视相机看见，不再依赖侧面厚度或微小倒角来表达质感。
+    parts = [
+        rounded_prism("tray_foot", 2.98, 2.48, 0.44, -0.38, -0.21,
+                      porcelain_shadow, 0.055, lobe=0.16),
+        rounded_prism("tray_body", 3.17, 2.72, 0.54, -0.26, 0.06,
+                      porcelain, 0.075, lobe=0.30),
+        rounded_prism("tray_well", 2.88, 2.35, 0.36, -0.01, 0.075,
+                      blush, 0.035),
+        rounded_ring("rose_enamel", (3.01, 2.55, 0.42, 0.10),
+                     (2.74, 2.25, 0.31, 0.0), 0.30, 0.58, rose, 0.032),
+        rounded_ring("porcelain_rim", (3.17, 2.72, 0.54, 0.30),
+                     (3.01, 2.55, 0.42, 0.10), 0.38, 0.68, porcelain, 0.038),
+        rounded_ring("inner_gold_piping", (2.78, 2.29, 0.33),
+                     (2.67, 2.18, 0.28), 0.52, 0.64, gold, 0.015),
+        rounded_ring("outer_gold_piping", (3.22, 2.77, 0.56, 0.30),
+                     (3.12, 2.67, 0.50, 0.23), 0.65, 0.76, gold, 0.015),
+    ]
+
+    # 只烘焙确认稿的菱格软包盘心，外圈珐琅、金边、把手和角饰仍使用真实 3D 轮廓。
+    # 不透明内衬可规避 glTF 对透明贴图 UV/排序的兼容差异，盘心略高于低模底板、仍低于
+    # y=0 的物理停靠面，因此不会改变甜品的掉落与堆叠。
+    texture_path = base.ROOT / "design/dessert-theme/textures/tray-liner-v1.jpg"
+    parts.append(textured_quad("tray_painted_liner", 5.30, 4.32, 0.145, texture_path))
+
+    # 四角草莓奶油是确认稿的主题锚点。装饰只占宽瓷沿，不进入可玩内区；草莓用两个果瓣、
+    # 奶油用三层旋涡体概括，移动端缩小后仍读得出来，同时避免不可控的高面数雕刻。
+    for x in (-2.77, 2.77):
+        for y in (-2.34, 2.34):
+            inward_x = -1 if x > 0 else 1
+            inward_y = -1 if y > 0 else 1
+            cream_x, cream_y = x + inward_x * 0.14, y + inward_y * 0.12
+            for dz, radius in [(0.67, 0.28), (0.79, 0.20), (0.90, 0.12)]:
+                parts.append(base.sphere("corner_cream", (cream_x, cream_y, dz),
+                                         (radius, radius, radius * 0.48), cream, 14, 8))
+            berry_x, berry_y = x - inward_x * 0.15, y - inward_y * 0.05
+            parts.append(base.sphere("corner_strawberry", (berry_x, berry_y, 0.78),
+                                     (0.29, 0.24, 0.19), berry, 16, 10))
+            for angle in (-35, 0, 35):
+                a = math.radians(angle + (145 if y > 0 else -35))
+                leaf = base.ico("strawberry_leaf",
+                                (berry_x + math.cos(a) * 0.13,
+                                 berry_y + math.sin(a) * 0.13, 0.89),
+                                (0.17, 0.08, 0.045), leaf_green, 1)
+                leaf.rotation_euler.z = a
+                parts.append(leaf)
+            for ox, oy in [(-0.07, -0.04), (0.05, -0.02), (0, 0.07)]:
+                parts.append(base.sphere("strawberry_seed",
+                                         (berry_x + ox, berry_y + oy, 0.91),
+                                         (0.018, 0.012, 0.012), gold, 8, 5))
+
+    # 椭圆金属把手必须伸出主体轮廓才看得见。dessert 皮肤会单独放大视觉容器，保证把手
+    # 加宽后内盘仍与原物理边界对齐，不会为了装饰反向压小可玩空间。
+    for side in (-1, 1):
+        handle = torus("serving_handle", (3.38 * side, 0, 0.52), 0.30, 0.075, gold)
+        handle.scale = (0.62, 1.55, 1)
+        base.apply(handle)
+        parts.append(handle)
+        for y in (-0.28, 0.28):
+            parts.append(base.sphere("handle_mount", (3.08 * side, y, 0.54),
+                                     (0.14, 0.16, 0.10), rose, 12, 8))
     return base.join(parts, "tray_dessert")
 
 
@@ -221,11 +397,13 @@ BUILDERS = [
 
 
 if __name__ == "__main__":
-    for model_name, builder in BUILDERS:
-        base.wipe()
-        model = builder()
-        base.export_glb(model, model_name)
-        base.render_icon(model, model_name)
+    # 容器精修时使用 --container-only，避免重导出无关甜品和槽位图标。
+    if "--container-only" not in sys.argv:
+        for model_name, builder in BUILDERS:
+            base.wipe()
+            model = builder()
+            base.export_glb(model, model_name)
+            base.render_icon(model, model_name)
 
     base.wipe()
     tray = dessert_tray()

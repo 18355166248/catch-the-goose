@@ -18,6 +18,7 @@ import { SaveData, BestRecord } from './SaveData';
 import { HudUI, PropKind } from './HudUI';
 import { SceneBackground } from './SceneBackground';
 import { AudioMan } from './AudioMan';
+import { Telemetry } from './Telemetry';
 
 const { ccclass, property } = _decorator;
 
@@ -58,6 +59,8 @@ export class GameManager extends Component {
     private audio: AudioMan | null = null;
     /** 物理世界（Jolt）。全工程唯一一处物理入口，玩法层不直接碰 Jolt 类型。 */
     private jolt = new JoltWorld();
+    /** 启动门闩：主页与“开始挑战”必须等同一份 Jolt 初始化结果，禁止无物理开局。 */
+    private physicsReady: Promise<boolean> | null = null;
     /** 固定步长累加器。渲染帧长喂进来，按 FIXED_STEP 整步消费，余量交给渲染插值。 */
     private physAccum = 0;
     /** 存档键与读写容错集中在 SaveData；这里只保留业务默认值。 */
@@ -72,7 +75,7 @@ export class GameManager extends Component {
     private dailyLeft = GameManager.DAILY_FREE;
     /** 判负缓冲和自动吸取期间锁住手动输入，保证槽位状态原子化。 */
     private interactionLocked = false;
-    /** 各关历史最佳:{ [levelIndex]: { stars, progress, score } } */
+    /** 当前主题的各关历史最佳:{ [levelIndex]: { stars, progress, score } } */
     private best: Record<number, BestRecord> = {};
     /**
      * 当前仍冰封的件。缓存成列表而不是每帧 getComponentsInChildren——
@@ -89,6 +92,10 @@ export class GameManager extends Component {
     // ===== 得分与连击 =====
     /** 本局得分。每次三消入账,连击越长单次入账越多。 */
     private score = 0;
+    /** 本局开始时刻，只用于统计局长，不参与玩法计时。 */
+    private roundStartedAt = 0;
+    /** 一次开局的匿名关联键；救场前后的两次结算用它归为同一局。 */
+    private roundId = '';
     /** 当前连击数(连续三消,中断即归零)。 */
     private combo = 0;
     /** 上次三消的时刻(秒),用于判断是否还在连击窗口内。 */
@@ -251,17 +258,12 @@ export class GameManager extends Component {
      * 非圆形物件(鹅/佛像/葫芦等)仍用方盒。
      */
     private static readonly ROUND_ITEMS = new Set([
-        'banzhi', 'bracelet', 'pingankou', 'tongqian', 'yuzhuo',
+        'banzhi', 'bracelet', 'tongqian', 'yuzhuo',
         // 农场主题的圆盘/球形件用圆柱代理，密堆时避免方盒空角互插后持续弹跳。
         'pumpkin', 'mushroom', 'lotus',
         // 甜品主题的圆饼/杯状件同理；细长糖果和三角蛋糕仍保留方盒轮廓。
         'cupcake', 'donut', 'macaron', 'cookie', 'pudding',
     ]);
-    /**
-     * ⚠️ 临时开关：关掉每日 3 次的免费挑战限制（见 ensureDaily / consumeDaily）。
-     * 物理迁移的测试期打开，方便反复重开关卡。**上线前必须改回 false**。
-     */
-    private static readonly DAILY_LIMIT_OFF = true;
     /** 重力。数值与旧实现一致，只是从 PhysicsSystem 挪到了 JoltWorld。 */
     private static readonly GRAVITY_Y = -12;
     /** 固定物理步长。必须是 60Hz 的整数分之一，见 initPhysics 的说明。 */
@@ -275,6 +277,8 @@ export class GameManager extends Component {
     private levelRandomState = 1;
 
     onLoad() {
+        Telemetry.init();
+        Telemetry.track('app_boot');
         // 物理由 Jolt 接管（见 JoltWorld 的类注释与 lab/ 的同场对比）。Cocos 内置的
         // ammo/Bullet 在本玩法的密堆下永不收敛——36 件跑满 45 仿真秒一件都不休眠，
         // 正式工程历史上那三层脚本兜底（0.9s 定时硬冻、PilePatrol 两条冻结判据、
@@ -282,7 +286,7 @@ export class GameManager extends Component {
         //
         // wasm 是异步加载的：init 完成前 buildBox 建的围栏会被丢掉，所以要等它。
         // 期间玩家看到的是加载页，没有可交互内容，等待无感。
-        void this.initPhysics();
+        this.physicsReady = this.initPhysics();
         // 皮肤要在建盒之前定好。每天固定一个场景：皮肤跟随当天主题（getActiveTheme），
         // 不再由玩家自选决定「场景身份」；HUD 换肤面板仅作背景微调，不改物件族。
         this.skinId = getSkin(getActiveTheme().skinId).id;
@@ -297,7 +301,7 @@ export class GameManager extends Component {
      * 表现为沉降阶段全体物件毫米级高频颤动。1/120 = 每帧恰好 2 步。
      * 与旧实现的关键差别是**现在有渲染插值**（JoltWorld.syncNodes），混叠不再靠步长凑。
      */
-    private async initPhysics() {
+    private async initPhysics(): Promise<boolean> {
         try {
             await this.jolt.init(GameManager.GRAVITY_Y);
         } catch (e) {
@@ -306,11 +310,13 @@ export class GameManager extends Component {
             // 踩过一次：构建开了 md5Cache，把 jolt-glue.js 改成了 jolt-glue.<hash>.js，
             // 加载器按固定路径取 → 404 → 这里静默失败，一路跑到用户手里。
             console.error('[GameManager] ❌ 物理初始化失败，游戏将没有任何物理效果', e);
-            this.hud?.toast('物理引擎加载失败，请刷新页面');
-            return;
+            Telemetry.error('physics_init', e);
+            return false;
         }
-        if (!this.node.isValid) return;   // 等待期间场景已被换掉
+        if (!this.node.isValid) return false;   // 等待期间场景已被换掉
         this.buildBox();
+        Telemetry.track('physics_ready');
+        return true;
     }
 
     onDestroy() {
@@ -359,6 +365,13 @@ export class GameManager extends Component {
         this.loadBest();
         // 首页期间计时牌先显示本关时限，别停在 0:00。
         this.updateHud();
+        // Jolt 是玩法的硬依赖。加载页只有在它成功建好世界与容器后才能撤掉；否则慢网设备
+        // 可能先点进关卡，spawn 安全空转后得到一堆没有刚体、永远不下落的物件。
+        const physicsOk = await (this.physicsReady ?? (this.physicsReady = this.initPhysics()));
+        if (!physicsOk) {
+            (globalThis as any).__gooseBoot?.fail('物理引擎加载失败，请重新加载');
+            return;
+        }
         // 首次启动先走独立引导页；完成后才进入挑战路线。两者都是真页面，不和游玩 HUD 共存。
         if (SaveData.onboarded()) this.showHome();
         else this.hud.showOnboarding({
@@ -387,6 +400,7 @@ export class GameManager extends Component {
     }
 
     private showHome() {
+        Telemetry.track('home_view', { theme: getActiveTheme().id, level: this.levelIndex + 1 });
         const best = this.best;
         this.hud?.showHome({
             // 路线节点来自独立配置，预告地图可以先显示、等模型齐备后再补 themeId 开放。
@@ -417,6 +431,7 @@ export class GameManager extends Component {
                 const map = CHALLENGE_MAPS.find(m => m.id === id);
                 if (!map?.themeId) return;
                 this.applyTheme(map.themeId, false); // 还在路线页挑地图，不入局
+                Telemetry.track('theme_select', { theme: map.themeId });
                 // 地图背景和控制台都不需要重建；整页重画会叠加按压缩放与路由淡入，
                 // 形成用户看到的“点一下闪一下”。只刷新站点层和当前主题成绩。
                 this.hud?.selectHomeMap(id, this.bestTextOf(this.levelIndex));
@@ -424,6 +439,7 @@ export class GameManager extends Component {
             onPickLevel: i => {
                 this.levelIndex = i;
                 this.level = LEVELS[i];
+                Telemetry.track('level_select', { level: i + 1, theme: getActiveTheme().id });
                 // 首页切难度发生在 spawn 之前，但计时与关卡牌是独立缓存状态；只换 level
                 // 会让大师配置实际倒出 56 件，HUD 却仍显示上一局的“第 2 关 / 3:30”。
                 // 在用户选择这一刻同步重置，首页摘要与进局后的运行状态才是同一份关卡。
@@ -460,10 +476,6 @@ export class GameManager extends Component {
      * 此入口的位置为将来接广告预留：届时只需把 onAction 换成广告回调。
      */
     private ensureDaily(next: () => void): boolean {
-        // ⚠️ 临时：物理迁移的测试期关掉每日次数限制。反复重开关卡验证时，
-        // 「今日次数用完」弹窗每三局就打断一次，纯粹是干扰。
-        // **上线前必须改回 false**，否则每日免费次数这条商业化设计整个失效。
-        if (GameManager.DAILY_LIMIT_OFF) return true;
         if (this.dailyLeft > 0) return true;
         this.hud?.showNotice('今日次数用完', '每天可免费挑战 3 次\n想接着玩就再续一次吧',
             '再续一次', () => {
@@ -481,7 +493,7 @@ export class GameManager extends Component {
         // BGM 起播点必须挂在用户手势上（点「开始挑战」），否则被浏览器自动播放策略拦掉。
         // 声音默认关闭，所以这里通常什么都不会响，直到玩家在暂停菜单里打开。
         this.audio?.startBgm();
-        await this.startInitialRound();
+        if (!await this.startInitialRound()) return;
         if (SaveData.taught()) return;
         // 第一次玩：等堆叠落定后主动指一组可消的物件，比任何文字都直观。
         SaveData.markTaught();
@@ -489,19 +501,20 @@ export class GameManager extends Component {
     }
 
     /** 本关需加载的 prefab id：物件族 +（有障碍物时）石头 +（有彩蛋时）金鹅。 */
-    private levelPrefabIds(): string[] {
-        const ids = this.level.distractors ? [...this.level.items, DISTRACTOR_ID] : [...this.level.items];
+    private levelPrefabIds(level = this.level): string[] {
+        const ids = level.distractors ? [...level.items, DISTRACTOR_ID] : [...level.items];
         // 金鹅用的 goose 模型不一定在本关的 items 里——水果族的 goose 排在第 9 位，
         // 只有第 3 关 pick(9) 才含它。不显式补进来，第 2 关的 prefabs.get('goose')
         // 就是 undefined，金鹅会**静默**不生成（没有报错，只是彩蛋消失）。
-        if (this.level.goldenGoose && !ids.includes(GameManager.GOLDEN_ID)) {
+        if (level.goldenGoose && !ids.includes(GameManager.GOLDEN_ID)) {
             ids.push(GameManager.GOLDEN_ID);
         }
         return ids;
     }
 
     /** 首次进入关卡的统一入口：确认有次数后再扣减、加载和生成。 */
-    private async startInitialRound() {
+    private async startInitialRound(): Promise<boolean> {
+        if (!await this.loadLevelAssets(this.level, () => void this.beginRound())) return false;
         // 这个入口也会在“退出本局 → 返回地图 → 再次出发”时复用，不能只依赖构造初值。
         // 上一局的救场、提示和连击状态必须在生成新堆前归零，避免重进后继承半局状态。
         this.rescueUsed = false;
@@ -520,10 +533,42 @@ export class GameManager extends Component {
         this.hud?.setCombo(0, 0);
         this.hud?.setScore(0);
         this.consumeDaily();
-        await this.prefabs.loadAll(this.levelPrefabIds());
         this.spawnItems();
         this.playing = true;
+        this.trackRoundStart();
         this.updateHud();
+        return true;
+    }
+
+    private trackRoundStart() {
+        this.roundStartedAt = performance.now();
+        this.roundId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        Telemetry.track('round_start', {
+            roundId: this.roundId,
+            theme: getActiveTheme().id,
+            level: this.levelIndex + 1,
+            itemCount: this.totalCount,
+            dailyLeft: this.dailyLeft,
+        });
+    }
+
+    /**
+     * 正式开局前的资源门禁。任何一个物件缺失都会破坏“三的倍数”与难度口径，
+     * 因此不能像旧版那样跳过缺件继续生成；保留当前页面并给玩家一次明确的重试入口。
+     */
+    private async loadLevelAssets(level: LevelDef, retry: () => void): Promise<boolean> {
+        const missing = await this.prefabs.loadAll(this.levelPrefabIds(level));
+        if (missing.length === 0) return true;
+        console.error(`[GameManager] 关卡资源不完整：${missing.join(', ')}`);
+        Telemetry.track('asset_load_failed', {
+            theme: getActiveTheme().id, level: this.levelIndex + 1, missing: missing.join(','),
+        });
+        this.hud?.showNotice('资源加载失败', '部分物件没有加载成功\n请检查网络后重新加载',
+            '重新加载', () => {
+                this.hud?.hideResult();
+                retry();
+            });
+        return false;
     }
 
     // ---------- 每日次数 / 最好成绩 ----------
@@ -544,7 +589,7 @@ export class GameManager extends Component {
     }
 
     private loadBest() {
-        this.best = SaveData.getBest();
+        this.best = SaveData.getBest(getActiveTheme().id);
     }
 
     /**
@@ -558,7 +603,7 @@ export class GameManager extends Component {
             || (score === prevScore && progress > prev.progress);
         if (better) {
             this.best[lvl] = { stars, progress, score };
-            SaveData.setBest(this.best);
+            SaveData.setBest(getActiveTheme().id, this.best);
         }
         return better && !!prev; // 首次成绩不算"刷新纪录"
     }
@@ -865,7 +910,10 @@ export class GameManager extends Component {
         const b = this.measureLocalAabb(n);
         if (!b) { console.warn(`[GameManager] 置物筐 ${id} 无网格包围盒，按原样摆放`); return; }
         const w = b.max.x - b.min.x, d = b.max.z - b.min.z, h = b.max.y - b.min.y;
-        const s = GameManager.CONTAINER_SPAN / Math.max(w, d, 1e-3);
+        // 带外置把手的容器会扩大 AABB，但把手不属于可玩内区；允许皮肤声明更大的视觉宽度，
+        // 保证内盘仍与固定物理边界对齐。未知/旧皮肤继续使用 4.0，玩法尺寸不受影响。
+        const visualSpan = this.currentSkin().containerSpan ?? GameManager.CONTAINER_SPAN;
+        const s = visualSpan / Math.max(w, d, 1e-3);
         n.setScale(s, s, s);
 
         // 缩放后，把模型自身中心平移到 boundary 中心，底部坐到 CONTAINER_BOTTOM_Y。
@@ -1420,7 +1468,7 @@ export class GameManager extends Component {
 
     /** 限制初始倾斜，避免钱币/玉环直立后高速翻滚造成旋转穿透。 */
     private setNaturalRotation(node: Node, id: string, random: () => number = Math.random) {
-        const flat = id === 'banzhi' || id === 'bracelet' || id === 'pingankou'
+        const flat = id === 'banzhi' || id === 'bracelet'
             || id === 'tongqian' || id === 'yuzhuo';
         // 薄片起始更贴近水平(20°→12°):配合下落只保留竖轴自转,落下即拍平叠摞,
         // 不会立起来边缘着地。非薄片保持较大随机倾斜的自然感。
@@ -1714,6 +1762,9 @@ export class GameManager extends Component {
             this.audio?.play(kind === 'shuffle' ? 'shuffle' : 'prop');
             this.propCounts[kind]--;
             this.saveProps();
+            Telemetry.track('prop_use', {
+                roundId: this.roundId, kind, level: this.levelIndex + 1, progress: this.progress,
+            });
         }
     }
 
@@ -1870,6 +1921,18 @@ export class GameManager extends Component {
         if (stars >= 2) reward.magnet = 1;
         if (stars >= 3) reward.shuffle = 1;
         this.grantProps(reward);
+        Telemetry.track('round_end', {
+            roundId: this.roundId,
+            theme: getActiveTheme().id,
+            level: this.levelIndex + 1,
+            win,
+            reason: win ? 'win' : reason,
+            progress: this.progress,
+            score: this.score,
+            stars,
+            durationSec: Math.round((performance.now() - this.roundStartedAt) / 1000),
+            rescueUsed: this.rescueUsed,
+        });
         console.log(`[GameManager] ${win ? '胜利' : `失败（${reason}）`} 完成度 ${this.progress}%`);
 
         const finishedLevel = this.levelIndex;
@@ -1919,6 +1982,9 @@ export class GameManager extends Component {
     private rescue() {
         if (this.rescueUsed || this.playing) return;
         this.rescueUsed = true;
+        Telemetry.track('rescue_use', {
+            roundId: this.roundId, reason: this.loseReason, level: this.levelIndex + 1,
+        });
         this.interactionLocked = false;
         this.hud?.hideResult();
         this.audio?.play('prop');
@@ -1938,6 +2004,8 @@ export class GameManager extends Component {
         // 不关掉的话新一局的堆就倒在首页底下，玩家看不见也点不到。
         this.hud?.hideHome();
         if (!this.ensureDaily(() => void this.resetLevel())) return;
+        const nextLevel = LEVELS[Math.min(this.levelIndex, LEVELS.length - 1)];
+        if (!await this.loadLevelAssets(nextLevel, () => void this.resetLevel())) return;
         this.consumeDaily();
         this.rescueUsed = false;
         this.loseReason = '';
@@ -1970,17 +2038,16 @@ export class GameManager extends Component {
         this.hud?.setTrayCount(0);
         this.hud?.clearCapturedModels();
         this.removedCount = 0;
-        this.level = LEVELS[Math.min(this.levelIndex, LEVELS.length - 1)];
+        this.level = nextLevel;
         this.timeLeft = this.level.timeSec;
         this.hud?.setLevel(this.levelIndex + 1);
         if (this.msgLabel) this.msgLabel.string = '';
         if (this.hud) this.hud.subMsgLabel.string = '';
-        // 进入新关卡时可能出现首次使用的物件种类,补加载对应 Prefab。
-        await this.prefabs.loadAll(this.levelPrefabIds());
         this.spawnItems();
         this.paused = false;
         this.hud?.setPaused(false);
         this.playing = true;
+        this.trackRoundStart();
         this.updateHud();
     }
 
@@ -2008,6 +2075,13 @@ export class GameManager extends Component {
      * 否则返回首页后再次开局会撞上上一局遗留的“幽灵物件”。
      */
     private exitRoundToHome() {
+        Telemetry.track('round_exit', {
+            roundId: this.roundId,
+            theme: getActiveTheme().id,
+            level: this.levelIndex + 1,
+            progress: this.progress,
+            durationSec: Math.round((performance.now() - this.roundStartedAt) / 1000),
+        });
         this.playing = false;
         this.paused = false;
         this.interactionLocked = false;
@@ -2047,6 +2121,7 @@ export class GameManager extends Component {
     private toggleSound(): boolean {
         const on = this.audio?.toggleSound() ?? false;
         this.hud?.setSoundOn(on);
+        Telemetry.track('sound_toggle', { on });
         return on;
     }
 

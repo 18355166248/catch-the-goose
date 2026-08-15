@@ -4,6 +4,7 @@ import {
 } from 'cc';
 import { Screen, ScreenViewport } from './UIRouter';
 import { UIKit, UIColors } from './UIKit';
+import { RemoteTextures } from './RemoteTextures';
 
 export interface MapChoice {
     id: string;
@@ -291,7 +292,7 @@ export class HomeScreen implements Screen {
         });
         // 勾章必须在三张难度切图之后创建，才能稳定压在当前档位右上角。
         this.difficultyBadge = UIKit.image(deck,
-            'textures/challenge-ui/selection-badge-v1/texture', 68, 68, 0, 0);
+            RemoteTextures.selectionBadge, 68, 68, 0, 0);
 
         this.data.levels.forEach((lv, i) => {
             const hit = UIKit.hitArea(deck, 190, 150, DIFFICULTY_XS[i], DIFFICULTY_Y, () => {
@@ -543,7 +544,7 @@ export class HomeScreen implements Screen {
         const stationOpacity = stationRoot.addComponent(UIOpacity);
         stationOpacity.opacity = !map.playable ? STATION_LOCKED_OPACITY
             : (selected ? 255 : STATION_IDLE_OPACITY);
-        UIKit.image(stationRoot, 'textures/challenge-ui/station-frame-v3/texture',
+        UIKit.image(stationRoot, RemoteTextures.stationFrame,
             330, 247, 0, 0);
         // 选中光圈必须画在底座之后：底座圆章内芯是不透明的羊皮纸面，先画就会被整块盖住，
         // 只剩超出木框的那一段露在画芯上方——旧实现（直径 178）漏出的就是这道半圈白弧。
@@ -555,7 +556,7 @@ export class HomeScreen implements Screen {
             map.playable ? 255 : 118);
         // 手绘勾章是选中状态的主要识别信号，固定在圆章右上角，不依赖动画才能看见。
         const selectedBadge = UIKit.image(stationRoot,
-            'textures/challenge-ui/selection-badge-v1/texture', 68, 68, 66, 82);
+            RemoteTextures.selectionBadge, 68, 68, 66, 82);
         selectedBadge.name = 'selectedBadge';
         selectedBadge.active = selected;
 

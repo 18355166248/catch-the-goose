@@ -2,7 +2,7 @@
   "ver": "1.0.27",
   "importer": "image",
   "imported": true,
-  "uuid": "222c274a-7efd-45c0-963c-62efabc336ac",
+  "uuid": "c5b36e6a-d7ca-4502-8e9e-cdcac5412631",
   "files": [
     ".json",
     ".png"
@@ -10,8 +10,8 @@
   "subMetas": {
     "6c48a": {
       "importer": "texture",
-      "uuid": "222c274a-7efd-45c0-963c-62efabc336ac@6c48a",
-      "displayName": "yushi",
+      "uuid": "c5b36e6a-d7ca-4502-8e9e-cdcac5412631@6c48a",
+      "displayName": "station-frame",
       "id": "6c48a",
       "name": "texture",
       "userData": {
@@ -22,7 +22,7 @@
         "mipfilter": "none",
         "anisotropy": 0,
         "isUuid": true,
-        "imageUuidOrDatabaseUri": "222c274a-7efd-45c0-963c-62efabc336ac",
+        "imageUuidOrDatabaseUri": "c5b36e6a-d7ca-4502-8e9e-cdcac5412631",
         "visible": false
       },
       "ver": "1.0.22",
@@ -37,6 +37,6 @@
     "type": "texture",
     "fixAlphaTransparencyArtifacts": false,
     "hasAlpha": true,
-    "redirect": "222c274a-7efd-45c0-963c-62efabc336ac@6c48a"
+    "redirect": "c5b36e6a-d7ca-4502-8e9e-cdcac5412631@6c48a"
   }
 }

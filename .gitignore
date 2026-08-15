@@ -25,3 +25,10 @@ game-demo/__MACOSX/
 # 本地视觉验证截图 / Playwright 产物
 .playwright-mcp/
 shot-*.png
+# QA 对比图同属本地产物：单张常有 1~3MB，早期漏了这条规则，已入库的那批用
+# git rm --cached 移出（文件仍留在工作区）。
+qa-*.png
+
+# Python 工具（scripts/*.py）的 lint 缓存。会生成在运行目录下，
+# 包括 game/assets/ 内部——那是 Cocos 的资源扫描范围，别让它进去。
+.ruff_cache/

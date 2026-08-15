@@ -1,8 +1,9 @@
 import {
     Node, Layers, Label, Color, UITransform, Graphics, tween, v3, Font,
-    resources, SpriteFrame, Sprite, Texture2D,
+    resources, SpriteFrame, Sprite, Texture2D, assetManager, ImageAsset,
 } from 'cc';
 import { NodeEventType } from 'cc';
+import { Telemetry } from '../Telemetry';
 
 /**
  * 页面的绘制原语：面板、文字、卡片、按钮。
@@ -34,19 +35,48 @@ export const UIColors = {
 } as const;
 
 export class UIKit {
+    /** 同一切图在一页会被多个站点复用；共享在途 Promise，避免 CDN 故障时同时打出十几次请求。 */
+    private static textureLoads = new Map<string, Promise<Texture2D | null>>();
+    private static fallbackWarned = new Set<string>();
+
+    private static loadTexture(path: string): Promise<Texture2D | null> {
+        const cached = UIKit.textureLoads.get(path);
+        if (cached) return cached;
+        const task = new Promise<Texture2D | null>((resolve) => {
+            if (/^https?:\/\//.test(path)) {
+                assetManager.loadRemote<ImageAsset>(path, (err, imageAsset) => {
+                    if (err || !imageAsset) { resolve(null); return; }
+                    const texture = new Texture2D();
+                    texture.image = imageAsset;
+                    resolve(texture);
+                });
+            } else {
+                resources.load(path, Texture2D, (err, texture) => resolve(err || !texture ? null : texture));
+            }
+        });
+        UIKit.textureLoads.set(path, task);
+        // 失败不做永久负缓存：当前页使用 fallback，之后重进页面仍可再试 CDN。
+        void task.then(texture => { if (!texture) UIKit.textureLoads.delete(path); });
+        return task;
+    }
+
     /**
      * 资源图的统一加载入口。页面先搭好结构，图片异步回来后再出现；加载失败保留页面底色，
      * 不让一个美术资源 404 把首次启动卡成空白页。
+     *
+     * `resourcePath` 传 http(s) 开头的地址即走远程加载（见 RemoteTextures）：
+     * 少数超大切图放 CDN 不进包，其余仍走 resources/。两条路径拿到 Texture2D 后
+     * 的处理完全一致，调用方不需要知道图从哪来。
      */
-    static image(parent: Node, resourcePath: string, w: number, h: number,
+    static image(parent: Node, resourcePath: string | { remote: string; fallback: string }, w: number, h: number,
         x: number, y: number, opacity = 255, tint?: Color): Node {
         const n = new Node('image');
         n.layer = Layers.Enum.UI_2D;
         n.setParent(parent);
         n.setPosition(x, y, 0);
         n.addComponent(UITransform).setContentSize(w, h);
-        resources.load(resourcePath, Texture2D, (err, texture) => {
-            if (err || !n.isValid || !texture) return;
+        const apply = (texture: Texture2D) => {
+            if (!n.isValid) return;
             // 工程图片统一按 Texture2D 导入（没有 SpriteFrame 子资源），页面层在运行时包装。
             const frame = new SpriteFrame();
             frame.texture = texture;
@@ -65,6 +95,22 @@ export class UIKit {
             // 让保持原色的当前项自己跳出来，比给当前项加特效省一张图。
             const t = tint ?? Color.WHITE;
             sprite.color = new Color(t.r, t.g, t.b, opacity);
+        };
+        const remotePath = typeof resourcePath === 'string' ? resourcePath : resourcePath.remote;
+        const fallbackPath = typeof resourcePath === 'string' ? null : resourcePath.fallback;
+        // 关键首页切图同时带一个本地低清版本：CDN/CORS 失败时页面可以降质，
+        // 不能丢掉站点框和选中态。同路径复用 loadTexture 的在途 Promise，避免重复请求。
+        void UIKit.loadTexture(remotePath).then(async texture => {
+            if (texture) { apply(texture); return; }
+            if (!fallbackPath) return;
+            const fallback = await UIKit.loadTexture(fallbackPath);
+            if (!fallback) return;
+            if (!UIKit.fallbackWarned.has(remotePath)) {
+                UIKit.fallbackWarned.add(remotePath);
+                console.warn(`[UIKit] 远程图片失败，已使用本地降级：${remotePath}`);
+                Telemetry.track('remote_asset_fallback', { asset: remotePath.split('/').pop() ?? 'unknown' });
+            }
+            apply(fallback);
         });
         return n;
     }

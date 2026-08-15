@@ -4,9 +4,10 @@
   "//3": "被连带删除，构建照过，直到实机点道具才会炸）。改完代码请跑：",
   "//4": "  npx --yes --registry=https://registry.npmjs.org -p typescript@5.6.3 tsc --noEmit -p game/tsconfig.check.json",
   "//5": "registry 必须显式指公共源：本机 npm 默认走内网镜像，取 typescript 会 502。",
-  "//6": "预期只剩 4 条 TS2550（padStart / includes，target 太低的历史告警，运行时无碍）。",
+  "//6": "target 保持 ES2015 以贴合构建转译，lib 用 ES2017 描述浏览器实际具备的 padStart/includes。",
   "compilerOptions": {
     "target": "ES2015",
+    "lib": ["ES2017", "DOM"],
     "module": "ES2015",
     "moduleResolution": "node",
     "strict": true,

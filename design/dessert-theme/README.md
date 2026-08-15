@@ -26,6 +26,11 @@
 - 9 张 192×192 透明槽位图标。
 
 模型全部为原创程序化几何，物件最大边归一化为 1.0，单件不超过 1.5k 面。
+陶瓷托盘以确认稿 `concepts/tray-topdown-v1.png` 为基准，采用“真实 3D 轮廓 + 手绘盘心材质”
+的混合方案：波浪奶油瓷胎、深玫红珐琅、双层金边、侧把手和四角莓果奶油均为几何，
+菱格软包内衬使用 `textures/tray-liner-v1.jpg` 烘焙高光与针脚。最终约 11.3k 三角面，
+可见细节集中在游戏近正俯视相机能看到的顶面。只重生成容器时在命令末尾追加
+`-- --container-only`。
 
 ```bash
 /Applications/Blender.app/Contents/MacOS/Blender --background \
