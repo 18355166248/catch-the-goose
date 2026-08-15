@@ -49,10 +49,11 @@ fi
 if [ "$CREATOR_STATUS" -ne 0 ]; then
     # Creator 3.8.8 在“编辑器已开 + CLI 构建”模式下偶发完成全部任务后仍返回 1；
     # 不能只信退出码，也不能像旧脚本那样完全忽略。必须同时有 Finished 且无 error 才接受。
-    # 已打开编辑器时，CLI worker 收尾会固定记录一次 build-script SIGTERM 并返回 36，
-    # 但任务随后完整 Finished；只豁免这一条已知收尾噪声，其他 error 仍立即失败。
+    # 已打开编辑器时，CLI worker 收尾会记录 build-script / build-engine SIGTERM 并返回 36，
+    # 但任务随后完整 Finished；只豁免这两条已验证的收尾噪声，其他 error 仍立即失败。
     if grep -iE '(^|[^a-z])error:' "$BUILD_LOG" \
-        | grep -qvF 'Exit process with code:null, signal:SIGTERM in task build-script'; then
+        | grep -vF 'Exit process with code:null, signal:SIGTERM in task build-script' \
+        | grep -qvF 'Exit process with code:null, signal:SIGTERM in task build-engine'; then
         tail -80 "$BUILD_LOG"
         echo "❌ Creator 返回 ${CREATOR_STATUS}，日志同时包含 error。"
         exit 1
@@ -62,6 +63,7 @@ fi
 grep -iE "Finished|error:" "$BUILD_LOG" \
     | grep -viE "^\s*at |BABEL" \
     | grep -vF 'Exit process with code:null, signal:SIGTERM in task build-script' \
+    | grep -vF 'Exit process with code:null, signal:SIGTERM in task build-engine' \
     | tail -3 || true
 
 # 不靠目录体积猜构建模式：直接核对 Creator 本次记录下来的生效配置。
