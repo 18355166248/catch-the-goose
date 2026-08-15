@@ -79,6 +79,21 @@ const MAP_STATIONS: Record<string, {
     },
 };
 
+/** 首页会立即出现的全部切图；加载页只能在这些纹理均已解析后撤掉。 */
+export const HOME_PRELOAD_IMAGES = [
+    // 新用户先看到引导页，老用户直接到路线页，两条启动分支必须使用同一门闩。
+    'textures/challenge-map-bg/texture',
+    'textures/challenge-ui/header-reference/texture',
+    'textures/challenge-ui/map-continuous-v2/texture',
+    'textures/challenge-ui/control-deck-bg/texture',
+    'textures/challenge-ui/summary-frame-blank/texture',
+    ...DIFFICULTY_ART.map(art => art.path),
+    'textures/challenge-ui/cta-button-clean/texture',
+    ...Object.values(MAP_STATIONS).map(station => station.icon),
+    RemoteTextures.stationFrame,
+    RemoteTextures.selectionBadge,
+] as const;
+
 /**
  * 挑战首页：顶部品牌、滚动地图、底部挑战控制台是三个独立区域。
  *

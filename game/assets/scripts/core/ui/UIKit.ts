@@ -37,6 +37,8 @@ export const UIColors = {
 export class UIKit {
     /** 同一切图在一页会被多个站点复用；共享在途 Promise，避免 CDN 故障时同时打出十几次请求。 */
     private static textureLoads = new Map<string, Promise<Texture2D | null>>();
+    /** 远程图与本地兜底按同一逻辑键缓存，预加载后页面创建不会再次等待网络。 */
+    private static imageLoads = new Map<string, Promise<Texture2D | null>>();
     private static fallbackWarned = new Set<string>();
 
     private static loadTexture(path: string): Promise<Texture2D | null> {
@@ -58,6 +60,42 @@ export class UIKit {
         // 失败不做永久负缓存：当前页使用 fallback，之后重进页面仍可再试 CDN。
         void task.then(texture => { if (!texture) UIKit.textureLoads.delete(path); });
         return task;
+    }
+
+    private static resolveImageTexture(resourcePath: string | { remote: string; fallback: string }): Promise<Texture2D | null> {
+        const key = typeof resourcePath === 'string' ? resourcePath : resourcePath.remote;
+        const cached = UIKit.imageLoads.get(key);
+        if (cached) return cached;
+        const fallbackPath = typeof resourcePath === 'string' ? null : resourcePath.fallback;
+        const task = UIKit.loadTexture(key).then(async texture => {
+            if (texture || !fallbackPath) return texture;
+            const fallback = await UIKit.loadTexture(fallbackPath);
+            if (fallback && !UIKit.fallbackWarned.has(key)) {
+                UIKit.fallbackWarned.add(key);
+                console.warn(`[UIKit] 远程图片失败，已使用本地降级：${key}`);
+                Telemetry.track('remote_asset_fallback', { asset: key.split('/').pop() ?? 'unknown' });
+            }
+            return fallback;
+        });
+        UIKit.imageLoads.set(key, task);
+        void task.then(texture => { if (!texture) UIKit.imageLoads.delete(key); });
+        return task;
+    }
+
+    static async preloadImages(
+        resources: ReadonlyArray<string | { remote: string; fallback: string }>,
+        onProgress?: (completed: number, total: number, failed: number) => void,
+    ): Promise<number> {
+        let completed = 0;
+        let failed = 0;
+        onProgress?.(0, resources.length, 0);
+        await Promise.all(resources.map(async resource => {
+            const texture = await UIKit.resolveImageTexture(resource);
+            if (!texture) failed += 1;
+            completed += 1;
+            onProgress?.(completed, resources.length, failed);
+        }));
+        return failed;
     }
 
     /**
@@ -96,22 +134,8 @@ export class UIKit {
             const t = tint ?? Color.WHITE;
             sprite.color = new Color(t.r, t.g, t.b, opacity);
         };
-        const remotePath = typeof resourcePath === 'string' ? resourcePath : resourcePath.remote;
-        const fallbackPath = typeof resourcePath === 'string' ? null : resourcePath.fallback;
-        // 关键首页切图同时带一个本地低清版本：CDN/CORS 失败时页面可以降质，
-        // 不能丢掉站点框和选中态。同路径复用 loadTexture 的在途 Promise，避免重复请求。
-        void UIKit.loadTexture(remotePath).then(async texture => {
-            if (texture) { apply(texture); return; }
-            if (!fallbackPath) return;
-            const fallback = await UIKit.loadTexture(fallbackPath);
-            if (!fallback) return;
-            if (!UIKit.fallbackWarned.has(remotePath)) {
-                UIKit.fallbackWarned.add(remotePath);
-                console.warn(`[UIKit] 远程图片失败，已使用本地降级：${remotePath}`);
-                Telemetry.track('remote_asset_fallback', { asset: remotePath.split('/').pop() ?? 'unknown' });
-            }
-            apply(fallback);
-        });
+        // 与启动预加载共用解析缓存；节点创建时拿到的已是远程图或本地兜底的最终纹理。
+        void UIKit.resolveImageTexture(resourcePath).then(texture => { if (texture) apply(texture); });
         return n;
     }
 

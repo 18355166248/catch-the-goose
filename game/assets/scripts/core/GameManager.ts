@@ -19,6 +19,8 @@ import { HudUI, PropKind } from './HudUI';
 import { SceneBackground } from './SceneBackground';
 import { AudioMan } from './AudioMan';
 import { Telemetry } from './Telemetry';
+import { UIKit } from './ui/UIKit';
+import { HOME_PRELOAD_IMAGES } from './ui/HomeScreen';
 
 const { ccclass, property } = _decorator;
 
@@ -372,6 +374,16 @@ export class GameManager extends Component {
             (globalThis as any).__gooseBoot?.fail('物理引擎加载失败，请重新加载');
             return;
         }
+        // 首页节点会同步创建，先把切图解析到 Texture 缓存，避免进度条结束后逐块补图。
+        const startupImages = initSkin.backdropTex
+            ? [...HOME_PRELOAD_IMAGES, `textures/${initSkin.backdropTex}/texture`]
+            : HOME_PRELOAD_IMAGES;
+        await UIKit.preloadImages(startupImages, (completed, total, failed) => {
+            const ratio = completed / Math.max(total, 1);
+            const suffix = failed > 0 ? `（${failed} 项使用降级）` : '';
+            (globalThis as any).__gooseBoot?.to(74 + ratio * 22, `正在加载界面资源…${suffix}`);
+        });
+        if (!this.node.isValid) return;
         // 首次启动先走独立引导页；完成后才进入挑战路线。两者都是真页面，不和游玩 HUD 共存。
         if (SaveData.onboarded()) this.showHome();
         else this.hud.showOnboarding({
