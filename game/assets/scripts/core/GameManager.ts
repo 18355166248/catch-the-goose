@@ -266,6 +266,46 @@ export class GameManager extends Component {
         // 甜品主题的圆饼/杯状件同理；细长糖果和三角蛋糕仍保留方盒轮廓。
         'cupcake', 'donut', 'macaron', 'cookie', 'pudding',
     ]);
+    /**
+     * 最大边统一归一化只能保证“最长尺寸相同”，不能保证俯视面积相同。香蕉、胡萝卜、
+     * 如意等细长件因此会比球形件少占很多像素，在手机上既显小又难点。这里只给轮廓偏细
+     * 的模型做 4%~8% 的温和补偿；缩放同时用于视觉和 Jolt 代理，不制造点击错位。
+     * 数值刻意不超过 1.08，避免破坏按统一 itemScale 反解出来的堆积层数。
+     */
+    private static readonly ITEM_SCALE_MULTIPLIER: Readonly<Record<string, number>> = {
+        banana: 1.08,
+        grape: 1.05,
+        lemon: 1.04,
+        pear: 1.05,
+        goose: 1.06,
+        ruyi: 1.08,
+        carrot: 1.08,
+        corn: 1.05,
+        eggplant: 1.04,
+        frog: 1.07,
+        koi: 1.06,
+        duck: 1.07,
+        icecream: 1.06,
+        cake_slice: 1.05,
+        candy: 1.08,
+        croissant: 1.06,
+    };
+    /**
+     * 这些模型的主要识别特征在侧面。GLB 的本地 Y 为竖轴，若沿用默认 ±32° 小倾角，
+     * 近正俯视相机看到的往往只是果蒂或圆形顶面。范围为相对竖直方向的倾角（度），
+     * 让它们以自然侧躺姿态落下，同时保留 12° 的随机滚转避免机械排布。
+     */
+    private static readonly SIDE_PROFILE_TILT: Readonly<Record<string, readonly [number, number]>> = {
+        strawberry: [34, 52],
+        pear: [46, 68],
+        carrot: [62, 78],
+        corn: [56, 74],
+        eggplant: [48, 68],
+        // 角色按设计稿改为直立正脸造型，温和倾斜可同时看到表情、腹部和脚掌。
+        frog: [28, 42],
+        duck: [28, 42],
+        icecream: [46, 66],
+    };
     /** 重力。数值与旧实现一致，只是从 PhysicsSystem 挪到了 JoltWorld。 */
     private static readonly GRAVITY_Y = -12;
     /** 固定物理步长。必须是 60Hz 的整数分之一，见 initPhysics 的说明。 */
@@ -1133,7 +1173,8 @@ export class GameManager extends Component {
                 // 参考录屏中单件约为篮宽的 1/6；66 件时形成紧凑但不过高的堆。
                 // 根节点直接给最终缩放：它的位姿归物理管，弹大动画改由视觉子树承担
                 // （见下方 tween），否则 syncNodes 每帧都会把缩放外的改动一并冲掉。
-                const scale = this.itemScale + (idx % 4) * 0.012;
+                const baseScale = this.itemScale + (idx % 4) * 0.012;
+                const scale = baseScale * (GameManager.ITEM_SCALE_MULTIPLIER[id] ?? 1);
                 n.setScale(scale, scale, scale);
 
                 const tag = n.addComponent(ItemTag);
@@ -1478,14 +1519,20 @@ export class GameManager extends Component {
         return frozen.length;
     }
 
-    /** 限制初始倾斜，避免钱币/玉环直立后高速翻滚造成旋转穿透。 */
+    /** 按模型轮廓设定初始倾斜：薄片拍平，细长竖向件侧躺，其余保留自然随机姿态。 */
     private setNaturalRotation(node: Node, id: string, random: () => number = Math.random) {
-        const flat = id === 'banzhi' || id === 'bracelet'
-            || id === 'tongqian' || id === 'yuzhuo';
-        // 薄片起始更贴近水平(20°→12°):配合下落只保留竖轴自转,落下即拍平叠摞,
-        // 不会立起来边缘着地。非薄片保持较大随机倾斜的自然感。
-        const tilt = flat ? 12 : 32;
         const q = new Quat();
+        const sideRange = GameManager.SIDE_PROFILE_TILT[id];
+        if (sideRange) {
+            const magnitude = sideRange[0] + random() * (sideRange[1] - sideRange[0]);
+            const signedTilt = (random() < 0.5 ? -1 : 1) * magnitude;
+            Quat.fromEuler(q, signedTilt, random() * 360, (random() - 0.5) * 24);
+            node.setRotation(q);
+            return;
+        }
+        // 圆盘/环形件起始更贴近水平：配合下落只保留竖轴自转，落下即拍平叠摞，
+        // 不会立起来边缘着地。这里统一复用 ROUND_ITEMS，避免新增主题模型时漏维护两张表。
+        const tilt = GameManager.ROUND_ITEMS.has(id) ? 12 : 32;
         Quat.fromEuler(
             q,
             (random() - 0.5) * tilt * 2,

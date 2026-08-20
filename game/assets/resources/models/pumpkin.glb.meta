@@ -23,6 +23,22 @@
       ],
       "subMetas": {}
     },
+    "1f22a": {
+      "importer": "gltf-material",
+      "uuid": "d208a04a-c29b-416f-9f8f-2e7f31828b7e@1f22a",
+      "displayName": "",
+      "id": "1f22a",
+      "name": "pumpkin_orange_light.material",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "471a8": {
       "importer": "gltf-material",
       "uuid": "d208a04a-c29b-416f-9f8f-2e7f31828b7e@471a8",
@@ -30,7 +46,7 @@
       "id": "471a8",
       "name": "pumpkin_orange.material",
       "userData": {
-        "gltfIndex": 0
+        "gltfIndex": 1
       },
       "ver": "1.0.14",
       "imported": true,
@@ -46,7 +62,7 @@
       "id": "21bd0",
       "name": "pumpkin_stem.material",
       "userData": {
-        "gltfIndex": 1
+        "gltfIndex": 2
       },
       "ver": "1.0.14",
       "imported": true,
@@ -99,6 +115,7 @@
       "skeletons": [],
       "textures": [],
       "materials": [
+        "d208a04a-c29b-416f-9f8f-2e7f31828b7e@1f22a",
         "d208a04a-c29b-416f-9f8f-2e7f31828b7e@471a8",
         "d208a04a-c29b-416f-9f8f-2e7f31828b7e@21bd0"
       ],

@@ -5,15 +5,15 @@
   "uuid": "c957e9f4-c98b-48ae-a929-b6164f5acda2",
   "files": [],
   "subMetas": {
-    "e2349": {
+    "825ed": {
       "importer": "gltf-mesh",
-      "uuid": "c957e9f4-c98b-48ae-a929-b6164f5acda2@e2349",
+      "uuid": "c957e9f4-c98b-48ae-a929-b6164f5acda2@825ed",
       "displayName": "",
-      "id": "e2349",
-      "name": "Mesh.mesh",
+      "id": "825ed",
+      "name": "Sphere.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 920
+        "triangleCount": 1112
       },
       "ver": "1.1.1",
       "imported": true,
@@ -47,6 +47,22 @@
       "name": "pstem.material",
       "userData": {
         "gltfIndex": 1
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "bbe21": {
+      "importer": "gltf-material",
+      "uuid": "c957e9f4-c98b-48ae-a929-b6164f5acda2@bbe21",
+      "displayName": "",
+      "id": "bbe21",
+      "name": "pleaf.material",
+      "userData": {
+        "gltfIndex": 2
       },
       "ver": "1.0.14",
       "imported": true,
@@ -94,13 +110,14 @@
     },
     "assetFinder": {
       "meshes": [
-        "c957e9f4-c98b-48ae-a929-b6164f5acda2@e2349"
+        "c957e9f4-c98b-48ae-a929-b6164f5acda2@825ed"
       ],
       "skeletons": [],
       "textures": [],
       "materials": [
         "c957e9f4-c98b-48ae-a929-b6164f5acda2@55dee",
-        "c957e9f4-c98b-48ae-a929-b6164f5acda2@14fe9"
+        "c957e9f4-c98b-48ae-a929-b6164f5acda2@14fe9",
+        "c957e9f4-c98b-48ae-a929-b6164f5acda2@bbe21"
       ],
       "scenes": [
         "c957e9f4-c98b-48ae-a929-b6164f5acda2@08e44"

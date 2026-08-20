@@ -29,7 +29,7 @@
       "name": "Sphere.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1184
+        "triangleCount": 1264
       },
       "ver": "1.1.1",
       "imported": true,
@@ -87,6 +87,22 @@
       ],
       "subMetas": {}
     },
+    "e704f": {
+      "importer": "gltf-material",
+      "uuid": "067b8d31-72f9-40da-80b5-e51eef2be8ec@e704f",
+      "displayName": "",
+      "id": "e704f",
+      "name": "cherry_leaf.material",
+      "userData": {
+        "gltfIndex": 4
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "c93bf": {
       "importer": "gltf-scene",
       "uuid": "067b8d31-72f9-40da-80b5-e51eef2be8ec@c93bf",
@@ -134,7 +150,8 @@
         "067b8d31-72f9-40da-80b5-e51eef2be8ec@0b10e",
         "067b8d31-72f9-40da-80b5-e51eef2be8ec@12583",
         "067b8d31-72f9-40da-80b5-e51eef2be8ec@e28fd",
-        "067b8d31-72f9-40da-80b5-e51eef2be8ec@c917c"
+        "067b8d31-72f9-40da-80b5-e51eef2be8ec@c917c",
+        "067b8d31-72f9-40da-80b5-e51eef2be8ec@e704f"
       ],
       "scenes": [
         "067b8d31-72f9-40da-80b5-e51eef2be8ec@c93bf"

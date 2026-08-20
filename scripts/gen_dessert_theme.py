@@ -190,11 +190,24 @@ def cupcake():
     cake = base.material("cup_cake", C["biscuit"], 0.62)
     pink = base.material("cup_frosting", C["pink"], 0.35)
     berry = base.material("cup_cherry", C["berry"], 0.28)
+    sprinkle_cream = base.material("cup_sprinkle_cream", C["cream"], 0.55)
     parts = [base.cone("wrapper", (0, 0, -0.38), 0.50, 0.43, 0.74, paper, 18),
              base.cylinder("cake", (0, 0, 0.0), 0.42, 0.20, cake, 18)]
+    rib = base.material("cup_wrapper_rib", (0.84, 0.54, 0.08, 1), 0.74)
+    for i in range(10):
+        a = i * math.tau / 10
+        parts.append(base.cylinder("wrapper_rib", (math.cos(a) * 0.455,
+                                                     math.sin(a) * 0.455, -0.39),
+                                   0.018, 0.57, rib, 6))
     for z, radius in [(0.18, 0.48), (0.48, 0.35), (0.70, 0.21)]:
         parts.append(base.sphere("frosting", (0, 0, z), (radius, radius, radius * 0.58), pink, 18, 10))
     parts.append(base.sphere("cherry", (0, 0, 0.92), (0.13, 0.13, 0.13), berry, 14, 8))
+    sprinkle_mats = [sprinkle_cream, base.material("cup_sprinkle_mint", C["mint"], 0.50), berry]
+    for i, (x, y, z) in enumerate([(-0.24, -0.34, 0.34), (0.18, -0.31, 0.46),
+                                    (-0.08, -0.28, 0.62), (0.13, -0.22, 0.69),
+                                    (0.29, -0.21, 0.30), (-0.30, -0.17, 0.49)]):
+        parts.append(base.sphere("sprinkle", (x, y, z), (0.035, 0.018, 0.045),
+                                 sprinkle_mats[i % len(sprinkle_mats)], 8, 5))
     return base.join(parts, "cupcake")
 
 
@@ -202,12 +215,16 @@ def donut():
     bread = base.material("donut_bread", C["biscuit"], 0.58)
     cocoa = base.material("donut_cocoa", C["cocoa"], 0.34)
     cream = base.material("donut_sprinkle", C["cream"], 0.60)
+    pink = base.material("donut_sprinkle_pink", C["pink"], 0.55)
+    mint = base.material("donut_sprinkle_mint", C["mint"], 0.55)
     parts = [torus("bread", (0, 0, 0), 0.56, 0.28, bread),
              torus("icing", (0, 0, 0.09), 0.56, 0.235, cocoa)]
-    for i in range(9):
-        a = i * math.tau / 9 + 0.25
+    sprinkle_mats = (cream, pink, mint)
+    for i in range(12):
+        a = i * math.tau / 12 + 0.25
         x, y = math.cos(a) * 0.57, math.sin(a) * 0.57
-        sprinkle = base.cylinder("sprinkle", (x, y, 0.34), 0.025, 0.17, cream, 6,
+        sprinkle = base.cylinder("sprinkle", (x, y, 0.34), 0.025, 0.15,
+                                  sprinkle_mats[i % 3], 6,
                                   rotation=(math.radians(90), 0, a))
         parts.append(sprinkle)
     return base.join(parts, "donut")
@@ -215,56 +232,161 @@ def donut():
 
 def icecream():
     cone_mat = base.material("icecream_cone", C["biscuit"], 0.72)
+    waffle = base.material("icecream_waffle", (0.46, 0.20, 0.045, 1), 0.74)
     mint = base.material("icecream_mint", C["mint"], 0.38)
     pink = base.material("icecream_berry", C["pink_light"], 0.38)
     cocoa = base.material("icecream_chip", C["cocoa"], 0.35)
+    wafer = base.material("icecream_wafer", (0.88, 0.48, 0.10, 1), 0.66)
     parts = [base.cone("cone", (0, 0, -0.48), 0.08, 0.42, 1.05, cone_mat, 18),
              base.sphere("scoop", (-0.20, 0, 0.30), (0.48, 0.48, 0.46), mint, 20, 12),
              base.sphere("scoop", (0.24, 0, 0.50), (0.43, 0.43, 0.41), pink, 20, 12)]
+    # Four shallow low-poly bands read as baked cone texture at phone scale.  Individual raised
+    # diamonds looked like chocolate chips from the near-top-down camera and cost far more faces.
+    for z in (-0.76, -0.55, -0.34, -0.13):
+        radius = 0.08 + ((z + 1.005) / 1.05) * 0.34
+        bpy.ops.mesh.primitive_torus_add(major_radius=radius, minor_radius=0.014,
+                                         major_segments=12, minor_segments=4,
+                                         location=(0, 0, z))
+        band = bpy.context.active_object
+        band.name = "waffle_band"; band.data.materials.append(waffle)
+        bpy.ops.object.shade_smooth(); parts.append(band)
+    # Crossed front grooves turn the horizontal bands into an unmistakable waffle lattice.
+    for points in [
+        [(-0.055, -0.145, -0.78), (0.235, -0.350, -0.17)],
+        [(0.055, -0.145, -0.78), (-0.235, -0.350, -0.17)],
+        [(-0.105, -0.225, -0.58), (0.295, -0.405, -0.04)],
+        [(0.105, -0.225, -0.58), (-0.295, -0.405, -0.04)],
+    ]:
+        parts.append(base.curve_tube("waffle_diagonal", points, 0.011, waffle))
     for x, y, z in [(0.15, -0.39, 0.56), (0.39, -0.30, 0.68), (-0.29, -0.40, 0.28)]:
         parts.append(base.sphere("chip", (x, y, z), (0.045, 0.025, 0.045), cocoa, 8, 6))
+    # Soft drips tie the scoops to the cone instead of leaving two perfect spheres floating above it.
+    parts.append(base.sphere("mint_drip", (-0.18, -0.32, 0.05),
+                             (0.12, 0.08, 0.20), mint, 12, 8))
+    parts.append(base.sphere("berry_drip", (0.20, -0.31, 0.13),
+                             (0.10, 0.07, 0.16), pink, 12, 8))
+    berry_sauce = base.material("icecream_berry_sauce", C["berry"], 0.32)
+    parts.append(base.sphere("berry_sauce", (0.25, -0.405, 0.64),
+                             (0.18, 0.028, 0.105), berry_sauce, 12, 8))
+    parts.append(base.sphere("sauce_drip", (0.39, -0.378, 0.53),
+                             (0.055, 0.035, 0.13), berry_sauce, 10, 6))
+    # Irregular scoop collars stop the ice cream from reading as two polished balls.
+    for cx, cz, radius, mat, phase in [(-0.20, 0.12, 0.40, mint, 0.0),
+                                       (0.24, 0.34, 0.36, pink, 0.35)]:
+        for i in range(8):
+            a = i * math.tau / 8 + phase
+            parts.append(base.sphere("scoop_ruffle",
+                                     (cx + math.cos(a) * radius,
+                                      math.sin(a) * radius * 0.72,
+                                      cz + 0.025 * (i % 2)),
+                                     (0.105, 0.085, 0.075), mat, 10, 6))
+    # A striped wafer stick creates a clear bakery-style top silhouette.
+    stick = base.cylinder("wafer_stick", (-0.10, 0.19, 0.83), 0.075, 0.64, wafer, 10,
+                          rotation=(0, math.radians(-19), math.radians(-8)))
+    parts.append(stick)
+    for z in (0.64, 0.80, 0.96):
+        stripe = base.cylinder("wafer_stripe", (-0.10 - (z - 0.83) * 0.34, 0.19, z),
+                               0.079, 0.045, cocoa, 10,
+                               rotation=(0, math.radians(-19), math.radians(-8)))
+        parts.append(stripe)
     return base.join(parts, "icecream")
 
 
 def macaron():
     lavender = base.material("macaron_shell", C["lavender"], 0.44)
+    lavender_dark = base.material("macaron_foot", (0.34, 0.12, 0.56, 1), 0.54)
     cream = base.material("macaron_cream", C["cream"], 0.55)
-    parts = [base.cylinder("shell", (0, 0, -0.24), 0.74, 0.36, lavender, 24),
-             base.cylinder("filling", (0, 0, 0), 0.68, 0.19, cream, 24),
-             base.cylinder("shell", (0, 0, 0.24), 0.74, 0.36, lavender, 24)]
+    berry = base.material("macaron_berry", C["berry"], 0.38)
+    parts = [base.cylinder("shell", (0, 0, -0.20), 0.69, 0.29, lavender, 24),
+             base.cylinder("filling", (0, 0, 0), 0.64, 0.16, cream, 24),
+             base.cylinder("shell", (0, 0, 0.20), 0.69, 0.29, lavender, 24)]
     for part in parts:
         bevel = part.modifiers.new("round_shell", "BEVEL")
-        bevel.width = 0.09
+        bevel.width = 0.10
         bevel.segments = 3
         bpy.context.view_layer.objects.active = part
         part.select_set(True)
         bpy.ops.object.modifier_apply(modifier=bevel.name)
         bpy.ops.object.shade_smooth()
-    return base.join(parts, "macaron")
+    # A ring of alternating low-poly crumbs reads as a real craggy macaron foot from the game
+    # camera.  The previous smooth torus technically added geometry but still looked machined.
+    for z, phase in [(-0.085, 0.0), (0.085, 0.5)]:
+        for i in range(16):
+            angle = (i + phase) * math.tau / 16
+            radius = 0.610 + (0.018 if i % 2 else -0.010)
+            crumb = base.ico("ruffled_foot", (math.cos(angle) * radius,
+                                               math.sin(angle) * radius, z),
+                             (0.105, 0.070, 0.055), lavender_dark, 1)
+            crumb.rotation_euler.z = angle
+            parts.append(crumb)
+    lavender_light = base.material("macaron_highlight", (0.70, 0.45, 0.86, 1), 0.34)
+    highlight = base.sphere("shell_highlight", (-0.22, -0.23, 0.355),
+                            (0.18, 0.080, 0.018), lavender_light, 12, 8)
+    parts.append(highlight)
+    for x, y, size in [(-0.40, 0.12, 0.032), (0.12, -0.40, 0.026),
+                       (0.36, 0.20, 0.030), (-0.05, 0.38, 0.024)]:
+        parts.append(base.sphere("shell_pore", (x, y, 0.347),
+                                 (size, size, 0.012), lavender_dark, 8, 5))
+    for i in range(7):
+        a = i * math.tau / 7
+        parts.append(base.sphere("berry_filling", (math.cos(a) * 0.43,
+                                                     math.sin(a) * 0.43, 0),
+                                 (0.055, 0.055, 0.040), berry, 8, 5))
+    result = base.join(parts, "macaron")
+    # Present the cream band and ruffled feet to the near-top-down camera instead of a blank lid.
+    result.rotation_euler.x = math.radians(68)
+    base.apply(result)
+    return result
 
 
 def cookie():
-    biscuit = base.material("cookie_biscuit", C["biscuit"], 0.76)
+    biscuit = base.material("cookie_biscuit", (0.76, 0.37, 0.075, 1), 0.72)
+    toast = base.material("cookie_toast", (0.40, 0.13, 0.025, 1), 0.68)
     cocoa = base.material("cookie_chip", C["cocoa"], 0.48)
     body = base.cylinder("cookie", (0, 0, 0), 0.80, 0.28, biscuit, 22)
     body.rotation_euler = (math.radians(90), 0, 0)
     base.apply(body)
     parts = [body]
+    rim = torus("toasted_rim", (0, -0.155, 0), 0.72, 0.045, toast,
+                rotation=(math.radians(90), 0, 0))
+    parts.append(rim)
     for x, z, s in [(-0.34, 0.25, 0.09), (0.24, 0.30, 0.07), (0.38, -0.18, 0.10),
                     (-0.15, -0.24, 0.065), (0.05, 0.02, 0.085)]:
         parts.append(base.sphere("chip", (x, -0.16, z), (s, 0.035, s), cocoa, 10, 6))
+    # Short beveled cocoa strokes suggest baked cracks without a texture map.
+    for x, z, length, angle in [(-0.22, 0.02, 0.28, 22), (0.12, -0.16, 0.24, -28),
+                                (0.16, 0.14, 0.20, 48)]:
+        crack = base.cube("crack", (x, -0.177, z), (length, 0.018, 0.018), toast, 0.012)
+        crack.rotation_euler.y = math.radians(angle)
+        parts.append(crack)
     return base.join(parts, "cookie")
 
 
 def cake_slice():
-    cake = base.material("cake_vanilla", C["vanilla"], 0.66)
+    cake = base.material("cake_vanilla", (0.88, 0.52, 0.14, 1), 0.66)
+    cake_light = base.material("cake_vanilla_light", (0.96, 0.69, 0.28, 1), 0.62)
     cream = base.material("cake_cream", C["cream"], 0.46)
     berry = base.material("cake_berry", C["berry"], 0.30)
     pink = base.material("cake_jam", C["pink"], 0.42)
-    parts = [wedge("cake", (0, 0, -0.18), (0.85, 0.66, 0.38), cake),
-             wedge("cream", (0, 0, 0.26), (0.86, 0.67, 0.10), cream),
-             wedge("jam", (-0.06, 0, -0.03), (0.79, 0.61, 0.055), pink)]
-    parts.append(base.sphere("berry", (-0.40, 0, 0.51), (0.15, 0.15, 0.15), berry, 14, 8))
+    parts = [wedge("bottom_sponge", (0, 0, -0.40), (0.82, 0.63, 0.16), cake),
+             wedge("cream_layer", (-0.01, 0, -0.20), (0.83, 0.64, 0.045), cream),
+             wedge("middle_sponge", (0, 0, -0.04), (0.81, 0.62, 0.12), cake_light),
+             wedge("jam", (-0.02, 0, 0.105), (0.82, 0.63, 0.035), pink),
+             wedge("top_sponge", (0, 0, 0.25), (0.80, 0.61, 0.105), cake),
+             wedge("top_cream", (0, 0, 0.405), (0.85, 0.66, 0.070), cream)]
+    parts.append(base.sphere("berry", (-0.40, 0, 0.59), (0.15, 0.15, 0.15), berry, 14, 8))
+    # Piped cream beads and a second berry add a bakery-finished top silhouette.
+    for x, y in [(-0.35, -0.36), (-0.10, -0.30), (0.15, -0.23), (0.38, -0.14)]:
+        parts.append(base.sphere("cream_bead", (x, y, 0.54), (0.12, 0.12, 0.085), cream, 12, 8))
+    parts.append(base.sphere("berry", (0.12, -0.18, 0.64), (0.10, 0.10, 0.10), berry, 12, 8))
+    # Visible crumbs make the sponge read as baked cake rather than a solid yellow wedge.
+    crumb = base.material("cake_crumb", (0.62, 0.28, 0.045, 1), 0.70)
+    for x, y, z, size in [(-0.54, -0.530, -0.36, 0.032),
+                          (-0.31, -0.445, -0.03, 0.026),
+                          (0.14, -0.270, -0.40, 0.030),
+                          (0.39, -0.175, 0.23, 0.024)]:
+        parts.append(base.sphere("crumb", (x, y, z),
+                                 (size, 0.012, size), crumb, 8, 5))
     return base.join(parts, "cake_slice")
 
 
@@ -273,13 +395,16 @@ def candy():
     lemon = base.material("candy_wrapper", C["lemon"], 0.50)
     white = base.material("candy_stripe", C["white"], 0.55)
     parts = [base.cylinder("body", (0, 0, 0), 0.42, 1.02, pink, 18,
-                                   rotation=(0, math.radians(90), 0)),
-             base.cylinder("stripe", (0, 0, 0), 0.435, 0.20, white, 18,
-                           rotation=(0, math.radians(90), 0))]
+                                   rotation=(0, math.radians(90), 0))]
+    for x, width in [(-0.24, 0.13), (0, 0.16), (0.24, 0.13)]:
+        parts.append(base.cylinder("stripe", (x, 0, 0), 0.435, width, white, 18,
+                                   rotation=(0, math.radians(90), 0)))
     for side in (-1, 1):
         wrap = base.cone("wrapper", (0.72 * side, 0, 0), 0.42, 0.10, 0.48, lemon, 8,
                          rotation=(0, math.radians(90 * side), 0))
         parts.append(wrap)
+        parts.append(base.cylinder("wrapper_band", (0.53 * side, 0, 0), 0.43, 0.08,
+                                   white, 12, rotation=(0, math.radians(90), 0)))
     return base.join(parts, "candy")
 
 
@@ -287,23 +412,42 @@ def pudding():
     custard = base.material("pudding_custard", C["lemon"], 0.38)
     caramel = base.material("pudding_caramel", C["cocoa"], 0.28)
     cream = base.material("pudding_cream", C["cream"], 0.44)
+    berry = base.material("pudding_cherry", C["berry"], 0.30)
     parts = [base.cone("custard", (0, 0, -0.08), 0.66, 0.48, 1.02, custard, 24),
-             base.cylinder("caramel", (0, 0, 0.49), 0.49, 0.12, caramel, 24),
-             base.sphere("cream", (0, 0, 0.69), (0.23, 0.23, 0.15), cream, 16, 10)]
+             base.cylinder("caramel", (0, 0, 0.49), 0.49, 0.12, caramel, 24)]
+    for i, length in enumerate((0.19, 0.13, 0.22, 0.15, 0.18)):
+        a = i * math.tau / 5 + 0.25
+        parts.append(base.sphere("caramel_drip", (math.cos(a) * 0.47, math.sin(a) * 0.47,
+                                                   0.40 - length * 0.35),
+                                 (0.075, 0.055, length), caramel, 12, 8))
+    for x, y, z, radius in [(-0.10, 0, 0.66, 0.20), (0.10, 0, 0.67, 0.18),
+                            (0, -0.07, 0.78, 0.13)]:
+        parts.append(base.sphere("cream_swirl", (x, y, z),
+                                 (radius, radius, radius * 0.65), cream, 14, 8))
+    parts.append(base.sphere("cherry", (0, -0.03, 0.91), (0.10, 0.10, 0.10), berry, 12, 8))
     return base.join(parts, "pudding")
 
 
 def croissant():
-    gold = base.material("croissant_gold", C["gold"], 0.62)
-    light = base.material("croissant_highlight", C["vanilla"], 0.65)
+    gold = base.material("croissant_gold", (0.56, 0.22, 0.025, 1), 0.60)
+    light = base.material("croissant_highlight", (0.86, 0.46, 0.085, 1), 0.54)
+    dark = base.material("croissant_toast", (0.25, 0.055, 0.006, 1), 0.66)
     parts = []
-    for i in range(9):
-        t = i / 8
+    for i in range(11):
+        t = i / 10
         a = math.radians(205 - 230 * t)
-        x, y = math.cos(a) * 0.72, math.sin(a) * 0.50
-        radius = 0.17 + 0.23 * math.sin(math.pi * t)
-        parts.append(base.sphere("segment", (x, y, 0), (radius * 1.25, radius, radius),
-                                 light if i in (3, 5) else gold, 16, 10))
+        x, y = math.cos(a) * 0.76, math.sin(a) * 0.53
+        radius = 0.135 + 0.255 * math.sin(math.pi * t) ** 0.78
+        segment_mat = dark if i in (0, 10) else (light if i in (4, 5, 6) else gold)
+        segment = base.sphere("laminated_segment", (x, y, 0),
+                              (radius * 1.18, radius * 0.88, radius), segment_mat, 16, 10)
+        segment.rotation_euler.z = a - math.pi / 2
+        parts.append(segment)
+        if 0 < i < 10:
+            seam = base.sphere("baked_seam", (x, y - radius * 0.78, radius * 0.54),
+                               (radius * 0.57, radius * 0.070, radius * 0.085), dark, 10, 6)
+            seam.rotation_euler.z = a - math.pi / 2
+            parts.append(seam)
     return base.join(parts, "croissant")
 
 
@@ -405,7 +549,8 @@ if __name__ == "__main__":
             base.export_glb(model, model_name)
             base.render_icon(model, model_name)
 
-    base.wipe()
-    tray = dessert_tray()
-    base.export_glb(tray, "tray_dessert", normalize_item=False)
+    if "--items-only" not in sys.argv:
+        base.wipe()
+        tray = dessert_tray()
+        base.export_glb(tray, "tray_dessert", normalize_item=False)
     print("ALL DONE", base.MODELS, base.ICONS)

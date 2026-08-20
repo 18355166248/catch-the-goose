@@ -29,7 +29,7 @@
       "name": "Cone.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 144
+        "triangleCount": 784
       },
       "ver": "1.1.1",
       "imported": true,
@@ -55,6 +55,22 @@
       ],
       "subMetas": {}
     },
+    "ad645": {
+      "importer": "gltf-material",
+      "uuid": "4e9878cf-e0e7-4c41-baab-f372f11dfba6@ad645",
+      "displayName": "",
+      "id": "ad645",
+      "name": "carrot_ridge.material",
+      "userData": {
+        "gltfIndex": 1
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "e8c0f": {
       "importer": "gltf-material",
       "uuid": "4e9878cf-e0e7-4c41-baab-f372f11dfba6@e8c0f",
@@ -62,7 +78,7 @@
       "id": "e8c0f",
       "name": "carrot_leaf.material",
       "userData": {
-        "gltfIndex": 1
+        "gltfIndex": 2
       },
       "ver": "1.0.14",
       "imported": true,
@@ -100,6 +116,7 @@
       "textures": [],
       "materials": [
         "4e9878cf-e0e7-4c41-baab-f372f11dfba6@aa823",
+        "4e9878cf-e0e7-4c41-baab-f372f11dfba6@ad645",
         "4e9878cf-e0e7-4c41-baab-f372f11dfba6@e8c0f"
       ],
       "scenes": [

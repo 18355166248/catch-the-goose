@@ -13,7 +13,7 @@
       "name": "Cylinder.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1140
+        "triangleCount": 1780
       },
       "ver": "1.1.1",
       "imported": true,
@@ -47,6 +47,22 @@
       "name": "macaron_cream.material",
       "userData": {
         "gltfIndex": 1
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "9076a": {
+      "importer": "gltf-material",
+      "uuid": "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@9076a",
+      "displayName": "",
+      "id": "9076a",
+      "name": "macaron_foot.material",
+      "userData": {
+        "gltfIndex": 2
       },
       "ver": "1.0.14",
       "imported": true,
@@ -100,7 +116,8 @@
       "textures": [],
       "materials": [
         "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@13caf",
-        "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@fed98"
+        "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@fed98",
+        "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@9076a"
       ],
       "scenes": [
         "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@d8e0f"

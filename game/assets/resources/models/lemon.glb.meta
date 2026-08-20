@@ -13,7 +13,7 @@
       "name": "Sphere.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 780
+        "triangleCount": 860
       },
       "ver": "1.1.1",
       "imported": true,
@@ -31,6 +31,22 @@
       "name": "lemon.material",
       "userData": {
         "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "6ce30": {
+      "importer": "gltf-material",
+      "uuid": "9e0078c0-9b1e-45f9-a50e-d43bfe1cc3bb@6ce30",
+      "displayName": "",
+      "id": "6ce30",
+      "name": "lemon_leaf.material",
+      "userData": {
+        "gltfIndex": 1
       },
       "ver": "1.0.14",
       "imported": true,
@@ -83,7 +99,8 @@
       "skeletons": [],
       "textures": [],
       "materials": [
-        "9e0078c0-9b1e-45f9-a50e-d43bfe1cc3bb@6f095"
+        "9e0078c0-9b1e-45f9-a50e-d43bfe1cc3bb@6f095",
+        "9e0078c0-9b1e-45f9-a50e-d43bfe1cc3bb@6ce30"
       ],
       "scenes": [
         "9e0078c0-9b1e-45f9-a50e-d43bfe1cc3bb@3d548"

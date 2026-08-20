@@ -5,22 +5,6 @@
   "uuid": "b67c623b-6e30-47d2-a5e0-51766fafa381",
   "files": [],
   "subMetas": {
-    "17203": {
-      "importer": "gltf-material",
-      "uuid": "b67c623b-6e30-47d2-a5e0-51766fafa381@17203",
-      "displayName": "",
-      "id": "17203",
-      "name": "scal4.material",
-      "userData": {
-        "gltfIndex": 5
-      },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
     "825ed": {
       "importer": "gltf-mesh",
       "uuid": "b67c623b-6e30-47d2-a5e0-51766fafa381@825ed",
@@ -29,7 +13,7 @@
       "name": "Sphere.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1024
+        "triangleCount": 1384
       },
       "ver": "1.1.1",
       "imported": true,
@@ -55,12 +39,12 @@
       ],
       "subMetas": {}
     },
-    "a5370": {
+    "67f2e": {
       "importer": "gltf-material",
-      "uuid": "b67c623b-6e30-47d2-a5e0-51766fafa381@a5370",
+      "uuid": "b67c623b-6e30-47d2-a5e0-51766fafa381@67f2e",
       "displayName": "",
-      "id": "a5370",
-      "name": "scal0.material",
+      "id": "67f2e",
+      "name": "strawberry_leaf.material",
       "userData": {
         "gltfIndex": 1
       },
@@ -71,78 +55,14 @@
       ],
       "subMetas": {}
     },
-    "80efa": {
+    "dd5de": {
       "importer": "gltf-material",
-      "uuid": "b67c623b-6e30-47d2-a5e0-51766fafa381@80efa",
+      "uuid": "b67c623b-6e30-47d2-a5e0-51766fafa381@dd5de",
       "displayName": "",
-      "id": "80efa",
-      "name": "scal1.material",
+      "id": "dd5de",
+      "name": "strawberry_seed.material",
       "userData": {
         "gltfIndex": 2
-      },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
-    "3262c": {
-      "importer": "gltf-material",
-      "uuid": "b67c623b-6e30-47d2-a5e0-51766fafa381@3262c",
-      "displayName": "",
-      "id": "3262c",
-      "name": "scal2.material",
-      "userData": {
-        "gltfIndex": 3
-      },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
-    "7eb70": {
-      "importer": "gltf-material",
-      "uuid": "b67c623b-6e30-47d2-a5e0-51766fafa381@7eb70",
-      "displayName": "",
-      "id": "7eb70",
-      "name": "scal3.material",
-      "userData": {
-        "gltfIndex": 4
-      },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
-    "24e18": {
-      "importer": "gltf-material",
-      "uuid": "b67c623b-6e30-47d2-a5e0-51766fafa381@24e18",
-      "displayName": "",
-      "id": "24e18",
-      "name": "scal5.material",
-      "userData": {
-        "gltfIndex": 6
-      },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
-    "9040d": {
-      "importer": "gltf-material",
-      "uuid": "b67c623b-6e30-47d2-a5e0-51766fafa381@9040d",
-      "displayName": "",
-      "id": "9040d",
-      "name": "sstem.material",
-      "userData": {
-        "gltfIndex": 7
       },
       "ver": "1.0.14",
       "imported": true,
@@ -196,13 +116,8 @@
       "textures": [],
       "materials": [
         "b67c623b-6e30-47d2-a5e0-51766fafa381@a2616",
-        "b67c623b-6e30-47d2-a5e0-51766fafa381@a5370",
-        "b67c623b-6e30-47d2-a5e0-51766fafa381@80efa",
-        "b67c623b-6e30-47d2-a5e0-51766fafa381@3262c",
-        "b67c623b-6e30-47d2-a5e0-51766fafa381@7eb70",
-        "b67c623b-6e30-47d2-a5e0-51766fafa381@17203",
-        "b67c623b-6e30-47d2-a5e0-51766fafa381@24e18",
-        "b67c623b-6e30-47d2-a5e0-51766fafa381@9040d"
+        "b67c623b-6e30-47d2-a5e0-51766fafa381@67f2e",
+        "b67c623b-6e30-47d2-a5e0-51766fafa381@dd5de"
       ],
       "scenes": [
         "b67c623b-6e30-47d2-a5e0-51766fafa381@5c66b"

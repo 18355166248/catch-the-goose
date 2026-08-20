@@ -7,26 +7,32 @@
 用法：
   & "C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe" ^
      --background --python scripts\\gen_fruits.py
-先产出到预览目录 + 渲染对比图；确认质量后再改 OUT 指向 resources/models。
+直接稳定覆盖 resources/models；改动后用 render_model_audit.py 生成统一视角对比图。
 """
 import bpy, os, math, bmesh
+from pathlib import Path
 from mathutils import Vector
 
-OUT = r"C:\Users\Administrator\AppData\Local\Temp\fruit_preview"
+ROOT = Path(__file__).resolve().parents[1]
+OUT = str(ROOT / "game/assets/resources/models")
 os.makedirs(OUT, exist_ok=True)
 
 # ---- 调色板（Principled Base Color，线性值；渲染后可再微调）----
 C = {
     "apple_red":   (0.62, 0.03, 0.03, 1),
+    "apple_blush": (0.92, 0.10, 0.035, 1),
     "leaf":        (0.13, 0.42, 0.09, 1),
     "stem_brown":  (0.24, 0.13, 0.05, 1),
     "banana":      (0.86, 0.66, 0.03, 1),
+    "banana_light":(1.00, 0.84, 0.16, 1),
     "banana_tip":  (0.20, 0.15, 0.04, 1),
     "orange":      (0.85, 0.28, 0.01, 1),
+    "orange_light":(1.00, 0.47, 0.025, 1),
     "grape":       (0.26, 0.07, 0.40, 1),
     "straw_red":   (0.70, 0.04, 0.08, 1),
     "straw_seed":  (0.90, 0.82, 0.30, 1),
     "pear":        (0.52, 0.60, 0.07, 1),
+    "pear_light":  (0.72, 0.77, 0.16, 1),
     "lemon":       (0.90, 0.78, 0.04, 1),
     "cherry":      (0.45, 0.01, 0.06, 1),
 }
@@ -127,14 +133,27 @@ def make_apple():
     # 顶/底轻微凹陷
     bm = bmesh.new(); bm.from_mesh(o.data)
     for v in bm.verts:
+        angle = math.atan2(v.co.y, v.co.x)
+        # Five restrained lobes keep the silhouette organic without turning it into a pumpkin.
+        radial = 1.0 + math.cos(angle * 5.0) * 0.045 * (1.0 - min(abs(v.co.z), 1.0))
+        v.co.x *= radial
+        v.co.y *= radial
         if v.co.z > 0.75:
-            v.co.z -= (v.co.z - 0.75) * 1.3
+            v.co.z -= (v.co.z - 0.75) * 1.55
         if v.co.z < -0.78:
             v.co.z += (-0.78 - v.co.z) * 0.6
     bm.to_mesh(o.data); bm.free()
     o.data.materials.append(mat("apple", C["apple_red"], roughness=0.32))
-    parts = [o] + add_stem_leaf(0.62, mat("stem", C["stem_brown"]),
-                                mat("leaf", C["leaf"]))
+    parts = [o] + add_stem_leaf(0.62, mat("stem", C["stem_brown"], roughness=0.72),
+                                mat("leaf", C["leaf"], roughness=0.48), stem_h=0.34)
+    # A warm cheek-like blush gives the apple a hand-painted casual-game finish.  Keep it almost
+    # flush with the skin so it reads as colour variation rather than a second piece of fruit.
+    blush = uv_sphere(14, 8, r=1.0)
+    blush.location = (-0.48, -0.78, 0.02)
+    blush.scale = (0.26, 0.065, 0.32)
+    blush.rotation_euler.z = math.radians(-122 - 90)
+    blush.data.materials.append(mat("apple_blush", C["apple_blush"], roughness=0.38))
+    parts.append(blush)
     o = join(parts, "apple")
     normalize_export(o, "apple")
 
@@ -163,17 +182,58 @@ def make_banana():
     ob = bpy.context.active_object
     bpy.ops.object.shade_smooth()
     ob.data.materials.append(mat("banana", C["banana"], roughness=0.45))
-    normalize_export(ob, "banana")
+    parts = [ob]
+    tip_mat = mat("banana_tip", C["banana_tip"], roughness=0.72)
+    for x, y, tilt in [(-1.51, -0.56, -22), (1.51, -0.56, 22)]:
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=12, ring_count=8, radius=0.13,
+                                             location=(x, y, 0))
+        tip = bpy.context.active_object
+        tip.scale = (0.55, 0.45, 0.48)
+        tip.rotation_euler.z = math.radians(tilt)
+        tip.data.materials.append(tip_mat)
+        bpy.ops.object.shade_smooth()
+        parts.append(tip)
+    # A thin warm ridge catches light in the game camera and prevents the fruit reading as one flat tube.
+    ridge_curve = bpy.data.curves.new("bananaHighlight", 'CURVE')
+    ridge_curve.dimensions = '3D'; ridge_curve.bevel_depth = 0.035; ridge_curve.bevel_resolution = 2
+    ridge = ridge_curve.splines.new('BEZIER'); ridge.bezier_points.add(2)
+    for point, co in zip(ridge.bezier_points, [(-0.92, 0.08, 0.25), (0, 0.34, 0.30), (0.92, 0.08, 0.25)]):
+        point.co = co; point.handle_left_type = point.handle_right_type = 'AUTO'
+    ridge_obj = bpy.data.objects.new("banana_highlight", ridge_curve)
+    bpy.context.scene.collection.objects.link(ridge_obj)
+    ridge_obj.data.materials.append(mat("banana_light", C["banana_light"], roughness=0.38))
+    bpy.context.view_layer.objects.active = ridge_obj; ridge_obj.select_set(True)
+    bpy.ops.object.convert(target='MESH'); parts.append(bpy.context.active_object)
+    normalize_export(join(parts, "banana"), "banana")
 
 
 def make_orange():
     o = uv_sphere(28, 18)
     o.scale = (1.0, 1.0, 0.94)
     apply_all(o)
+    bm = bmesh.new(); bm.from_mesh(o.data)
+    for v in bm.verts:
+        angle = math.atan2(v.co.y, v.co.x)
+        radial = 1.0 + 0.025 * math.cos(angle * 7.0) * (1.0 - abs(v.co.z))
+        v.co.x *= radial; v.co.y *= radial
+        if v.co.z > 0.78:
+            v.co.z -= (v.co.z - 0.78) * 0.8
+    bm.to_mesh(o.data); bm.free()
     o.data.materials.append(mat("orange", C["orange"], roughness=0.5))
-    parts = [o] + add_stem_leaf(0.66, mat("ostem", C["leaf"]),
-                                mat("oleaf", C["leaf"]), stem_r=0.05,
-                                stem_h=0.12, leaf=False)
+    parts = [o] + add_stem_leaf(0.91, mat("ostem", C["stem_brown"], roughness=0.7),
+                                mat("oleaf", C["leaf"], roughness=0.5), stem_r=0.05,
+                                stem_h=0.22, leaf=True)
+    # Sparse recessed-colour pores survive icon downsampling and break the old plastic-ball read.
+    pore_mat = mat("orange_pore", (0.58, 0.13, 0.004, 1), roughness=0.68)
+    for z, count, phase in [(-0.34, 5, 0.25), (0.08, 6, 0.0), (0.42, 4, 0.5)]:
+        ring_r = math.sqrt(max(0.0, 1.0 - (z / 0.94) ** 2)) * 0.985
+        for i in range(count):
+            a = (i + phase) * math.tau / count
+            bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=0.038,
+                location=(math.cos(a) * ring_r, math.sin(a) * ring_r, z))
+            pore = bpy.context.active_object
+            pore.data.materials.append(pore_mat)
+            parts.append(pore)
     o = join(parts, "orange")
     normalize_export(o, "orange")
 
@@ -213,17 +273,24 @@ def make_strawberry():
         z = v.co.z  # -1..1
         # 归一化高度 0(底)..1(顶)，横向按二次曲线收窄成明显锥形
         h = (z + 1.0) / 2.0
-        f = 0.12 + 0.98 * (h ** 0.75)
-        v.co.x *= f; v.co.y *= f
-        # 底部拉尖、顶部略压平
+        # Classic strawberry profile: narrow tip, broad shoulder, then the sphere's own top taper.
+        # The older model used a near-zero bottom multiplier and became a needle; this keeps the
+        # lower third rounded while preserving a clearly vertical silhouette.
+        f = 0.18 + 1.00 * h ** 0.70
+        # Keep the shoulder broad but make the whole berry distinctly taller than it is wide.
+        # At the game's near-top-down angle this is the difference between "strawberry" and
+        # "small tomato", especially once the green calyx is visible.
+        v.co.x *= f * 0.84; v.co.y *= f * 0.84
+        # Bottom remains pointed but no longer needle-like; top is compressed under the calyx.
         if z < 0:
-            v.co.z = z * 1.45
+            v.co.z = z * 1.58
         else:
-            v.co.z = z * 0.9
+            v.co.z = z * 0.84
     bm.to_mesh(o.data); bm.free()
     o.data.materials.append(mat("straw", C["straw_red"], roughness=0.3))
     # 绿萼：顶部一圈明显小叶 + 短梗
     leaves = []
+    leaf_mat = mat("strawberry_leaf", C["leaf"], roughness=0.52)
     for i in range(6):
         a = i / 6 * math.tau
         bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=0.34,
@@ -232,34 +299,57 @@ def make_strawberry():
         lf.scale = (1.0, 0.42, 0.14)
         lf.rotation_euler = (0, math.radians(48), a)
         bpy.ops.object.shade_smooth()
-        lf.data.materials.append(mat("scal%d" % i, C["leaf"]))
+        lf.data.materials.append(leaf_mat)
         leaves.append(lf)
     bpy.ops.mesh.primitive_cylinder_add(vertices=6, radius=0.06, depth=0.3,
                                         location=(0, 0, 1.0))
     stem = bpy.context.active_object
     bpy.ops.object.shade_smooth()
-    stem.data.materials.append(mat("sstem", C["leaf"]))
+    stem.data.materials.append(leaf_mat)
     leaves.append(stem)
-    o = join([o] + leaves, "strawberry")
+    seed_mat = mat("strawberry_seed", C["straw_seed"], roughness=0.62)
+    seeds = []
+    # Place small seeds on the calculated body surface.  Computing the radius from the exact body
+    # profile keeps them half-embedded instead of floating when the silhouette is tuned later.
+    for z, count, phase in [(-0.62, 5, 0.0), (-0.24, 7, 0.5), (0.20, 6, 0.0)]:
+        original_z = z / (1.58 if z < 0 else 0.84)
+        h = (original_z + 1.0) * 0.5
+        profile = (0.18 + 1.00 * h ** 0.70) * 0.84
+        surface_radius = math.sqrt(max(0.0, 1.0 - original_z * original_z)) * profile
+        for i in range(count):
+            angle = (i + phase) / count * math.tau
+            center_radius = surface_radius + 0.025
+            bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=0.055,
+                location=(math.cos(angle) * center_radius, math.sin(angle) * center_radius, z))
+            seed = bpy.context.active_object
+            seed.scale = (0.72, 0.72, 1.22)
+            seed.data.materials.append(seed_mat)
+            seeds.append(seed)
+    o = join([o] + leaves + seeds, "strawberry")
     normalize_export(o, "strawberry")
 
 
 def make_pear():
-    m = bpy.data.metaballs.new("pm")
-    m.resolution = 0.14; m.threshold = 0.6
-    ob = bpy.data.objects.new("pear", m)
-    bpy.context.scene.collection.objects.link(ob)
-    e1 = m.elements.new(); e1.co = (0, 0, -0.55); e1.radius = 1.0
-    e2 = m.elements.new(); e2.co = (0, 0, 0.5); e2.radius = 0.62
-    e3 = m.elements.new(); e3.co = (0, 0, 1.05); e3.radius = 0.38
-    bpy.context.view_layer.objects.active = ob
-    ob.select_set(True)
-    bpy.ops.object.convert(target='MESH')
-    ob = bpy.context.active_object
-    bpy.ops.object.shade_smooth()
+    ob = uv_sphere(28, 20)
+    bm = bmesh.new(); bm.from_mesh(ob.data)
+    for v in bm.verts:
+        z = v.co.z
+        # One continuous skin replaces the old three-lump metaball silhouette.
+        radial = 0.80 - 0.30 * z + 0.12 * (1.0 - z * z)
+        v.co.x *= radial; v.co.y *= radial
+        v.co.z *= 1.22
+        if z < -0.78:
+            v.co.z += (-0.78 - z) * 0.28
+    bm.to_mesh(ob.data); bm.free()
     ob.data.materials.append(mat("pear", C["pear"], roughness=0.4))
     parts = [ob] + add_stem_leaf(1.35, mat("pstem", C["stem_brown"]),
-                                 mat("pleaf", C["leaf"]), stem_h=0.3, leaf=False)
+                                 mat("pleaf", C["leaf"]), stem_h=0.32, leaf=True)
+    blush = uv_sphere(14, 8, r=1.0)
+    blush.location = (0.46, -0.72, -0.22)
+    blush.scale = (0.22, 0.065, 0.28)
+    blush.rotation_euler.z = math.radians(-58 - 90)
+    blush.data.materials.append(mat("pear_blush", C["pear_light"], roughness=0.46))
+    parts.append(blush)
     ob = join(parts, "pear")
     normalize_export(ob, "pear")
 
@@ -275,7 +365,22 @@ def make_lemon():
             v.co.x *= 1.0 + (t - 0.7) * 0.8
     bm.to_mesh(o.data); bm.free()
     o.data.materials.append(mat("lemon", C["lemon"], roughness=0.5))
-    normalize_export(o, "lemon")
+    leaf = mat("lemon_leaf", C["leaf"], roughness=0.5)
+    parts = [o]
+    tip_mat = mat("lemon_tip", (0.72, 0.58, 0.025, 1), roughness=0.64)
+    for x in (-1.55, 1.55):
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=0.12,
+                                              location=(x, 0, 0))
+        tip = bpy.context.active_object
+        tip.scale = (0.78, 0.82, 0.82)
+        tip.data.materials.append(tip_mat)
+        parts.append(tip)
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=0.25,
+                                          location=(-0.72, 0.02, 0.82))
+    lf = bpy.context.active_object
+    lf.scale = (1.1, 0.48, 0.12); lf.rotation_euler.z = math.radians(-25)
+    lf.data.materials.append(leaf); bpy.ops.object.shade_smooth(); parts.append(lf)
+    normalize_export(join(parts, "lemon"), "lemon")
 
 
 def make_cherry():
@@ -295,7 +400,13 @@ def make_cherry():
         bpy.ops.object.shade_smooth()
         st.data.materials.append(mat("cstem%d" % bend, C["leaf"]))
         stems.append(st)
-    o = join(balls + stems, "cherry")
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=0.22,
+                                          location=(0, 0.04, 1.34))
+    leaf = bpy.context.active_object
+    leaf.scale = (1.5, 0.55, 0.12); leaf.rotation_euler.z = math.radians(18)
+    leaf.data.materials.append(mat("cherry_leaf", C["leaf"], roughness=0.5))
+    bpy.ops.object.shade_smooth()
+    o = join(balls + stems + [leaf], "cherry")
     normalize_export(o, "cherry")
 
 

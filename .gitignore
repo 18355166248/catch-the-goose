@@ -29,6 +29,15 @@ shot-*.png
 # git rm --cached 移出（文件仍留在工作区）。
 qa-*.png
 
+# 模型统一视角审计的逐件帧与迭代目录；只提交 final 下体积较小的主题 JPG 表。
+audit/model-quality/current/
+audit/model-quality/after/
+audit/model-quality/before/
+audit/model-quality/frog-duck-v*/
+audit/model-quality/final/*.png
+audit/runtime/
+
 # Python 工具（scripts/*.py）的 lint 缓存。会生成在运行目录下，
 # 包括 game/assets/ 内部——那是 Cocos 的资源扫描范围，别让它进去。
 .ruff_cache/
+scripts/__pycache__/

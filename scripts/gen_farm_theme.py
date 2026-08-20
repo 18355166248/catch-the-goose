@@ -130,6 +130,27 @@ def cube(name: str, loc, scale, mat, bevel=0.0):
     return obj
 
 
+def curve_tube(name: str, points, bevel: float, mat):
+    """Small low-poly stroke for facial lines and decorative seams."""
+    curve = bpy.data.curves.new(name + "Curve", "CURVE")
+    curve.dimensions = "3D"
+    curve.resolution_u = 2
+    curve.bevel_depth = bevel
+    curve.bevel_resolution = 1
+    spline = curve.splines.new("BEZIER")
+    spline.bezier_points.add(len(points) - 1)
+    for point, co in zip(spline.bezier_points, points):
+        point.co = co
+        point.handle_left_type = point.handle_right_type = "AUTO"
+    obj = bpy.data.objects.new(name, curve)
+    bpy.context.scene.collection.objects.link(obj)
+    obj.data.materials.append(mat)
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    bpy.ops.object.convert(target="MESH")
+    return bpy.context.active_object
+
+
 def join(parts, name: str):
     bpy.ops.object.select_all(action="DESELECT")
     for part in parts:
@@ -222,8 +243,19 @@ def render_icon(obj, name: str) -> None:
 
 def carrot():
     orange = material("carrot_orange", C["orange"], 0.58)
+    ridge = material("carrot_ridge", (1.0, 0.43, 0.07, 1), 0.54)
     green = material("carrot_leaf", C["leaf"], 0.62)
     parts = [cone("root", (0, 0, -0.18), 0.38, 0.08, 1.55, orange, 16)]
+    # Four shallow growth rings break the old single-cone read without changing its proxy shape.
+    for z, radius in [(-0.66, 0.325), (-0.38, 0.275), (-0.10, 0.220), (0.18, 0.165)]:
+        bpy.ops.mesh.primitive_torus_add(major_radius=radius, minor_radius=0.022,
+                                         major_segments=16, minor_segments=5,
+                                         location=(0, 0, z))
+        ring = bpy.context.active_object
+        ring.name = "growth_ring"
+        ring.data.materials.append(ridge)
+        bpy.ops.object.shade_smooth()
+        parts.append(ring)
     for angle in (-0.45, 0, 0.45):
         parts.append(cone("leaf", (math.sin(angle) * 0.16, 0, 0.78),
                           0.13, 0.025, 0.75, green, 8,
@@ -232,9 +264,18 @@ def carrot():
 
 
 def corn():
-    yellow = material("corn_kernel", C["yellow"], 0.52)
+    yellow = material("corn_kernel", (1.0, 0.64, 0.035, 1), 0.54)
+    kernel_light = material("corn_kernel_light", (1.0, 0.82, 0.13, 1), 0.48)
     green = material("corn_husk", C["leaf"], 0.63)
     parts = [sphere("cob", (0, 0, 0.05), (0.48, 0.48, 1.05), yellow, 22, 14)]
+    # Raised kernels create the familiar cob rhythm in top/side views.  Icospheres keep the added
+    # detail under the mobile triangle budget while surviving downsampling better than a texture.
+    for row, z in enumerate((-0.70, -0.47, -0.24, -0.01, 0.22, 0.45, 0.68)):
+        for column in range(8):
+            angle = (column + row * 0.5) * math.tau / 8
+            kernel = ico("kernel", (math.cos(angle) * 0.465, math.sin(angle) * 0.465, z + 0.05),
+                         (0.075, 0.075, 0.105), kernel_light, 1)
+            parts.append(kernel)
     for side in (-1, 1):
         leaf = ico("husk", (0.34 * side, 0, -0.30), (0.22, 0.11, 0.95), green, 2)
         leaf.rotation_euler = (0, math.radians(18 * side), 0)
@@ -244,6 +285,7 @@ def corn():
 
 def eggplant():
     purple = material("eggplant_purple", C["purple"], 0.32)
+    purple_light = material("eggplant_highlight", (0.72, 0.38, 0.82, 1), 0.27)
     green = material("eggplant_calyx", C["leaf"], 0.58)
     parts = [sphere("body", (0, 0, -0.20), (0.58, 0.54, 1.05), purple, 24, 16)]
     for i in range(5):
@@ -254,31 +296,81 @@ def eggplant():
         parts.append(leaf)
     parts.append(cylinder("stem", (0, 0, 1.02), 0.09, 0.42, green, 8,
                             rotation=(0, math.radians(-12), 0)))
+    # One broad, almost flush highlight remains legible after the model is tilted in the basket.
+    parts.append(sphere("skin_highlight", (-0.18, -0.515, 0.06),
+                        (0.070, 0.018, 0.20), purple_light, 12, 8))
     return join(parts, "eggplant")
 
 
 def frog():
-    green = material("frog_green", C["frog"], 0.45)
-    cream = material("frog_belly", C["cream"], 0.62)
-    black = material("frog_eye", C["black"], 0.26)
-    parts = [sphere("body", (0, 0, -0.12), (0.75, 0.63, 0.48), green),
-             sphere("head", (0, -0.08, 0.43), (0.62, 0.54, 0.43), green),
-             sphere("belly", (0, -0.50, -0.06), (0.38, 0.10, 0.29), cream, 16, 10)]
+    green = material("frog_green", (0.18, 0.60, 0.035, 1), 0.48)
+    green_light = material("frog_muzzle", (0.34, 0.72, 0.08, 1), 0.50)
+    green_dark = material("frog_spot", (0.075, 0.36, 0.018, 1), 0.58)
+    cream = material("frog_belly", (0.92, 0.70, 0.16, 1), 0.60)
+    eye_white = material("frog_eye_white", (0.98, 0.93, 0.75, 1), 0.38)
+    iris = material("frog_iris", (0.34, 0.12, 0.025, 1), 0.28)
+    pink = material("frog_cheek", (1.0, 0.44, 0.44, 1), 0.48)
+    black = material("frog_eye", C["black"], 0.24)
+    white = material("frog_eye_glint", C["white"], 0.26)
+    # The concept sheet uses an upright pear body instead of the old wide, prone frog.  The head
+    # overlaps the torso so it still feels compact when tumbling in the basket.
+    parts = [sphere("body", (0, 0.10, -0.06), (0.53, 0.42, 0.65), green, 24, 16),
+             sphere("head", (0, -0.17, 0.56), (0.61, 0.46, 0.43), green, 24, 16),
+             sphere("muzzle", (0, -0.515, 0.47), (0.47, 0.070, 0.25), green_light, 18, 12),
+             sphere("belly", (0, -0.345, -0.05), (0.33, 0.052, 0.47), cream, 18, 12)]
     for side in (-1, 1):
-        parts.append(sphere("eye", (0.34 * side, -0.30, 0.72), (0.16, 0.15, 0.17), green, 16, 10))
-        parts.append(sphere("pupil", (0.34 * side, -0.43, 0.74), (0.065, 0.04, 0.08), black, 12, 8))
-        parts.append(ico("leg", (0.67 * side, 0.08, -0.31), (0.42, 0.24, 0.15), green, 2))
+        # Green rims frame inset cream eyes; layered iris/pupil/glint avoids the old bead-eye look.
+        parts.append(sphere("eye_rim", (0.27 * side, -0.47, 0.82),
+                            (0.195, 0.115, 0.225), green_dark, 16, 10))
+        parts.append(sphere("eye_white", (0.27 * side, -0.555, 0.82),
+                            (0.142, 0.035, 0.174), eye_white, 16, 10))
+        parts.append(sphere("iris", (0.27 * side, -0.590, 0.80),
+                            (0.087, 0.018, 0.112), iris, 12, 8))
+        parts.append(sphere("pupil", (0.27 * side, -0.607, 0.80),
+                            (0.050, 0.010, 0.078), black, 12, 8))
+        parts.append(sphere("eye_glint", (0.245 * side, -0.621, 0.855),
+                            (0.024, 0.007, 0.031), white, 8, 5))
+        parts.append(sphere("cheek", (0.41 * side, -0.590, 0.48),
+                            (0.085, 0.018, 0.060), pink, 12, 8))
+        parts.append(sphere("back_thigh", (0.48 * side, 0.12, -0.22),
+                            (0.30, 0.27, 0.38), green, 18, 12))
+        arm = sphere("front_arm", (0.30 * side, -0.41, -0.10),
+                     (0.105, 0.075, 0.42), green_light, 14, 10)
+        arm.rotation_euler.y = math.radians(7 * side)
+        parts.append(arm)
+        parts.append(sphere("front_palm", (0.31 * side, -0.47, -0.48),
+                            (0.13, 0.11, 0.060), green_light, 12, 8))
+        for toe in (-1, 0, 1):
+            parts.append(sphere("front_toe",
+                                (0.31 * side + toe * 0.055, -0.555, -0.52 + abs(toe) * 0.012),
+                                (0.042, 0.105, 0.040), green_light, 10, 6))
+        # Rear toes peek out beside the body and strengthen the seated silhouette.
+        for toe in (-1, 0, 1):
+            parts.append(sphere("rear_toe",
+                                (0.49 * side + toe * 0.048, -0.17, -0.53 + abs(toe) * 0.012),
+                                (0.044, 0.12, 0.040), green, 10, 6))
+    for side in (-1, 1):
+        for z, x_offset, size in [(0.12, 0.45, 0.055), (0.30, 0.49, 0.043),
+                                  (-0.08, 0.46, 0.040)]:
+            parts.append(sphere("side_spot", (x_offset * side, -0.18, z),
+                                (size, 0.025, size * 0.86), green_dark, 10, 6))
+    for side in (-1, 1):
+        parts.append(sphere("nostril", (0.070 * side, -0.590, 0.57),
+                            (0.018, 0.008, 0.016), green_dark, 8, 5))
+    parts.append(curve_tube("smile", [(-0.24, -0.598, 0.44), (0, -0.645, 0.35),
+                                       (0.24, -0.598, 0.44)], 0.013, green_dark))
     return join(parts, "frog")
 
 
 def pumpkin():
     orange = material("pumpkin_orange", C["orange"], 0.60)
+    orange_light = material("pumpkin_orange_light", (1.0, 0.38, 0.045, 1), 0.56)
     green = material("pumpkin_stem", C["leaf"], 0.66)
     parts = []
     for i in range(8):
         a = i * math.tau / 8
         parts.append(sphere("lobe", (math.cos(a) * 0.24, math.sin(a) * 0.24, 0),
-                            (0.46, 0.46, 0.66), orange, 18, 12))
+                            (0.46, 0.46, 0.66), orange_light if i % 2 == 0 else orange, 18, 12))
     parts.append(cone("stem", (0, 0, 0.72), 0.13, 0.08, 0.42, green, 8))
     return join(parts, "pumpkin")
 
@@ -288,61 +380,155 @@ def mushroom():
     cream = material("mushroom_cream", C["white"], 0.70)
     parts = [sphere("cap", (0, 0, 0.38), (0.82, 0.82, 0.42), red, 24, 14),
              cone("stem", (0, 0, -0.28), 0.28, 0.19, 0.95, cream, 14)]
-    for x, y, s in [(-0.28, -0.52, 0.10), (0.26, -0.57, 0.12),
-                    (0.02, -0.69, 0.08), (0.44, -0.34, 0.07)]:
-        parts.append(sphere("spot", (x, y, 0.50), (s, 0.045, s), cream, 12, 8))
+    for x, y, s in [(-0.30, -0.22, 0.11), (0.28, -0.30, 0.13),
+                    (0.02, 0.04, 0.09), (0.43, 0.10, 0.075), (-0.42, 0.22, 0.07)]:
+        radial = min(0.98, (x * x + y * y) / (0.82 * 0.82))
+        z = 0.38 + 0.42 * math.sqrt(1.0 - radial) + 0.018
+        parts.append(sphere("spot", (x, y, z), (s, s, 0.045), cream, 12, 8))
     return join(parts, "mushroom")
 
 
 def koi():
-    teal = material("koi_teal", C["teal"], 0.30)
-    orange = material("koi_orange", C["orange"], 0.43)
-    white = material("koi_fin", C["white"], 0.60)
+    white = material("koi_pearl", (0.96, 0.91, 0.72, 1), 0.44)
+    orange = material("koi_orange", (0.86, 0.055, 0.012, 1), 0.40)
+    gold = material("koi_scale", (1.0, 0.42, 0.025, 1), 0.48)
+    fin_mat = material("koi_fin", (0.72, 0.025, 0.006, 1), 0.58)
     black = material("koi_eye", C["black"], 0.24)
-    parts = [sphere("body", (0, 0, 0), (1.05, 0.48, 0.43), teal, 24, 14),
-             sphere("patch", (0.24, -0.40, 0.16), (0.31, 0.08, 0.22), orange, 14, 8)]
+    parts = [sphere("body", (0, 0, 0), (1.02, 0.43, 0.38), white, 24, 14),
+             sphere("head_patch", (0.57, -0.34, 0.13), (0.35, 0.075, 0.25), orange, 14, 8),
+             sphere("back_patch", (-0.20, -0.37, 0.16), (0.34, 0.060, 0.20), orange, 14, 8)]
     for side in (-1, 1):
-        tail = ico("tail", (-1.00, 0.34 * side, 0), (0.46, 0.29, 0.10), orange, 1)
-        tail.rotation_euler = (0, 0, math.radians(24 * side))
+        tail = ico("tail_lobe", (-1.02, 0.25 * side, 0), (0.48, 0.28, 0.095), fin_mat, 2)
+        tail.rotation_euler.z = math.radians(25 * side)
         parts.append(tail)
-        parts.append(sphere("eye", (0.70, -0.39, 0.18 * side), (0.07, 0.035, 0.07), black, 10, 6))
-    top_fin = ico("fin", (-0.10, 0, 0.42), (0.38, 0.08, 0.23), white, 1)
-    parts.append(top_fin)
+        fin = ico("side_fin", (0.02, 0.40 * side, -0.01),
+                  (0.38, 0.20, 0.065), fin_mat, 1)
+        fin.rotation_euler.z = math.radians(18 * side)
+        parts.append(fin)
+    # A few raised golden scales provide rhythm without covering the pearl body.
+    for x, y in [(-0.55, -0.38), (-0.30, -0.40), (-0.05, -0.41),
+                 (0.20, -0.39), (-0.42, -0.34), (0.07, -0.36)]:
+        parts.append(sphere("scale", (x, y, 0.08), (0.085, 0.026, 0.060), gold, 10, 6))
+    parts.append(ico("dorsal_fin", (-0.18, 0, 0.38), (0.40, 0.075, 0.20), fin_mat, 1))
+    parts.append(sphere("eye", (0.68, -0.405, 0.18), (0.073, 0.030, 0.073), black, 10, 6))
+    parts.append(sphere("eye_glint", (0.70, -0.433, 0.205), (0.020, 0.009, 0.020), white, 8, 5))
+    parts.append(curve_tube("mouth", [(0.92, -0.39, 0.00), (1.02, -0.405, -0.02)],
+                            0.012, black))
     return join(parts, "koi")
 
 
 def lotus():
-    pink = material("lotus_pink", C["pink"], 0.42)
-    pale = material("lotus_pale", (1.0, 0.65, 0.74, 1), 0.48)
-    yellow = material("lotus_center", C["yellow"], 0.62)
-    parts = [sphere("center", (0, 0, 0.24), (0.25, 0.25, 0.17), yellow, 16, 10)]
-    for ring, count, radius, scale, mat in [
-        (0, 8, 0.48, (0.52, 0.19, 0.18), pink),
-        (1, 6, 0.30, (0.40, 0.15, 0.30), pale),
+    green = material("lotus_pad", (0.08, 0.38, 0.15, 1), 0.68)
+    green_light = material("lotus_pad_vein", (0.22, 0.57, 0.21, 1), 0.64)
+    deep = material("lotus_deep", (0.83, 0.16, 0.39, 1), 0.43)
+    pink = material("lotus_pink", (0.98, 0.42, 0.62, 1), 0.44)
+    pale = material("lotus_pale", (1.0, 0.72, 0.80, 1), 0.50)
+    yellow = material("lotus_center", (1.0, 0.68, 0.035, 1), 0.58)
+    yellow_light = material("lotus_stamen_tip", (1.0, 0.88, 0.24, 1), 0.48)
+    parts = [sphere("lily_pad", (0.16, 0.14, -0.18), (0.88, 0.72, 0.070), green, 24, 10)]
+    # A few broad veins keep the pad readable without competing with the blossom.
+    for angle in (-42, -12, 20, 50):
+        a = math.radians(angle)
+        parts.append(curve_tube("pad_vein", [(0.08, 0.08, -0.105),
+                                                (0.08 + math.cos(a) * 0.53,
+                                                 0.08 + math.sin(a) * 0.43, -0.105)],
+                                0.010, green_light))
+    for ring, count, radius, scale, z, mat in [
+        (0, 12, 0.55, (0.46, 0.16, 0.10), -0.01, deep),
+        (1, 9, 0.37, (0.37, 0.135, 0.18), 0.11, pink),
+        (2, 6, 0.21, (0.25, 0.105, 0.25), 0.24, pale),
     ]:
         for i in range(count):
             a = i * math.tau / count + ring * 0.25
-            petal = ico("petal", (math.cos(a) * radius, math.sin(a) * radius, 0.10 + ring * 0.12),
+            petal = ico("petal", (math.cos(a) * radius, math.sin(a) * radius, z),
                         scale, mat, 2)
-            petal.rotation_euler = (0, math.radians(-18 - ring * 20), a)
+            petal.rotation_euler.z = a
             parts.append(petal)
+    # Keep the seed pod small and surround it with a dense stamen halo.  The old oversized pod and
+    # three dots read as a cartoon face rather than a flower from the game camera.
+    parts.append(sphere("seed_pod", (0, 0, 0.53), (0.135, 0.135, 0.085), yellow, 14, 8))
+    for i in range(12):
+        a = i * math.tau / 12
+        radius = 0.19 if i % 2 else 0.22
+        parts.append(cylinder("stamen", (math.cos(a) * radius, math.sin(a) * radius, 0.50),
+                              0.018, 0.12, yellow, 6))
+        parts.append(sphere("stamen_tip", (math.cos(a) * radius, math.sin(a) * radius, 0.575),
+                            (0.032, 0.032, 0.025), yellow_light, 8, 5))
     return join(parts, "lotus")
 
 
 def duck():
-    yellow = material("duck_yellow", C["yellow"], 0.50)
-    orange = material("duck_bill", C["orange"], 0.58)
-    black = material("duck_eye", C["black"], 0.25)
-    parts = [sphere("body", (0, 0.05, -0.10), (0.86, 0.62, 0.58), yellow),
-             sphere("head", (0.42, -0.08, 0.55), (0.46, 0.43, 0.44), yellow)]
-    bill = ico("bill", (0.82, -0.22, 0.49), (0.34, 0.22, 0.10), orange, 1)
-    parts.append(bill)
+    yellow = material("duck_yellow", (0.96, 0.47, 0.008, 1), 0.48)
+    yellow_light = material("duck_feather_light", (1.0, 0.68, 0.055, 1), 0.53)
+    cream = material("duck_belly", (1.0, 0.78, 0.20, 1), 0.58)
+    orange = material("duck_bill", (1.0, 0.25, 0.012, 1), 0.54)
+    bill_dark = material("duck_bill_shadow", (0.82, 0.16, 0.008, 1), 0.60)
+    eye_white = material("duck_eye_white", (1.0, 0.95, 0.80, 1), 0.36)
+    iris = material("duck_iris", (0.32, 0.10, 0.018, 1), 0.28)
+    black = material("duck_eye", C["black"], 0.24)
+    white = material("duck_eye_glint", C["white"], 0.30)
+    pink = material("duck_cheek", (1.0, 0.42, 0.32, 1), 0.48)
+    # Upright pear body and separate round head follow the approved concept sheet.  This replaces
+    # the old horizontal loaf silhouette that looked more like a chick-shaped bun than a duck.
+    parts = [sphere("body", (0, 0.10, -0.08), (0.53, 0.43, 0.64), yellow, 24, 16),
+             sphere("belly", (0, -0.355, -0.10), (0.34, 0.045, 0.41), cream, 18, 12),
+             sphere("neck", (0, -0.02, 0.48), (0.36, 0.32, 0.29), yellow, 18, 12),
+             sphere("head", (0, -0.13, 0.70), (0.49, 0.43, 0.47), yellow, 24, 16)]
+    parts.append(sphere("bill_upper", (0, -0.575, 0.62),
+                        (0.31, 0.16, 0.095), orange, 16, 10))
+    parts.append(sphere("bill_lower", (0, -0.565, 0.55),
+                        (0.255, 0.13, 0.060), bill_dark, 14, 8))
     for side in (-1, 1):
-        wing = ico("wing", (-0.06, 0.48 * side, 0.04), (0.50, 0.15, 0.28), yellow, 2)
-        wing.rotation_euler = (0, 0, math.radians(8 * side))
+        parts.append(sphere("eye_white", (0.20 * side, -0.510, 0.78),
+                            (0.135, 0.036, 0.165), eye_white, 16, 10))
+        parts.append(sphere("iris", (0.20 * side, -0.545, 0.77),
+                            (0.080, 0.018, 0.105), iris, 12, 8))
+        parts.append(sphere("pupil", (0.20 * side, -0.562, 0.77),
+                            (0.046, 0.010, 0.074), black, 12, 8))
+        parts.append(sphere("eye_glint", (0.178 * side, -0.574, 0.823),
+                            (0.022, 0.007, 0.029), white, 8, 5))
+        parts.append(sphere("cheek", (0.34 * side, -0.535, 0.61),
+                            (0.072, 0.016, 0.052), pink, 10, 6))
+        parts.append(sphere("nostril", (0.085 * side, -0.720, 0.655),
+                            (0.018, 0.008, 0.013), bill_dark, 8, 5))
+        wing = ico("wing", (0.47 * side, 0.02, 0.04),
+                   (0.235, 0.15, 0.38), yellow_light, 2)
+        wing.rotation_euler.y = math.radians(-10 * side)
         parts.append(wing)
-        parts.append(sphere("eye", (0.64, -0.34, 0.68 + 0.0 * side), (0.06, 0.035, 0.06), black, 10, 6))
-        break
+        for feather_index in range(3):
+            feather = ico("wing_feather", (side * (0.49 + feather_index * 0.018),
+                                             -0.145,
+                                             0.04 - feather_index * 0.12),
+                          (0.16 - feather_index * 0.014, 0.030, 0.095), yellow, 1)
+            feather.rotation_euler.y = math.radians(side * (18 - feather_index * 4))
+            parts.append(feather)
+        # Broad palm plus three forward toes gives a readable webbed foot from the game camera.
+        parts.append(sphere("foot_palm", (0.23 * side, -0.16, -0.61),
+                            (0.22, 0.19, 0.060), orange, 12, 8))
+        for toe in (-1, 0, 1):
+            parts.append(sphere("webbed_toe",
+                                (0.23 * side + toe * 0.065, -0.30 - abs(toe) * 0.012, -0.63),
+                                (0.060, 0.17, 0.040), orange, 10, 6))
+    for x, angle in [(-0.12, -15), (0.12, 15)]:
+        tail = ico("tail_feather", (x, 0.48, 0.10), (0.18, 0.25, 0.10), yellow_light, 1)
+        tail.rotation_euler.z = math.radians(angle)
+        parts.append(tail)
+    # Eyebrows and a curved beak seam carry the cheerful expression from the concept sheet.
+    brow = material("duck_brow", (0.56, 0.14, 0.008, 1), 0.58)
+    for side in (-1, 1):
+        parts.append(curve_tube("eyebrow",
+                                [(0.31 * side, -0.515, 0.94),
+                                 (0.21 * side, -0.545, 0.975),
+                                 (0.12 * side, -0.520, 0.95)], 0.011, brow))
+    parts.append(curve_tube("beak_smile", [(-0.22, -0.700, 0.575),
+                                             (0, -0.735, 0.535),
+                                             (0.22, -0.700, 0.575)], 0.010, bill_dark))
+    # Two simple tuft leaves preserve a clean silhouette at small icon size.
+    for side in (-1, 1):
+        tuft = ico("head_tuft", (0.055 * side, -0.04, 1.16),
+                   (0.070, 0.16, 0.060), yellow_light, 1)
+        tuft.rotation_euler.z = math.radians(24 * side)
+        parts.append(tuft)
     return join(parts, "duck")
 
 
@@ -427,7 +613,8 @@ if __name__ == "__main__":
             export_glb(model, model_name)
             render_icon(model, model_name)
 
-    wipe()
-    basket = harvest_basket()
-    export_glb(basket, "basket_farm", normalize_item=False)
+    if "--items-only" not in sys.argv:
+        wipe()
+        basket = harvest_basket()
+        export_glb(basket, "basket_farm", normalize_item=False)
     print("ALL DONE", MODELS, ICONS)
