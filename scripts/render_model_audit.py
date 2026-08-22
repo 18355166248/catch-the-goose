@@ -9,6 +9,7 @@ Optional arguments after ``--``:
   --output <directory>   Override audit/model-quality/current
   --only apple,banana    Render a subset
   --azimuth <degrees>    Rotate models around Z for side/back QA
+  --models-dir <path>    Read GLB candidates from another directory
 """
 from __future__ import annotations
 
@@ -39,6 +40,7 @@ def args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--only", default="")
     parser.add_argument("--azimuth", type=float, default=-8.0)
+    parser.add_argument("--models-dir", type=Path, default=MODELS)
     return parser.parse_args(raw)
 
 
@@ -110,10 +112,10 @@ def setup_scene() -> None:
         light.rotation_euler = (Vector((0, 0, 0)) - light.location).to_track_quat("-Z", "Y").to_euler()
         scene.collection.objects.link(light)
 
-def render(name: str, output: Path, azimuth: float) -> None:
+def render(name: str, output: Path, azimuth: float, models_dir: Path) -> None:
     clear_imported()
     before = set(bpy.context.scene.objects)
-    bpy.ops.import_scene.gltf(filepath=str(MODELS / f"{name}.glb"))
+    bpy.ops.import_scene.gltf(filepath=str(models_dir / f"{name}.glb"))
     imported = [obj for obj in bpy.context.scene.objects if obj not in before]
     meshes = [obj for obj in imported if obj.type == "MESH"]
     if not meshes:
@@ -162,13 +164,15 @@ def main() -> None:
     options = args()
     if not options.output.is_absolute():
         options.output = ROOT / options.output
+    if not options.models_dir.is_absolute():
+        options.models_dir = ROOT / options.models_dir
     requested = {item.strip() for item in options.only.split(",") if item.strip()}
     setup_scene()
     names = list(dict.fromkeys(item for family in THEMES.values() for item in family))
     for name in names:
         if requested and name not in requested:
             continue
-        render(name, options.output, options.azimuth)
+        render(name, options.output, options.azimuth, options.models_dir)
 
 
 if __name__ == "__main__":

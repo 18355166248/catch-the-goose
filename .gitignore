@@ -14,6 +14,8 @@ game/.creator/
 # Codex / 浏览器视觉回归产生的本地截图
 .codex/
 assets-3d/*.png
+# v2 生成脚本先写候选目录，三角度通过后才提升到 Cocos resources；候选 GLB 可重复生成。
+assets-3d/candidates/
 
 # Tripo 原始高模（15MB+，保留本地作源文件，不进仓库）
 assets-3d/*3d model.glb
