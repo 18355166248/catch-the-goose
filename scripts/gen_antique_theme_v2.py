@@ -325,7 +325,128 @@ def make_bracelet(output: Path) -> None:
     )
 
 
-BUILDERS = {"tongqian": make_tongqian, "bracelet": make_bracelet}
+def make_baoshi(output: Path) -> None:
+    # 透明宝石在 Cocos 密堆环境里容易消失，使用不透明深绿基色配合多层切面明度模拟翡翠通透感。
+    emerald_deep = material("baoshi_emerald_deep", (0.008, 0.075, 0.022, 1), metalness=0.02,
+                            roughness=0.28)
+    emerald_mid = material("baoshi_emerald_mid", (0.015, 0.20, 0.055, 1), metalness=0.015,
+                           roughness=0.24)
+    emerald_light = material("baoshi_emerald_highlight", (0.055, 0.39, 0.12, 1), metalness=0.01,
+                             roughness=0.20)
+    antique_gold = material("baoshi_antique_gold", (0.47, 0.20, 0.025, 1), metalness=0.46,
+                            roughness=0.36)
+    gold_recess = material("baoshi_gold_recess", (0.11, 0.025, 0.004, 1), metalness=0.20,
+                           roughness=0.62)
+
+    # 主石使用桌面、冠部、腰棱、亭部四级截面；宽桌面和深亭部比单个规则多面体更像切割宝石。
+    sides = 8
+    vertices = [(0.0, 0.0, 0.44)]
+    levels = [
+        (0.62, 0.44),
+        (0.88, 0.18),
+        (0.92, 0.02),
+        (0.70, -0.34),
+    ]
+    for radius, z in levels:
+        for index in range(sides):
+            angle = math.pi / 8 + index * math.tau / sides
+            vertices.append((radius * math.cos(angle), radius * math.sin(angle), z))
+    vertices.append((0.0, 0.0, -0.48))
+    bottom_index = len(vertices) - 1
+
+    faces = []
+    material_indices = []
+    for index in range(sides):
+        nxt = (index + 1) % sides
+        faces.append((0, 1 + index, 1 + nxt))
+        # 桌面必须是一整块稳定深绿，亮度变化只发生在外围冠部，避免重新读成廉价彩色三角块。
+        material_indices.append(0)
+    for level_index in range(len(levels) - 1):
+        start = 1 + level_index * sides
+        next_start = start + sides
+        for index in range(sides):
+            nxt = (index + 1) % sides
+            faces.extend([(start + index, next_start + index, next_start + nxt),
+                          (start + index, next_start + nxt, start + nxt)])
+            if level_index == 0:
+                material_indices.extend([2 if index in {1, 2} else 1] * 2)
+            elif level_index == 1:
+                material_indices.extend([1] * 2)
+            else:
+                material_indices.extend([0] * 2)
+    last_start = 1 + (len(levels) - 1) * sides
+    for index in range(sides):
+        nxt = (index + 1) % sides
+        faces.append((last_start + index, bottom_index, last_start + nxt))
+        material_indices.append(0)
+
+    mesh = bpy.data.meshes.new("octagonal-cut-jade-mesh")
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+    gem = bpy.data.objects.new("octagonal-cut-jade", mesh)
+    bpy.context.scene.collection.objects.link(gem)
+    for mat in (emerald_deep, emerald_mid, emerald_light):
+        mesh.materials.append(mat)
+    for polygon, mat_index in zip(mesh.polygons, material_indices):
+        polygon.material_index = mat_index
+
+    # 深色八角托底只从腰棱外侧露出，提供古玩镶嵌结构而不会把物件误读成戒指。
+    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=1.04, depth=0.20,
+                                        location=(0, 0, -0.20), rotation=(0, 0, math.pi / 8))
+    base = bpy.context.active_object
+    base.name = "octagonal-setting-base"
+    base.data.materials.append(gold_recess)
+    bevel(base, 0.045, 2)
+
+    bpy.ops.mesh.primitive_torus_add(major_radius=0.945, minor_radius=0.075,
+                                     major_segments=8, minor_segments=6,
+                                     location=(0, 0, 0.055), rotation=(0, 0, math.pi / 8))
+    bezel = bpy.context.active_object
+    bezel.name = "raised-gold-bezel"
+    bezel.data.materials.append(antique_gold)
+
+    # 四爪沿对角线跨过腰棱并与托底重叠，避免只放四个悬浮金块的常见错误。
+    prongs = []
+    for index, angle in enumerate([math.pi / 4, 3 * math.pi / 4, 5 * math.pi / 4,
+                                   7 * math.pi / 4]):
+        radius = 0.82
+        bpy.ops.mesh.primitive_cube_add(size=1.0,
+                                        location=(radius * math.cos(angle),
+                                                  radius * math.sin(angle), 0.20),
+                                        rotation=(0, 0, angle))
+        prong = bpy.context.active_object
+        prong.name = f"protective-prong-{index}"
+        prong.scale = (0.18, 0.34, 0.24)
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        bevel(prong, 0.06, 3)
+        prong.data.materials.append(antique_gold)
+        prongs.append(prong)
+
+    # 八枚低矮莲瓣位于托座外壁，侧视提供节奏；高度受控，不遮挡主石桌面。
+    lotus_panels = []
+    for index in range(sides):
+        angle = index * math.tau / sides
+        radius = 0.94
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=1.0,
+                                              location=(radius * math.cos(angle),
+                                                        radius * math.sin(angle), -0.11))
+        panel = bpy.context.active_object
+        panel.name = f"lotus-panel-{index}"
+        panel.scale = (0.16, 0.30, 0.075)
+        panel.rotation_euler[2] = angle
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+        panel.data.materials.append(antique_gold)
+        lotus_panels.append(panel)
+
+    normalize_export_parts(
+        [gem, base, bezel, join(prongs, "protective-prong-system"),
+         join(lotus_panels, "lotus-setting-panels")],
+        "baoshi",
+        output,
+    )
+
+
+BUILDERS = {"tongqian": make_tongqian, "bracelet": make_bracelet, "baoshi": make_baoshi}
 
 
 def main() -> None:
