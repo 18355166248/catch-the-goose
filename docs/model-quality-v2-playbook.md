@@ -210,7 +210,7 @@ python3 /Users/xmly/.agents/skills/img2threejs/forge/stage2_spec/validate_sculpt
 | 序号 | 主题 | 模型 | 状态 | 提交 |
 | ---: | --- | --- | --- | --- |
 | 1 | 古玩铺 | `tongqian` | 已完成 | 本提交 |
-| 2 | 古玩铺 | `bracelet` | 待评估 | — |
+| 2 | 古玩铺 | `bracelet` | 运行时验收 | 本提交 |
 | 3 | 古玩铺 | `baoshi` | 待评估 | — |
 | 4 | 古玩铺 | `hulu` | 待评估 | — |
 | 5 | 古玩铺 | `yuzhuo` | 待评估 | — |

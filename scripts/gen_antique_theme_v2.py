@@ -218,7 +218,114 @@ def make_tongqian(output: Path) -> None:
     normalize_export_parts([body, outer_rim, inner_rim, glyphs, patina_marks], "tongqian", output)
 
 
-BUILDERS = {"tongqian": make_tongqian}
+def make_bracelet(output: Path) -> None:
+    # 紫晶、鎏金和浅玉必须在古玩铺偏绿环境光下仍能分区，因此不用过高金属度或透明材质。
+    amethyst = material("bracelet_amethyst", (0.30, 0.07, 0.50, 1), metalness=0.04,
+                        roughness=0.30)
+    amethyst_light = material("bracelet_amethyst_highlight", (0.50, 0.16, 0.72, 1),
+                              metalness=0.03, roughness=0.25)
+    antique_gold = material("bracelet_antique_gold", (0.82, 0.43, 0.075, 1),
+                            metalness=0.48, roughness=0.34)
+    gold_shadow = material("bracelet_gold_recess", (0.28, 0.095, 0.018, 1),
+                           metalness=0.25, roughness=0.58)
+    cord_mat = material("bracelet_wine_cord", (0.18, 0.012, 0.035, 1), metalness=0.0,
+                        roughness=0.78)
+    jade = material("bracelet_pale_jade", (0.50, 0.79, 0.61, 1), metalness=0.0,
+                    roughness=0.38)
+
+    # 绳体先建立完整闭环，珠粒之间保留少量间隙，避免旧模型缩小时重新融合成一圈球形噪点。
+    bpy.ops.mesh.primitive_torus_add(major_radius=1.23, minor_radius=0.045,
+                                     major_segments=48, minor_segments=6)
+    cord = bpy.context.active_object
+    cord.name = "elastic-cord"
+    cord.data.materials.append(cord_mat)
+    for polygon in cord.data.polygons:
+        polygon.use_smooth = True
+
+    beads = []
+    spacers = []
+    ring_radius = 1.23
+    spacer_slots = {4, 8, 12}
+    for index in range(16):
+        angle = -math.pi / 2 + index * math.tau / 16
+        x, y = ring_radius * math.cos(angle), ring_radius * math.sin(angle)
+        if index == 0:
+            bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=0.34,
+                                                  location=(x, y, 0.015))
+            focal = bpy.context.active_object
+            focal.name = "focal-gold-bead"
+            focal.scale = (1.08, 0.94, 0.92)
+            bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+            focal.data.materials.append(antique_gold)
+            beads.append(focal)
+        elif index in spacer_slots:
+            bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=0.15,
+                                                 location=(x, y, 0))
+            spacer = bpy.context.active_object
+            spacer.name = f"gold-spacer-{index}"
+            # 隔珠沿圆周方向略扁，正面仍保留足够的金色面积作为节奏点。
+            spacer.scale = (0.78 + 0.20 * abs(math.cos(angle)),
+                            0.78 + 0.20 * abs(math.sin(angle)), 0.82)
+            bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+            spacer.data.materials.append(antique_gold)
+            spacers.append(spacer)
+        else:
+            bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=0.285,
+                                                  location=(x, y, 0))
+            bead = bpy.context.active_object
+            bead.name = f"amethyst-bead-{index:02d}"
+            # 固定序列的微小比例差制造天然珠感，同时保证每次生成完全可复现。
+            scale_variation = (0.97, 1.035, 1.0, 1.055, 0.985)[index % 5]
+            bead.scale = (scale_variation, 1.0 / scale_variation, 0.96 + (index % 3) * 0.025)
+            bead.rotation_euler[2] = index * 0.41
+            bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+            bead.data.materials.append(amethyst_light if index in {2, 7, 13} else amethyst)
+            beads.append(bead)
+
+    # 主珠用原创对称云纹形成明确朝向；采用实体粗线，俯视缩小后仍可见，而非依赖法线贴图。
+    motif_strokes = []
+    motif_sets = [
+        [(-0.21, -1.23), (-0.10, -1.14), (0.0, -1.20), (0.10, -1.14), (0.21, -1.23)],
+        [(-0.18, -1.31), (-0.08, -1.25), (0.0, -1.30), (0.08, -1.25), (0.18, -1.31)],
+        [(0.0, -1.08), (0.0, -1.38)],
+    ]
+    for index, points in enumerate(motif_sets):
+        motif_strokes.append(curve_stroke(f"focal-cloud-{index}", points, 0.315, 0.025,
+                                          gold_shadow))
+    focal_motif = join(motif_strokes, "focal-cloud-relief")
+
+    # 连接环和浅玉坠打破完美圆环轮廓，让手串在散落、旋转时仍有稳定的上下方向。
+    bpy.ops.mesh.primitive_torus_add(major_radius=0.115, minor_radius=0.030,
+                                     major_segments=20, minor_segments=6,
+                                     location=(0, -1.60, 0.0))
+    charm_loop = bpy.context.active_object
+    charm_loop.name = "charm-loop"
+    charm_loop.data.materials.append(antique_gold)
+
+    bpy.ops.mesh.primitive_cone_add(vertices=16, radius1=0.11, radius2=0.065, depth=0.14,
+                                    location=(0, -1.73, 0.0), rotation=(math.pi / 2, 0, 0))
+    charm_cap = bpy.context.active_object
+    charm_cap.name = "charm-cap"
+    charm_cap.data.materials.append(antique_gold)
+    bevel(charm_cap, 0.015, 2)
+
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=0.25,
+                                          location=(0, -1.94, -0.005))
+    charm = bpy.context.active_object
+    charm.name = "pale-jade-charm"
+    charm.scale = (0.70, 1.08, 0.44)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    charm.data.materials.append(jade)
+
+    normalize_export_parts(
+        [cord, join(beads, "bead-system"), join(spacers, "spacer-system"), focal_motif,
+         charm_loop, charm_cap, charm],
+        "bracelet",
+        output,
+    )
+
+
+BUILDERS = {"tongqian": make_tongqian, "bracelet": make_bracelet}
 
 
 def main() -> None:
