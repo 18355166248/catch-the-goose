@@ -9,7 +9,7 @@
      --background --python scripts\\gen_fruits.py
 直接稳定覆盖 resources/models；改动后用 render_model_audit.py 生成统一视角对比图。
 """
-import bpy, os, math, bmesh
+import bpy, os, math, bmesh, sys
 from pathlib import Path
 from mathutils import Vector
 
@@ -104,6 +104,40 @@ def normalize_export(o, name):
     print("BUILT", name, "faces=", len(o.data.polygons))
 
 
+def normalize_export_parts(objects, name):
+    """多部件模型统一归一化后导出，保留部件名供 Cocos 侧完整遍历 MeshRenderer。"""
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in objects:
+        o.select_set(True)
+        bpy.context.view_layer.objects.active = o
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+    lo = Vector((1e9, 1e9, 1e9))
+    hi = Vector((-1e9, -1e9, -1e9))
+    for o in objects:
+        for corner in o.bound_box:
+            point = o.matrix_world @ Vector(corner)
+            lo = Vector(min(lo[i], point[i]) for i in range(3))
+            hi = Vector(max(hi[i], point[i]) for i in range(3))
+    center = (lo + hi) / 2
+    scale = 1.0 / (max(hi - lo) or 1.0)
+
+    # 归一化必须对整套部件使用同一个中心和比例，否则果梗/叶片会在导出时与果体脱节。
+    for o in objects:
+        o.location = (o.location - center) * scale
+        o.scale = (scale, scale, scale)
+        bpy.context.view_layer.objects.active = o
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in objects:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = objects[0]
+    bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, name + ".glb"),
+                              export_format='GLB', use_selection=True)
+    faces = sum(len(o.data.polygons) for o in objects if o.type == 'MESH')
+    print("BUILT", name, "parts=", [o.name for o in objects], "faces=", faces)
+
+
 def add_stem_leaf(top_z, m_stem, m_leaf, stem_r=0.06, stem_h=0.28, leaf=True):
     parts = []
     bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=stem_r, depth=stem_h,
@@ -127,35 +161,169 @@ def add_stem_leaf(top_z, m_stem, m_leaf, stem_r=0.06, stem_h=0.28, leaf=True):
 # ---------------- 各水果 ----------------
 
 def make_apple():
-    o = uv_sphere(28, 18)
-    o.scale = (1.0, 1.0, 0.88)
-    apply_all(o)
-    # 顶/底轻微凹陷
-    bm = bmesh.new(); bm.from_mesh(o.data)
-    for v in bm.verts:
-        angle = math.atan2(v.co.y, v.co.x)
-        # Five restrained lobes keep the silhouette organic without turning it into a pumpkin.
-        radial = 1.0 + math.cos(angle * 5.0) * 0.045 * (1.0 - min(abs(v.co.z), 1.0))
-        v.co.x *= radial
-        v.co.y *= radial
-        if v.co.z > 0.75:
-            v.co.z -= (v.co.z - 0.75) * 1.55
-        if v.co.z < -0.78:
-            v.co.z += (-0.78 - v.co.z) * 0.6
-    bm.to_mesh(o.data); bm.free()
-    o.data.materials.append(mat("apple", C["apple_red"], roughness=0.32))
-    parts = [o] + add_stem_leaf(0.62, mat("stem", C["stem_brown"], roughness=0.72),
-                                mat("leaf", C["leaf"], roughness=0.48), stem_h=0.34)
-    # A warm cheek-like blush gives the apple a hand-painted casual-game finish.  Keep it almost
-    # flush with the skin so it reads as colour variation rather than a second piece of fruit.
-    blush = uv_sphere(14, 8, r=1.0)
-    blush.location = (-0.48, -0.78, 0.02)
-    blush.scale = (0.26, 0.065, 0.32)
-    blush.rotation_euler.z = math.radians(-122 - 90)
-    blush.data.materials.append(mat("apple_blush", C["apple_blush"], roughness=0.38))
-    parts.append(blush)
-    o = join(parts, "apple")
-    normalize_export(o, "apple")
+    def smoothstep(edge0, edge1, value):
+        t = min(1.0, max(0.0, (value - edge0) / (edge1 - edge0)))
+        return t * t * (3.0 - 2.0 * t)
+
+    skin = mat("apple_skin", (0.42, 0.018, 0.014, 1), roughness=0.46)
+    lenticel_mat = mat("apple_lenticel", (0.35, 0.04, 0.025, 1), roughness=0.64)
+    stem_mat = mat("apple_stem", (0.18, 0.07, 0.025, 1), roughness=0.70)
+    stem_cut_mat = mat("apple_stem_cut", (0.38, 0.18, 0.07, 1), roughness=0.58)
+    leaf_mat = mat("apple_leaf", (0.07, 0.22, 0.015, 1), roughness=0.57)
+    leaf_vein_mat = mat("apple_leaf_vein", (0.16, 0.32, 0.025, 1), roughness=0.50)
+
+    # 果皮保持单一连续材质，让五瓣起伏由真实几何和光照表达；避免分面配色或后台贴图写入造成黑块。
+
+    def deform_body(point):
+        """按设计稿连续雕出肩部、顶窝和收窄底部，避免继续从球体上贴装饰补形。"""
+        x, y, z0 = point
+        theta = math.atan2(y, x)
+        radial_xy = math.sqrt(x * x + y * y)
+        shoulder = math.exp(-((z0 - 0.28) / 0.48) ** 2)
+        lower_taper = 1.0 - 0.16 * max(0.0, -z0)
+        lobe_weight = 0.025 + 0.035 * max(0.0, z0) + 0.015 * max(0.0, -z0)
+        lobe = 1.0 + math.cos(theta * 5.0 + 0.18) * lobe_weight
+        asymmetry = 1.0 + 0.018 * math.sin(theta + 0.7) + 0.01 * z0
+        x *= 0.86 * (1.0 + shoulder * 0.07) * lower_taper * lobe * asymmetry
+        y *= 0.80 * (1.0 + shoulder * 0.055) * lower_taper * lobe
+        z = z0 * 0.86
+
+        # 顶窝必须是真实凹面而不是深色贴片；中心压低，五瓣肩部仍保持较高轮廓。
+        if z0 > 0.48:
+            top_weight = smoothstep(0.48, 0.94, z0)
+            cavity = 0.27 * math.exp(-((radial_xy / 0.34) ** 2)) * top_weight
+            z -= cavity
+
+        # 底部中央略抬、五个外侧接触点略低，既呈现花萼感又保留稳定落地面。
+        if z0 < -0.70:
+            base_weight = smoothstep(-0.70, -0.98, z0)
+            foot = -0.76 - 0.055 * (0.5 + 0.5 * math.cos(theta * 5.0 + 0.18)) * min(1.0, radial_xy / 0.45)
+            z = z * (1.0 - base_weight) + foot * base_weight
+        return Vector((x, y, z))
+
+    body = uv_sphere(36, 22)
+    body.name = "fruit-body"
+    for vertex in body.data.vertices:
+        vertex.co = deform_body(vertex.co)
+    body.data.update()
+    body.data.materials.append(skin)
+    for poly in body.data.polygons:
+        poly.use_smooth = True
+
+    # 果皮斑点浅埋进表面，只打断高光；不能像旧版测试方案那样悬浮成凸钉。
+    speckles = []
+    speckle_layout = [
+        (-132, 0.34), (-116, 0.12), (-102, -0.18), (-84, 0.40), (-70, 0.02),
+        (-54, -0.34), (-38, 0.22), (-20, -0.08), (8, 0.30), (28, -0.26),
+    ]
+    for angle_deg, z0 in speckle_layout:
+        theta = math.radians(angle_deg)
+        ring = math.sqrt(max(0.0, 1.0 - z0 * z0))
+        surface = deform_body(Vector((math.cos(theta) * ring, math.sin(theta) * ring, z0)))
+        normal = surface.normalized()
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=1.0, location=surface * 0.994)
+        spot = bpy.context.active_object
+        spot.name = "lenticel"
+        spot.scale = (0.016, 0.016, 0.005)
+        spot.rotation_mode = 'QUATERNION'
+        spot.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(normal)
+        spot.data.materials.append(lenticel_mat)
+        speckles.append(spot)
+    body = join([body] + speckles, "fruit-body")
+
+    # 弯曲渐细果梗从顶窝内部起步，连接前提由重叠量保证，避免中间悬空。
+    stem_curve = bpy.data.curves.new("appleStemCurve", 'CURVE')
+    stem_curve.dimensions = '3D'
+    stem_curve.bevel_depth = 0.085
+    stem_curve.bevel_resolution = 2
+    stem_curve.resolution_u = 4
+    stem_curve.fill_mode = 'FULL'
+    stem_curve.use_fill_caps = True
+    spline = stem_curve.splines.new('BEZIER')
+    spline.bezier_points.add(3)
+    stem_points = [
+        ((0.00, 0.00, 0.60), 1.08),
+        ((-0.01, -0.01, 0.76), 1.00),
+        ((0.02, 0.00, 0.92), 0.82),
+        ((0.08, 0.02, 1.06), 0.64),
+    ]
+    for point, (co, radius) in zip(spline.bezier_points, stem_points):
+        point.co = co
+        point.radius = radius
+        point.handle_left_type = point.handle_right_type = 'AUTO'
+    stem = bpy.data.objects.new("stem", stem_curve)
+    bpy.context.scene.collection.objects.link(stem)
+    stem.data.materials.append(stem_mat)
+    bpy.context.view_layer.objects.active = stem
+    stem.select_set(True)
+    bpy.ops.object.convert(target='MESH')
+    stem = bpy.context.active_object
+    for poly in stem.data.polygons:
+        poly.use_smooth = True
+
+    tangent = Vector((0.06, 0.02, 0.14)).normalized()
+    bpy.ops.mesh.primitive_cylinder_add(vertices=10, radius=0.057, depth=0.028,
+                                         location=(0.08, 0.02, 1.06))
+    stem_cap = bpy.context.active_object
+    stem_cap.name = "faceted-cut-top"
+    stem_cap.rotation_mode = 'QUATERNION'
+    stem_cap.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(tangent)
+    stem_cap.data.materials.append(stem_cut_mat)
+    stem = join([stem, stem_cap], "stem")
+
+    # 叶片使用三列截面形成真实中折，再固化厚度；从任意角度看都不是一张平面卡片。
+    path = [
+        (0.04, 0.82, 0.025), (0.16, 0.90, 0.10), (0.31, 0.96, 0.16),
+        (0.47, 0.97, 0.15), (0.62, 0.92, 0.095), (0.75, 0.84, 0.016),
+    ]
+    leaf_vertices = []
+    for x, z, width in path:
+        leaf_vertices.extend([
+            (x, -width - 0.035, z - 0.018),
+            (x, -0.035, z + 0.035),
+            (x, width - 0.035, z - 0.018),
+        ])
+    leaf_faces = []
+    for i in range(len(path) - 1):
+        a = i * 3
+        b = (i + 1) * 3
+        leaf_faces.extend([(a, b, b + 1, a + 1), (a + 1, b + 1, b + 2, a + 2)])
+    leaf_mesh = bpy.data.meshes.new("appleLeafMesh")
+    leaf_mesh.from_pydata(leaf_vertices, [], leaf_faces)
+    leaf_mesh.update()
+    leaf = bpy.data.objects.new("leaf", leaf_mesh)
+    bpy.context.scene.collection.objects.link(leaf)
+    leaf.data.materials.append(leaf_mat)
+    for poly in leaf.data.polygons:
+        poly.use_smooth = True
+    solidify = leaf.modifiers.new("leafThickness", 'SOLIDIFY')
+    solidify.thickness = 0.035
+    solidify.offset = 0.0
+    bevel = leaf.modifiers.new("leafEdgeSoftness", 'BEVEL')
+    bevel.width = 0.012
+    bevel.segments = 2
+    apply_all(leaf)
+
+    vein_curve = bpy.data.curves.new("appleLeafVein", 'CURVE')
+    vein_curve.dimensions = '3D'
+    vein_curve.bevel_depth = 0.014
+    vein_curve.bevel_resolution = 2
+    vein_curve.resolution_u = 3
+    vein_spline = vein_curve.splines.new('BEZIER')
+    vein_spline.bezier_points.add(len(path) - 1)
+    for point, (x, z, _width) in zip(vein_spline.bezier_points, path):
+        point.co = (x, -0.052, z + 0.048)
+        point.radius = max(0.25, 1.0 - x * 0.85)
+        point.handle_left_type = point.handle_right_type = 'AUTO'
+    vein = bpy.data.objects.new("leaf-midrib", vein_curve)
+    bpy.context.scene.collection.objects.link(vein)
+    vein.data.materials.append(leaf_vein_mat)
+    bpy.context.view_layer.objects.active = vein
+    vein.select_set(True)
+    bpy.ops.object.convert(target='MESH')
+    leaf = join([leaf, bpy.context.active_object], "leaf")
+
+    normalize_export_parts([body, stem, leaf], "apple")
 
 
 def make_banana():
@@ -413,7 +581,13 @@ def make_cherry():
 BUILDERS = [make_apple, make_banana, make_orange, make_grape,
             make_strawberry, make_pear, make_lemon, make_cherry]
 
+requested = set()
+if "--" in sys.argv:
+    requested = {name.strip() for name in sys.argv[sys.argv.index("--") + 1:] if name.strip()}
 for fn in BUILDERS:
+    model_name = fn.__name__.removeprefix("make_")
+    if requested and model_name not in requested:
+        continue
     wipe()
     fn()
 

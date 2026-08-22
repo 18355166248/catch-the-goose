@@ -1,0 +1,18 @@
+{
+  "sourceImage": "/Users/xmly/Swell/code/game-workspace/catch-the-goose/design/fruit-theme/apple-v2/apple-hero-reference-v1.png",
+  "zonesDir": "/Users/xmly/Swell/code/game-workspace/catch-the-goose/design/fruit-theme/apple-v2/detail-crops",
+  "detailInventory": {
+    "scanMethod": "grid-3x3 with direct visual inspection",
+    "targetMinDetails": 8,
+    "details": [
+      {"id":"crown-cavity","kind":"recessed-groove","description":"Deep five-way crown cavity around the stem socket","region":{"x":0.16,"y":0.08,"width":0.56,"height":0.28,"units":"normalized"},"scale":"meso","affects":"form and cavity shading","mapsTo":{"type":"component.localFeatures","ref":"fruit-body:crown-cavity"},"evidenceRef":"detail-crops/zone-r0c1.png","confidence":0.95},
+      {"id":"five-lobe-shoulder","kind":"contour","description":"Five broad asymmetric shoulder lobes interrupt the upper silhouette","region":{"x":0.05,"y":0.13,"width":0.82,"height":0.34,"units":"normalized"},"scale":"macro","affects":"silhouette","mapsTo":{"type":"component.localFeatures","ref":"fruit-body:five-lobe-shoulder"},"evidenceRef":"detail-crops/zone-r0c0.png + zone-r0c1.png + zone-r0c2.png","confidence":0.94},
+      {"id":"five-point-base","kind":"contour","description":"Narrower lower third terminating in a soft five-point base indentation","region":{"x":0.2,"y":0.64,"width":0.5,"height":0.22,"units":"normalized"},"scale":"meso","affects":"silhouette and ground contact","mapsTo":{"type":"component.localFeatures","ref":"fruit-body:five-point-base"},"evidenceRef":"detail-crops/zone-r2c1.png","confidence":0.84},
+      {"id":"coral-blush","kind":"color-patch","description":"Broad coral-red shoulder and cheek variation blended into crimson skin","region":{"x":0.08,"y":0.2,"width":0.72,"height":0.42,"units":"normalized"},"scale":"macro","affects":"albedo","mapsTo":{"type":"material.localOverrides","ref":"skin:coral-blush"},"evidenceRef":"detail-crops/zone-r1c0.png + zone-r1c1.png","confidence":0.92},
+      {"id":"waxy-highlight","kind":"gloss","description":"Broad soft waxy highlight broken by medium roughness instead of a hard plastic hotspot","region":{"x":0.08,"y":0.25,"width":0.72,"height":0.28,"units":"normalized"},"scale":"meso","affects":"roughness and clearcoat","mapsTo":{"type":"material.localOverrides","ref":"skin:broad-wax-highlight"},"evidenceRef":"detail-crops/zone-r1c0.png + zone-r1c1.png","confidence":0.9},
+      {"id":"lenticel-speckles","kind":"surface-speckles","description":"Sparse low-contrast shallow fruit-skin lenticels integrated into the skin","region":{"x":0.07,"y":0.2,"width":0.75,"height":0.56,"units":"normalized"},"scale":"micro","affects":"albedo and bump","mapsTo":{"type":"material.localOverrides","ref":"skin:lenticel-speckles"},"evidenceRef":"detail-crops/zone-r1c1.png + zone-r2c1.png","confidence":0.76},
+      {"id":"stem-taper-grain","kind":"linework","description":"Thick curved stem with taper, faceted cut top, and restrained vertical wood grain","region":{"x":0.37,"y":0.05,"width":0.18,"height":0.26,"units":"normalized"},"scale":"meso","affects":"component form and roughness","mapsTo":{"type":"component.localFeatures","ref":"stem:curved-taper-grain"},"evidenceRef":"detail-crops/zone-r0c1.png","confidence":0.93},
+      {"id":"leaf-fold-vein","kind":"raised-ridge","description":"Leaf with real thickness, central fold, raised vein, and curled tapered tip","region":{"x":0.49,"y":0.08,"width":0.42,"height":0.24,"units":"normalized"},"scale":"meso","affects":"leaf silhouette and shading","mapsTo":{"type":"component.localFeatures","ref":"leaf:fold-vein-tip"},"evidenceRef":"detail-crops/zone-r0c1.png + zone-r0c2.png","confidence":0.94}
+    ]
+  }
+}

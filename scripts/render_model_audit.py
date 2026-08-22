@@ -8,6 +8,7 @@ Optional arguments after ``--``:
 
   --output <directory>   Override audit/model-quality/current
   --only apple,banana    Render a subset
+  --azimuth <degrees>    Rotate models around Z for side/back QA
 """
 from __future__ import annotations
 
@@ -37,6 +38,7 @@ def args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--only", default="")
+    parser.add_argument("--azimuth", type=float, default=-8.0)
     return parser.parse_args(raw)
 
 
@@ -108,7 +110,7 @@ def setup_scene() -> None:
         light.rotation_euler = (Vector((0, 0, 0)) - light.location).to_track_quat("-Z", "Y").to_euler()
         scene.collection.objects.link(light)
 
-def render(name: str, output: Path) -> None:
+def render(name: str, output: Path, azimuth: float) -> None:
     clear_imported()
     before = set(bpy.context.scene.objects)
     bpy.ops.import_scene.gltf(filepath=str(MODELS / f"{name}.glb"))
@@ -137,7 +139,8 @@ def render(name: str, output: Path) -> None:
     scale = 0.92 / size
     pivot.scale = (scale, scale, scale)
     pivot.location = -center * scale
-    pivot.rotation_euler.z = math.radians(-8)
+    # 同一套相机只旋转模型，便于跨版本和多角度检查轮廓、穿插与材质连续性。
+    pivot.rotation_euler.z = math.radians(azimuth)
     bpy.context.view_layer.update()
 
     # Align the model to a shared baseline in the transparent audit frame.
@@ -165,7 +168,7 @@ def main() -> None:
     for name in names:
         if requested and name not in requested:
             continue
-        render(name, options.output)
+        render(name, options.output, options.azimuth)
 
 
 if __name__ == "__main__":

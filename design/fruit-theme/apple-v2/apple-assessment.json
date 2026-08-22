@@ -1,0 +1,340 @@
+{
+  "targetName": "Premium Stylized Apple",
+  "sourceImage": "/Users/xmly/Swell/code/game-workspace/catch-the-goose/design/fruit-theme/apple-v2/apple-hero-reference-v1.png",
+  "preSpecAssessment": {
+    "objectClass": {
+      "primaryType": "stylized game apple prop",
+      "primaryDomain": "object",
+      "formLanguage": [
+        "organic",
+        "botanical-like",
+        "rounded low-poly"
+      ],
+      "structureKind": [
+        "single continuous fruit body",
+        "attached stem",
+        "attached folded leaf",
+        "repeated radial surface features"
+      ],
+      "motionPotential": [
+        "whole-object transform",
+        "physics collectible"
+      ],
+      "materialFamilies": [
+        "waxy fruit skin",
+        "wood stem",
+        "leaf"
+      ],
+      "notes": "The reference shows one premium stylized apple from a three-quarter view; the companion concept sheet supplies side and near-top evidence. The target is a real-time mobile-game collectible exported as GLB, not a photoreal scan."
+    },
+    "complexity": {
+      "tier": "moderate",
+      "scores": {
+        "silhouetteComplexity": 2,
+        "componentCount": 1,
+        "hierarchyDepth": 1,
+        "repetitionDensity": 2,
+        "materialLayerCount": 2,
+        "localDetailDensity": 2,
+        "occlusionRisk": 1,
+        "actionReadinessNeed": 1
+      },
+      "estimatedCounts": {
+        "macroComponents": 3,
+        "mesoComponents": 5,
+        "microFeatureGroups": 8,
+        "materialLayers": 4,
+        "repetitionSystems": 2
+      },
+      "reasoning": [
+        "The fruit body is a continuous sculpt with a five-lobed crown and base, not a scaled sphere.",
+        "The thick stem and folded leaf are separately attached silhouette components.",
+        "Reference fidelity depends on broad shape, cavity depth, regional color variation, waxy roughness variation, and sparse integrated speckles rather than dense geometry."
+      ]
+    },
+    "specDepthDecision": {
+      "requiredDepth": "moderate",
+      "minimumComponentLevels": [
+        "macro",
+        "meso"
+      ],
+      "needsRepetitionSystems": true,
+      "needsMaterialLocalOverrides": true,
+      "needsMultipleReviewViews": true,
+      "needsActionReadyHierarchy": true,
+      "rationale": "Moderate depth is required because the object has only three macro parts but relies on two radial/repeated systems and several localized material/form overrides to avoid reading as a generic red sphere."
+    },
+    "unknownsToResolveBeforeImplementation": [
+      {
+        "id": "hidden-back-surface",
+        "status": "accepted-inference",
+        "note": "The back surface is not shown close-up; continue the same restrained speckle and roughness distribution without inventing new markings."
+      },
+      {
+        "id": "bottom-calyx-depth",
+        "status": "accepted-inference",
+        "note": "The bottom is partially hidden by the ground shadow. Preserve the visible five-point base indentation but keep it shallow enough for stable physics contact."
+      }
+    ],
+    "detailInventory": {
+      "scanMethod": "component-zones",
+      "targetMinDetails": 8,
+      "note": "Enumerate every identity-defining small detail before authoring the spec. Each detail must map to a component.localFeatures entry or material.localOverrides entry, never prose only. Use forge/stage1_intake/build_detail_inventory.py to scan zones.",
+      "details": [
+        {"id":"crown-cavity","kind":"recessed-groove","description":"Deep five-way crown cavity around the stem socket","region":"upper fruit body","scale":"meso","affects":"form and cavity shading","mapsTo":{"type":"component.localFeatures","ref":"fruit-body:crown-cavity"},"evidenceRef":"hero upper center","confidence":0.95},
+        {"id":"five-lobe-shoulder","kind":"contour","description":"Five broad asymmetric shoulder lobes that interrupt the upper silhouette","region":"upper third","scale":"macro","affects":"silhouette","mapsTo":{"type":"component.localFeatures","ref":"fruit-body:five-lobe-shoulder"},"evidenceRef":"hero upper silhouette","confidence":0.94},
+        {"id":"five-point-base","kind":"contour","description":"Narrower lower third terminating in a soft five-point base indentation","region":"lower third","scale":"meso","affects":"silhouette and contact","mapsTo":{"type":"component.localFeatures","ref":"fruit-body:five-point-base"},"evidenceRef":"hero lower silhouette","confidence":0.84},
+        {"id":"coral-blush","kind":"color-patch","description":"Broad coral-red blush across the lit shoulder and cheek, blended into crimson skin","region":"front upper-left and center","scale":"macro","affects":"albedo","mapsTo":{"type":"material.localOverrides","ref":"skin:coral-blush"},"evidenceRef":"hero front surface","confidence":0.92},
+        {"id":"waxy-highlight","kind":"gloss","description":"Broad soft waxy highlight broken by medium roughness, never a hard plastic hotspot","region":"front shoulders","scale":"meso","affects":"roughness and clearcoat","mapsTo":{"type":"material.localOverrides","ref":"skin:broad-wax-highlight"},"evidenceRef":"hero front surface","confidence":0.9},
+        {"id":"lenticel-speckles","kind":"surface-speckles","description":"Sparse, low-contrast shallow fruit-skin lenticels integrated into the surface","region":"fruit skin","scale":"micro","affects":"albedo and bump","mapsTo":{"type":"material.localOverrides","ref":"skin:lenticel-speckles"},"evidenceRef":"hero skin close-up","confidence":0.76},
+        {"id":"stem-taper-grain","kind":"linework","description":"Thick curved stem with taper, faceted cut top, and restrained vertical wood grain","region":"crown socket","scale":"meso","affects":"component form and roughness","mapsTo":{"type":"component.localFeatures","ref":"stem:curved-taper-grain"},"evidenceRef":"hero upper center","confidence":0.93},
+        {"id":"leaf-fold-vein","kind":"raised-ridge","description":"Leaf with real thickness, central fold, raised vein, and a curled tapered tip","region":"stem base","scale":"meso","affects":"leaf silhouette and shading","mapsTo":{"type":"component.localFeatures","ref":"leaf:fold-vein-tip"},"evidenceRef":"hero upper right","confidence":0.94}
+      ]
+    },
+    "anatomy": {
+      "applies": false,
+      "styleHeads": 0.0,
+      "proportions": {
+        "headUnit": 0.0,
+        "torso": 0.0,
+        "legs": 0.0,
+        "shoulderWidth": 0.0,
+        "hipWidth": 0.0
+      },
+      "pose": {
+        "type": "unassessed",
+        "jointAngles": {}
+      },
+      "faceLandmarks": {
+        "eyeLine": 0.0,
+        "eyeSpacing": 0.0,
+        "noseBase": 0.0,
+        "mouthLine": 0.0,
+        "hairline": 0.0
+      },
+      "features": [],
+      "confidence": 0.0,
+      "note": "Only meaningful when objectClass.primaryDomain is character or hybrid. Set applies=true and fill from forge/stage1_intake/extract_landmarks.py. See grimoire/character/reconstruction.md and grimoire/character/likeness_maximization.md."
+    },
+    "sourceImage": "/Users/xmly/Swell/code/game-workspace/catch-the-goose/design/fruit-theme/apple-v2/apple-hero-reference-v1.png"
+  },
+  "qualityContract": {
+    "qualityBar": "moderate",
+    "definitionOfDone": [
+      "At the fixed game-like three-quarter camera the apple reads as a premium five-lobed apple, not a sphere or pumpkin.",
+      "The top cavity remains clearly recessed, while the lower third tapers into a stable soft five-point base.",
+      "The curved stem is visibly embedded in the crown and the folded leaf overlaps its base without a gap.",
+      "Neutral and grazing renders show broad waxy highlights, regional crimson-to-coral variation, cavity darkening, and restrained lenticels without plastic glare.",
+      "The normalized GLB preserves current physics/loading contracts and stays within a 4k-triangle mobile budget."
+    ],
+    "minimumSpecDepth": {
+      "macroComponents": 3,
+      "mesoComponents": 5,
+      "microFeatureGroups": 8,
+      "materialLayers": 4,
+      "repetitionSystems": 2,
+      "reviewViewpoints": 3
+    },
+    "featureGroups": [
+      {
+        "id": "apple-silhouette",
+        "name": "Five-lobed apple silhouette",
+        "required": true,
+        "qualityCriteria": [
+          "Width is concentrated around the upper-middle body, the lower third narrows, and five restrained shoulder lobes remain readable without forming a pumpkin."
+        ],
+        "evidenceRefs": [
+          "hero full silhouette",
+          "concept sheet side and top views"
+        ],
+        "failureModes": [
+          "body reads as a smooth sphere",
+          "radial lobes are deep enough to read as a pumpkin",
+          "bottom remains as wide as the shoulders"
+        ]
+      },
+      {
+        "id": "crown-and-base-form",
+        "name": "Crown cavity and five-point base",
+        "required": true,
+        "qualityCriteria": [
+          "The crown cavity forms a real concave depression around the stem socket and the base ends in a shallow five-point indentation that remains stable on the physics floor."
+        ],
+        "evidenceRefs": [
+          "hero upper center",
+          "concept sheet near-top view",
+          "hero lower silhouette"
+        ],
+        "failureModes": [
+          "stem emerges from a flat cap",
+          "cavity is represented only by dark color",
+          "base is flat or terminates in a sharp unstable point"
+        ]
+      },
+      {
+        "id": "stem-leaf-assembly",
+        "name": "Embedded stem and folded leaf assembly",
+        "required": true,
+        "qualityCriteria": [
+          "The thick curved stem overlaps the crown socket and the leaf overlaps the stem base with visible thickness, central fold, raised vein, and tapered curled tip."
+        ],
+        "evidenceRefs": [
+          "hero upper center and upper right"
+        ],
+        "failureModes": [
+          "stem or leaf floats above the body",
+          "leaf reads as a flat oval",
+          "stem is a perfectly straight uniform cylinder"
+        ]
+      },
+      {
+        "id": "fruit-skin-lookdev",
+        "name": "Waxy fruit skin without plastic glare",
+        "required": true,
+        "qualityCriteria": [
+          "Crimson base, coral shoulder blush, burgundy cavity darkening, medium roughness variation, broad waxy highlight, and sparse low-contrast lenticels remain independently controllable.",
+          "Neutral and grazing light both preserve skin volume without a hard white hotspot."
+        ],
+        "evidenceRefs": [
+          "hero front skin",
+          "hero crown cavity"
+        ],
+        "failureModes": [
+          "skin is one flat red albedo",
+          "highlight reads as polished plastic",
+          "speckles read as protruding beads or high-contrast dirt"
+        ]
+      },
+      {
+        "id": "game-camera-readability",
+        "name": "Mobile game-camera readability and budget",
+        "required": true,
+        "qualityCriteria": [
+          "Crown cavity, one leaf, body taper, and non-spherical silhouette survive the fixed near-top audit camera and icon downsampling.",
+          "The GLB stays normalized to maximum dimension 1.0, uses no floating decorative shells, and remains under 4k triangles."
+        ],
+        "evidenceRefs": [
+          "fixed audit camera",
+          "concept sheet near-top view"
+        ],
+        "failureModes": [
+          "improvement appears only in a hero close-up",
+          "leaf or cavity disappears at game scale",
+          "extra detail exceeds the mobile triangle budget"
+        ]
+      }
+    ],
+    "visualDeltaChecks": [
+      "old near-sphere silhouette versus new upper-heavy tapered silhouette",
+      "old shallow top dent versus new concave five-way crown cavity",
+      "old tiny straight stem/leaf versus new embedded curved stem and folded leaf",
+      "old flat red material versus crimson-coral-burgundy regional response",
+      "fixed-camera readability and triangle-budget delta"
+    ],
+    "antiShallowSpecRules": [
+      "Do not proceed to code if qualityContract.qualityBar is unassessed.",
+      "Do not proceed to code if the spec only contains a root component for a moderate or complex object.",
+      "Do not proceed to code if required featureGroups are not represented by componentTree, materials, or repetitionSystems.",
+      "Do not proceed to code if visible local features are described only in prose and not attached to components/materials/evidenceRefs.",
+      "Do not proceed past structural-pass if attached child parts lack attachment.parentSocket, localStart, localEnd, embedDepth/overlap, and gapTolerance.",
+      "Do not pass material look-dev when albedo is reused as roughness, height, normal, or AO.",
+      "Do not pass material look-dev without macro, meso, and micro surface frequency bands for close-up materials.",
+      "Do not pass reference-fidelity material look-dev from a source image without usable referencePbr maps or an explicit documented limitation.",
+      "Do not patch a spec with extracted PBR maps when extraction confidence is below the target threshold unless the user explicitly accepts lower fidelity.",
+      "Do not place adjacent separate-geometry parts below 0.02 world-unit seam overlap (source: grimoire/build/geometry_patterns.md).",
+      "Do not satisfy raised or recessed relief, fasteners, or grip structure with a map alone when the feature affects form; use geometry or displacement (source: grimoire/build/geometry_patterns.md)."
+    ]
+  },
+  "authoringInstruction": "Fill observed object class, complexity reasoning, featureGroups, visualDeltaChecks, and unknowns before generating or implementing ObjectSculptSpec.",
+  "localSpecSearch": {
+    "collection": "core_3d",
+    "query": "Premium Stylized Apple stylized fruit continuous organic sculpt waxy fruit skin roughness variation leaf attachment central vein",
+    "index": {
+      "status": "hit",
+      "reason": "current",
+      "fingerprint": "6857e5ab528b42ac12f4f411f862610a0bffce8e47aee3610a7603c318072fe8"
+    },
+    "matches": [
+      {
+        "record_id": "core.topology-intent",
+        "file_path": "grimoire/glossary/3d_vocabulary.md",
+        "heading": "Geometry And Topology",
+        "key_path": null,
+        "score": 5.143858634031,
+        "snippets": [
+          "Topology intent classifies a surface as hard-surface blockout, subdivision-ready, low-poly prop, organic deformed mesh, or alpha-card cluster."
+        ],
+        "source_refs": [
+          {
+            "path": "grimoire/glossary/3d_vocabulary.md",
+            "heading": "Geometry And Topology",
+            "key_path": null
+          }
+        ],
+        "evidence_refs": [
+          {
+            "kind": "source",
+            "ref": "grimoire/glossary/3d_vocabulary.md"
+          },
+          {
+            "kind": "notebooklm-research",
+            "ref": "notebooklm:4b03c2f9-8393-411f-b5b4-039ab9532843",
+            "note": "Validated generic schema vocabulary; numeric claims remain backed by local source_refs."
+          }
+        ]
+      },
+      {
+        "record_id": "core.pbr-hand-painted-vs-pbr-texture",
+        "file_path": "docs/raw/img2threejs-skill-dataset.json",
+        "heading": null,
+        "key_path": "categories.material_pbr[12]",
+        "score": 4.988048552479,
+        "snippets": [
+          "Distinguishes textures with lighting baked directly into color (static, stylized) from textures that respond dynamically to scene lighting via separate PBR channels. Phân biệt kết cấu có ánh sáng được nướng trực tiếp vào màu (tĩnh, cách điệu) ..."
+        ],
+        "source_refs": [
+          {
+            "path": "docs/raw/img2threejs-skill-dataset.json",
+            "heading": null,
+            "key_path": "categories.material_pbr[12]"
+          }
+        ],
+        "evidence_refs": [
+          {
+            "kind": "source",
+            "ref": "docs/raw/img2threejs-skill-dataset.json",
+            "note": "img2threejs NotebookLM research distillation"
+          }
+        ]
+      },
+      {
+        "record_id": "core.attachment-contract",
+        "file_path": "grimoire/readiness/joint_attachment.md",
+        "heading": "Attachment Contract",
+        "key_path": null,
+        "score": 4.323254189177,
+        "snippets": [
+          "An attached child records its parent, parent socket, local start and end, contact type, and embed depth or overlap where applicable."
+        ],
+        "source_refs": [
+          {
+            "path": "grimoire/readiness/joint_attachment.md",
+            "heading": "Attachment Contract",
+            "key_path": null
+          }
+        ],
+        "evidence_refs": [
+          {
+            "kind": "source",
+            "ref": "grimoire/readiness/joint_attachment.md"
+          },
+          {
+            "kind": "notebooklm-research",
+            "ref": "notebooklm:4b03c2f9-8393-411f-b5b4-039ab9532843",
+            "note": "Validated generic schema vocabulary; numeric claims remain backed by local source_refs."
+          }
+        ]
+      }
+    ]
+  }
+}
