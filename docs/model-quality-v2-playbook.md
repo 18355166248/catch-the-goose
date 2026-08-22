@@ -211,7 +211,7 @@ python3 /Users/xmly/.agents/skills/img2threejs/forge/stage2_spec/validate_sculpt
 | ---: | --- | --- | --- | --- |
 | 1 | 古玩铺 | `tongqian` | 已完成 | 本提交 |
 | 2 | 古玩铺 | `bracelet` | 已完成 | `2f2d6fc` |
-| 3 | 古玩铺 | `baoshi` | 运行时验收 | 本提交 |
+| 3 | 古玩铺 | `baoshi` | 已完成 | `9764769` |
 | 4 | 古玩铺 | `hulu` | 待评估 | — |
 | 5 | 古玩铺 | `yuzhuo` | 待评估 | — |
 | 6 | 古玩铺 | `banzhi` | 待评估 | — |
