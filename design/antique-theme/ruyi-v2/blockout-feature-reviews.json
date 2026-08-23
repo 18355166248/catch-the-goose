@@ -1,0 +1,23 @@
+[
+  {
+    "id": "continuous-handle-silhouette",
+    "score": 0.95,
+    "threshold": 0.8,
+    "passed": true,
+    "notes": "连续 S 曲线清楚且无节段"
+  },
+  {
+    "id": "three-lobe-cloud-structure",
+    "score": 0.91,
+    "threshold": 0.8,
+    "passed": true,
+    "notes": "三瓣珐琅与金框层次清楚"
+  },
+  {
+    "id": "lilac-peacock-gold-material-system",
+    "score": 0.92,
+    "threshold": 0.75,
+    "passed": true,
+    "notes": "淡紫、孔雀蓝与暖金分区稳定"
+  }
+]

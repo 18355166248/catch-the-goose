@@ -1349,6 +1349,209 @@ def make_yuxi_from_scan(output: Path) -> None:
     )
 
 
+def make_ruyi(output: Path) -> None:
+    """Build a continuous pale-lilac ruyi with a readable enamel cloud head."""
+    lilac = material("ruyi_pale_lilac_jade", (0.64, 0.47, 0.78, 1), metalness=0.0,
+                     roughness=0.27)
+    lilac_light = material("ruyi_milky_lilac_highlight", (0.82, 0.69, 0.90, 1),
+                           metalness=0.0, roughness=0.23)
+    peacock = material("ruyi_peacock_blue_enamel", (0.015, 0.36, 0.43, 1),
+                       metalness=0.06, roughness=0.20)
+    gold = material("ruyi_warm_antique_gold", (0.78, 0.39, 0.065, 1), metalness=0.52,
+                    roughness=0.35)
+    cinnabar = material("ruyi_cinnabar_tassel_knot", (0.72, 0.025, 0.012, 1),
+                        metalness=0.0, roughness=0.38)
+    for polished in (lilac, lilac_light, peacock):
+        principled = polished.node_tree.nodes.get("Principled BSDF")
+        if "Coat Weight" in principled.inputs:
+            principled.inputs["Coat Weight"].default_value = 0.18
+            principled.inputs["Coat Roughness"].default_value = 0.14
+
+    # 淡紫玉不能只靠一个纯色球面高光；嵌入低对比连续玉纹，让柄身转动时仍有温润层次，
+    # 同时避免深色裂纹在手机缩略图里读成黑线。
+    texture_width, texture_height = 256, 64
+    jade_image = bpy.data.images.new("ruyi_continuous_lilac_jade", width=texture_width,
+                                     height=texture_height)
+    jade_pixels: list[float] = []
+    deep_lilac = Vector((0.48, 0.30, 0.62))
+    milk_lilac = Vector((0.78, 0.63, 0.86))
+    for y in range(texture_height):
+        v = y / (texture_height - 1)
+        for x in range(texture_width):
+            u = x / (texture_width - 1)
+            wave = 0.5 + 0.5 * math.sin((u * 3.1 + 0.12 * math.sin(v * math.tau * 2.0)) * math.tau)
+            cloud = 0.5 + 0.5 * math.sin((u * 1.25 - v * 0.72) * math.tau + 0.7)
+            blend = 0.27 + wave * 0.25 + cloud * 0.16
+            color = deep_lilac.lerp(milk_lilac, blend)
+            grain = 0.015 * math.sin((u * 41.0 + v * 17.0) * math.tau)
+            jade_pixels.extend((max(0.0, min(1.0, color.x + grain)),
+                                max(0.0, min(1.0, color.y + grain)),
+                                max(0.0, min(1.0, color.z + grain)), 1.0))
+    jade_image.pixels.foreach_set(jade_pixels)
+    jade_image.pack()
+    lilac_nodes = lilac.node_tree.nodes
+    lilac_links = lilac.node_tree.links
+    jade_texture = lilac_nodes.new("ShaderNodeTexImage")
+    jade_texture.image = jade_image
+    jade_texture.interpolation = "Linear"
+    jade_texture.extension = "REPEAT"
+    lilac_links.new(jade_texture.outputs["Color"], lilac_nodes.get("Principled BSDF").inputs["Base Color"])
+
+    def bezier_tube(name: str, points: list[tuple[float, float, float]], radius: float,
+                    mat: bpy.types.Material, resolution: int = 4) -> bpy.types.Object:
+        curve = bpy.data.curves.new(name, "CURVE")
+        curve.dimensions = "3D"
+        curve.resolution_u = resolution
+        curve.bevel_depth = radius
+        curve.bevel_resolution = 3
+        spline = curve.splines.new("BEZIER")
+        spline.bezier_points.add(len(points) - 1)
+        for point, coordinates in zip(spline.bezier_points, points):
+            point.co = coordinates
+            point.handle_left_type = "AUTO"
+            point.handle_right_type = "AUTO"
+        obj = bpy.data.objects.new(name, curve)
+        bpy.context.scene.collection.objects.link(obj)
+        obj.data.materials.append(mat)
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        bpy.ops.object.convert(target="MESH")
+        return bpy.context.active_object
+
+    def prism(name: str, outline: list[tuple[float, float]], z: float, depth: float,
+              mat: bpy.types.Material, bevel_width: float) -> bpy.types.Object:
+        count = len(outline)
+        vertices = [(x, y, z - depth * 0.5) for x, y in outline]
+        vertices += [(x, y, z + depth * 0.5) for x, y in outline]
+        faces: list[tuple[int, ...]] = [tuple(reversed(range(count))), tuple(range(count, count * 2))]
+        faces.extend((i, (i + 1) % count, (i + 1) % count + count, i + count)
+                     for i in range(count))
+        mesh = bpy.data.meshes.new(f"{name}-mesh")
+        mesh.from_pydata(vertices, [], faces)
+        mesh.update()
+        obj = bpy.data.objects.new(name, mesh)
+        bpy.context.scene.collection.objects.link(obj)
+        obj.data.materials.append(mat)
+        bevel(obj, bevel_width, 3)
+        for polygon in obj.data.polygons:
+            polygon.use_smooth = True
+        return obj
+
+    # 旧版六颗椭球串成柄，旋转时缝隙和节段非常明显；单根自动贝塞尔管保证轮廓与高光连续。
+    handle_path = [
+        (-0.84, -0.38, 0.00), (-0.60, -0.30, 0.015), (-0.34, -0.22, 0.025),
+        (-0.08, -0.13, 0.035), (0.14, -0.02, 0.045), (0.32, 0.16, 0.05),
+    ]
+    handle = bezier_tube("continuous-s-curve-jade-handle", handle_path, 0.105, lilac)
+    # 孔雀蓝脊线嵌在柄的上表面，既强化长向走势，也让缩略图不再只剩一条浅色细棍。
+    spine_path = [(x, y, z + 0.088) for x, y, z in handle_path[1:-1]]
+    spine = bezier_tube("peacock-enamel-handle-inlay", spine_path, 0.027, peacock, 3)
+    # 孔雀蓝脊线两侧各加一根细金丝，三色长向结构在密堆俯视下比孤立色线更精致、更稳定。
+    gold_rails = join([
+        bezier_tube("gold-filigree-rail-upper", [(x, y + 0.038, z + 0.006)
+                    for x, y, z in spine_path], 0.010, gold, 3),
+        bezier_tube("gold-filigree-rail-lower", [(x, y - 0.038, z + 0.006)
+                    for x, y, z in spine_path], 0.010, gold, 3),
+    ], "twin-gold-handle-rails")
+
+    handle_pearl_parts = []
+    for index, (x, y, z) in enumerate((spine_path[0], spine_path[1], spine_path[-1])):
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=12, ring_count=6, radius=1.0,
+                                             location=(x, y, z + 0.018))
+        pearl = bpy.context.active_object
+        pearl.name = f"gold-handle-pearl-{index}"
+        pearl.scale = (0.033, 0.033, 0.020)
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        pearl.data.materials.append(gold)
+        handle_pearl_parts.append(pearl)
+    handle_pearls = join(handle_pearl_parts, "three-gold-handle-pearls")
+
+    cloud = [
+        (0.24, 0.16), (0.35, 0.10), (0.48, 0.15), (0.56, 0.27),
+        (0.63, 0.18), (0.73, 0.11), (0.87, 0.12), (0.99, 0.22),
+        (1.04, 0.36), (1.00, 0.49), (0.89, 0.58), (0.77, 0.58),
+        (0.73, 0.72), (0.65, 0.82), (0.56, 0.87), (0.47, 0.82),
+        (0.39, 0.72), (0.36, 0.59), (0.24, 0.58), (0.15, 0.50),
+        (0.11, 0.37), (0.15, 0.25),
+    ]
+    cloud_body = prism("single-silhouette-three-lobe-cloud-head", cloud, 0.02, 0.16,
+                       lilac_light, 0.045)
+    # 不再把外轮廓等比缩小成一整块蓝色贴片；三枚独立珐琅叶瓣由金丝分隔，形成掐丝层次。
+    enamel_panels = [
+        [(0.25, 0.33), (0.35, 0.24), (0.47, 0.29), (0.51, 0.41),
+         (0.44, 0.51), (0.31, 0.49), (0.23, 0.41)],
+        [(0.67, 0.31), (0.78, 0.22), (0.91, 0.26), (0.96, 0.38),
+         (0.89, 0.49), (0.76, 0.50), (0.67, 0.42)],
+        [(0.45, 0.55), (0.48, 0.69), (0.56, 0.78), (0.64, 0.69),
+         (0.68, 0.55), (0.60, 0.48), (0.52, 0.48)],
+    ]
+    enamel_parts = []
+    panel_border_parts = []
+    for index, panel in enumerate(enamel_panels):
+        enamel_parts.append(prism(f"peacock-enamel-petal-{index}", panel, 0.112, 0.045,
+                                  peacock, 0.023))
+        panel_border_parts.append(curve_stroke(f"gold-cloisonne-wire-{index}",
+                                  panel + [panel[0]], 0.151, 0.014, gold))
+    enamel = join(enamel_parts, "three-peacock-enamel-petals")
+    panel_borders = join(panel_border_parts, "three-gold-cloisonne-wires")
+    gold_border = curve_stroke("continuous-gold-cloud-border", cloud + [cloud[0]],
+                               0.118, 0.026, gold)
+
+    # 三条粗金线对应传统如意的卷云骨架；避免细纹在手机画面中缩成暗噪点。
+    gold_curls = join([
+        curve_stroke("gold-curl-left", [(0.28, 0.42), (0.39, 0.34), (0.49, 0.43)],
+                     0.151, 0.021, gold),
+        curve_stroke("gold-curl-right", [(0.92, 0.42), (0.81, 0.34), (0.69, 0.43)],
+                     0.151, 0.021, gold),
+        curve_stroke("gold-curl-crown", [(0.47, 0.58), (0.56, 0.73), (0.65, 0.58)],
+                     0.151, 0.021, gold),
+    ], "three-gold-cloud-curls")
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=10, radius=1.0,
+                                         location=(0.58, 0.45, 0.18))
+    center_boss = bpy.context.active_object
+    center_boss.name = "warm-gold-cloud-boss"
+    center_boss.scale = (0.095, 0.095, 0.055)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    center_boss.data.materials.append(gold)
+
+    # 尾端用金帽、朱砂结和三束孔雀蓝短穗建立方向，穗根埋入结内，防止运行时看成悬浮线条。
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=10, radius=1.0,
+                                         location=(-0.91, -0.40, 0.0))
+    tail_cap = bpy.context.active_object
+    tail_cap.name = "antique-gold-tail-cap"
+    tail_cap.scale = (0.15, 0.135, 0.115)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    tail_cap.data.materials.append(gold)
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=1.0,
+                                         location=(-1.035, -0.43, 0.0))
+    knot = bpy.context.active_object
+    knot.name = "cinnabar-tassel-knot"
+    knot.scale = (0.09, 0.08, 0.075)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    knot.data.materials.append(cinnabar)
+
+    knot_loops = join([
+        bezier_tube("cinnabar-knot-loop-upper", [(-1.02, -0.42, 0.03),
+                    (-1.07, -0.35, 0.035), (-1.12, -0.42, 0.02)], 0.021, cinnabar, 3),
+        bezier_tube("cinnabar-knot-loop-lower", [(-1.02, -0.44, 0.025),
+                    (-1.07, -0.51, 0.03), (-1.12, -0.44, 0.015)], 0.021, cinnabar, 3),
+    ], "woven-cinnabar-knot-loops")
+    tassels = join([
+        bezier_tube(f"peacock-tassel-{index}", [(-1.08, -0.43 + offset, 0.0),
+                     (-1.20, -0.47 + offset * 1.35, -0.018),
+                     (-1.31 - abs(offset) * 0.35, -0.43 + offset * 1.85, -0.035)],
+                    0.017, peacock, 2)
+        for index, offset in enumerate((-0.065, -0.032, 0.0, 0.032, 0.065))
+    ], "five-peacock-tassels")
+
+    normalize_export_parts(
+        [handle, spine, gold_rails, handle_pearls, cloud_body, enamel, panel_borders,
+         gold_border, gold_curls, center_boss, tail_cap, knot, knot_loops, tassels],
+        "ruyi",
+        output,
+    )
+
+
 BUILDERS = {
     "tongqian": make_tongqian,
     "bracelet": make_bracelet,
@@ -1357,6 +1560,7 @@ BUILDERS = {
     "yuzhuo": make_yuzhuo,
     "banzhi": make_banzhi,
     "yuxi": make_yuxi_from_scan,
+    "ruyi": make_ruyi,
 }
 
 

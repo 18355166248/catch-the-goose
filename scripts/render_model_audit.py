@@ -10,6 +10,7 @@ Optional arguments after ``--``:
   --only apple,banana    Render a subset
   --azimuth <degrees>    Rotate models around Z for side/back QA
   --models-dir <path>    Read GLB candidates from another directory
+  --map-stripped         Replace imported materials with neutral clay for silhouette QA
 """
 from __future__ import annotations
 
@@ -41,6 +42,7 @@ def args() -> argparse.Namespace:
     parser.add_argument("--only", default="")
     parser.add_argument("--azimuth", type=float, default=-8.0)
     parser.add_argument("--models-dir", type=Path, default=MODELS)
+    parser.add_argument("--map-stripped", action="store_true")
     return parser.parse_args(raw)
 
 
@@ -112,7 +114,8 @@ def setup_scene() -> None:
         light.rotation_euler = (Vector((0, 0, 0)) - light.location).to_track_quat("-Z", "Y").to_euler()
         scene.collection.objects.link(light)
 
-def render(name: str, output: Path, azimuth: float, models_dir: Path) -> None:
+def render(name: str, output: Path, azimuth: float, models_dir: Path,
+           map_stripped: bool = False) -> None:
     clear_imported()
     before = set(bpy.context.scene.objects)
     bpy.ops.import_scene.gltf(filepath=str(models_dir / f"{name}.glb"))
@@ -123,6 +126,19 @@ def render(name: str, output: Path, azimuth: float, models_dir: Path) -> None:
         return
     for obj in imported:
         obj["audit_import"] = True
+
+    if map_stripped:
+        # Blockout 必须只审轮廓和体积，统一中性泥材质可避免高饱和颜色或贴图遮住结构缺陷。
+        clay = bpy.data.materials.new("audit-neutral-clay")
+        clay.diffuse_color = (0.55, 0.55, 0.55, 1.0)
+        clay.use_nodes = True
+        principled = clay.node_tree.nodes.get("Principled BSDF")
+        principled.inputs["Base Color"].default_value = (0.55, 0.55, 0.55, 1.0)
+        principled.inputs["Metallic"].default_value = 0.0
+        principled.inputs["Roughness"].default_value = 0.72
+        for obj in meshes:
+            obj.data.materials.clear()
+            obj.data.materials.append(clay)
 
     # GLB files may contain a transform root above their mesh.  Put all imported roots under one
     # audit pivot and transform only that pivot; moving every imported object would apply the same
@@ -172,7 +188,7 @@ def main() -> None:
     for name in names:
         if requested and name not in requested:
             continue
-        render(name, options.output, options.azimuth, options.models_dir)
+        render(name, options.output, options.azimuth, options.models_dir, options.map_stripped)
 
 
 if __name__ == "__main__":
