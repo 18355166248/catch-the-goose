@@ -13,7 +13,7 @@
       "name": "Sphere.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1000
+        "triangleCount": 1300
       },
       "ver": "1.1.1",
       "imported": true,
@@ -71,6 +71,22 @@
       ],
       "subMetas": {}
     },
+    "dea0a": {
+      "importer": "gltf-material",
+      "uuid": "b64105e7-629d-4b28-9671-a6f73806dee4@dea0a",
+      "displayName": "",
+      "id": "dea0a",
+      "name": "orange_pore.material",
+      "userData": {
+        "gltfIndex": 3
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "09d3f": {
       "importer": "gltf-scene",
       "uuid": "b64105e7-629d-4b28-9671-a6f73806dee4@09d3f",
@@ -117,7 +133,8 @@
       "materials": [
         "b64105e7-629d-4b28-9671-a6f73806dee4@07910",
         "b64105e7-629d-4b28-9671-a6f73806dee4@e3a38",
-        "b64105e7-629d-4b28-9671-a6f73806dee4@32a92"
+        "b64105e7-629d-4b28-9671-a6f73806dee4@32a92",
+        "b64105e7-629d-4b28-9671-a6f73806dee4@dea0a"
       ],
       "scenes": [
         "b64105e7-629d-4b28-9671-a6f73806dee4@09d3f"

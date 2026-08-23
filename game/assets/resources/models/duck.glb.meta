@@ -13,7 +13,7 @@
       "name": "Sphere.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1080
+        "triangleCount": 5860
       },
       "ver": "1.1.1",
       "imported": true,
@@ -39,6 +39,22 @@
       ],
       "subMetas": {}
     },
+    "b7a21": {
+      "importer": "gltf-material",
+      "uuid": "78088ee5-13c4-4fec-a0ba-c76c50f00f45@b7a21",
+      "displayName": "",
+      "id": "b7a21",
+      "name": "duck_belly.material",
+      "userData": {
+        "gltfIndex": 1
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "0d5af": {
       "importer": "gltf-material",
       "uuid": "78088ee5-13c4-4fec-a0ba-c76c50f00f45@0d5af",
@@ -46,7 +62,55 @@
       "id": "0d5af",
       "name": "duck_bill.material",
       "userData": {
-        "gltfIndex": 1
+        "gltfIndex": 2
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "575fe": {
+      "importer": "gltf-material",
+      "uuid": "78088ee5-13c4-4fec-a0ba-c76c50f00f45@575fe",
+      "displayName": "",
+      "id": "575fe",
+      "name": "duck_bill_shadow.material",
+      "userData": {
+        "gltfIndex": 3
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "10dab": {
+      "importer": "gltf-material",
+      "uuid": "78088ee5-13c4-4fec-a0ba-c76c50f00f45@10dab",
+      "displayName": "",
+      "id": "10dab",
+      "name": "duck_eye_white.material",
+      "userData": {
+        "gltfIndex": 4
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "88f87": {
+      "importer": "gltf-material",
+      "uuid": "78088ee5-13c4-4fec-a0ba-c76c50f00f45@88f87",
+      "displayName": "",
+      "id": "88f87",
+      "name": "duck_iris.material",
+      "userData": {
+        "gltfIndex": 5
       },
       "ver": "1.0.14",
       "imported": true,
@@ -62,7 +126,71 @@
       "id": "8d412",
       "name": "duck_eye.material",
       "userData": {
-        "gltfIndex": 2
+        "gltfIndex": 6
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "40a65": {
+      "importer": "gltf-material",
+      "uuid": "78088ee5-13c4-4fec-a0ba-c76c50f00f45@40a65",
+      "displayName": "",
+      "id": "40a65",
+      "name": "duck_eye_glint.material",
+      "userData": {
+        "gltfIndex": 7
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "1a789": {
+      "importer": "gltf-material",
+      "uuid": "78088ee5-13c4-4fec-a0ba-c76c50f00f45@1a789",
+      "displayName": "",
+      "id": "1a789",
+      "name": "duck_cheek.material",
+      "userData": {
+        "gltfIndex": 8
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "fb41e": {
+      "importer": "gltf-material",
+      "uuid": "78088ee5-13c4-4fec-a0ba-c76c50f00f45@fb41e",
+      "displayName": "",
+      "id": "fb41e",
+      "name": "duck_feather_light.material",
+      "userData": {
+        "gltfIndex": 9
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "851fc": {
+      "importer": "gltf-material",
+      "uuid": "78088ee5-13c4-4fec-a0ba-c76c50f00f45@851fc",
+      "displayName": "",
+      "id": "851fc",
+      "name": "duck_brow.material",
+      "userData": {
+        "gltfIndex": 10
       },
       "ver": "1.0.14",
       "imported": true,
@@ -116,8 +244,16 @@
       "textures": [],
       "materials": [
         "78088ee5-13c4-4fec-a0ba-c76c50f00f45@02a21",
+        "78088ee5-13c4-4fec-a0ba-c76c50f00f45@b7a21",
         "78088ee5-13c4-4fec-a0ba-c76c50f00f45@0d5af",
-        "78088ee5-13c4-4fec-a0ba-c76c50f00f45@8d412"
+        "78088ee5-13c4-4fec-a0ba-c76c50f00f45@575fe",
+        "78088ee5-13c4-4fec-a0ba-c76c50f00f45@10dab",
+        "78088ee5-13c4-4fec-a0ba-c76c50f00f45@88f87",
+        "78088ee5-13c4-4fec-a0ba-c76c50f00f45@8d412",
+        "78088ee5-13c4-4fec-a0ba-c76c50f00f45@40a65",
+        "78088ee5-13c4-4fec-a0ba-c76c50f00f45@1a789",
+        "78088ee5-13c4-4fec-a0ba-c76c50f00f45@fb41e",
+        "78088ee5-13c4-4fec-a0ba-c76c50f00f45@851fc"
       ],
       "scenes": [
         "78088ee5-13c4-4fec-a0ba-c76c50f00f45@70f33"

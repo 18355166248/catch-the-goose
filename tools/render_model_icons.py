@@ -1,11 +1,26 @@
 import bpy
 import math
 import os
+import sys
+from pathlib import Path
 from mathutils import Vector
 
 
-SOURCE_DIR = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\models"
-OUTPUT_DIR = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\icons"
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE_DIR = ROOT / "game/assets/resources/models"
+OUTPUT_DIR = ROOT / "game/assets/resources/icons"
+
+
+def requested_model_ids() -> set[str]:
+    """Allow `-- hulu,yuxi` so one model update never rewrites every icon."""
+    if "--" not in sys.argv:
+        return set()
+    return {
+        item.strip()
+        for argument in sys.argv[sys.argv.index("--") + 1:]
+        for item in argument.split(",")
+        if item.strip()
+    }
 
 
 def look_at(obj, target):
@@ -82,7 +97,8 @@ def render_icon(source_path, output_path):
     add_light('Rim', (1.0, 4.5, 4.0), 720, 3.0, (0.75, 1.0, 0.86))
 
     scene = bpy.context.scene
-    scene.render.engine = 'BLENDER_EEVEE_NEXT'
+    engines = bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items.keys()
+    scene.render.engine = "BLENDER_EEVEE_NEXT" if "BLENDER_EEVEE_NEXT" in engines else "BLENDER_EEVEE"
     scene.render.resolution_x = 192
     scene.render.resolution_y = 192
     scene.render.resolution_percentage = 100
@@ -95,8 +111,11 @@ def render_icon(source_path, output_path):
     bpy.ops.render.render(write_still=True)
 
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-for filename in sorted(os.listdir(SOURCE_DIR)):
-    if filename.lower().endswith('.glb'):
-        model_id = os.path.splitext(filename)[0]
-        render_icon(os.path.join(SOURCE_DIR, filename), os.path.join(OUTPUT_DIR, f'{model_id}.png'))
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+requested = requested_model_ids()
+for source_path in sorted(SOURCE_DIR.glob("*.glb")):
+    model_id = source_path.stem
+    if requested and model_id not in requested:
+        continue
+    render_icon(str(source_path), str(OUTPUT_DIR / f"{model_id}.png"))
+    print("ICON", model_id)

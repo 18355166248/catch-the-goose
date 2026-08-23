@@ -21,6 +21,22 @@
       ],
       "subMetas": {}
     },
+    "53752": {
+      "importer": "gltf-material",
+      "uuid": "9db8b076-5074-48a1-b899-5a447b1e4724@53752",
+      "displayName": "",
+      "id": "53752",
+      "name": "frog_iris.material",
+      "userData": {
+        "gltfIndex": 5
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "825ed": {
       "importer": "gltf-mesh",
       "uuid": "9db8b076-5074-48a1-b899-5a447b1e4724@825ed",
@@ -29,7 +45,7 @@
       "name": "Sphere.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 2240
+        "triangleCount": 8128
       },
       "ver": "1.1.1",
       "imported": true,
@@ -55,6 +71,22 @@
       ],
       "subMetas": {}
     },
+    "cf1ab": {
+      "importer": "gltf-material",
+      "uuid": "9db8b076-5074-48a1-b899-5a447b1e4724@cf1ab",
+      "displayName": "",
+      "id": "cf1ab",
+      "name": "frog_muzzle.material",
+      "userData": {
+        "gltfIndex": 1
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "76a05": {
       "importer": "gltf-material",
       "uuid": "9db8b076-5074-48a1-b899-5a447b1e4724@76a05",
@@ -62,7 +94,39 @@
       "id": "76a05",
       "name": "frog_belly.material",
       "userData": {
-        "gltfIndex": 1
+        "gltfIndex": 2
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "c8cbf": {
+      "importer": "gltf-material",
+      "uuid": "9db8b076-5074-48a1-b899-5a447b1e4724@c8cbf",
+      "displayName": "",
+      "id": "c8cbf",
+      "name": "frog_spot.material",
+      "userData": {
+        "gltfIndex": 3
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "3fbb1": {
+      "importer": "gltf-material",
+      "uuid": "9db8b076-5074-48a1-b899-5a447b1e4724@3fbb1",
+      "displayName": "",
+      "id": "3fbb1",
+      "name": "frog_eye_white.material",
+      "userData": {
+        "gltfIndex": 4
       },
       "ver": "1.0.14",
       "imported": true,
@@ -78,7 +142,39 @@
       "id": "ee4e4",
       "name": "frog_eye.material",
       "userData": {
-        "gltfIndex": 2
+        "gltfIndex": 6
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "d94bd": {
+      "importer": "gltf-material",
+      "uuid": "9db8b076-5074-48a1-b899-5a447b1e4724@d94bd",
+      "displayName": "",
+      "id": "d94bd",
+      "name": "frog_eye_glint.material",
+      "userData": {
+        "gltfIndex": 7
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "bcb3a": {
+      "importer": "gltf-material",
+      "uuid": "9db8b076-5074-48a1-b899-5a447b1e4724@bcb3a",
+      "displayName": "",
+      "id": "bcb3a",
+      "name": "frog_cheek.material",
+      "userData": {
+        "gltfIndex": 8
       },
       "ver": "1.0.14",
       "imported": true,
@@ -116,8 +212,14 @@
       "textures": [],
       "materials": [
         "9db8b076-5074-48a1-b899-5a447b1e4724@3e380",
+        "9db8b076-5074-48a1-b899-5a447b1e4724@cf1ab",
         "9db8b076-5074-48a1-b899-5a447b1e4724@76a05",
-        "9db8b076-5074-48a1-b899-5a447b1e4724@ee4e4"
+        "9db8b076-5074-48a1-b899-5a447b1e4724@c8cbf",
+        "9db8b076-5074-48a1-b899-5a447b1e4724@3fbb1",
+        "9db8b076-5074-48a1-b899-5a447b1e4724@53752",
+        "9db8b076-5074-48a1-b899-5a447b1e4724@ee4e4",
+        "9db8b076-5074-48a1-b899-5a447b1e4724@d94bd",
+        "9db8b076-5074-48a1-b899-5a447b1e4724@bcb3a"
       ],
       "scenes": [
         "9db8b076-5074-48a1-b899-5a447b1e4724@45178"

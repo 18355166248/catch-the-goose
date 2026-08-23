@@ -1,0 +1,11 @@
+Model Information:
+* title:	Chinese guardian lion
+* source:	https://sketchfab.com/3d-models/chinese-guardian-lion-afdb632cc23f4c0c9bbaa1100010039f
+* author:	rvscanners (https://sketchfab.com/rvscanners)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Chinese guardian lion" (https://sketchfab.com/3d-models/chinese-guardian-lion-afdb632cc23f4c0c9bbaa1100010039f) by rvscanners (https://sketchfab.com/rvscanners) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

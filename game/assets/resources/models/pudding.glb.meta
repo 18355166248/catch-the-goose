@@ -29,7 +29,7 @@
       "name": "Cone.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 472
+        "triangleCount": 1780
       },
       "ver": "1.1.1",
       "imported": true,
@@ -63,6 +63,22 @@
       "name": "pudding_caramel.material",
       "userData": {
         "gltfIndex": 1
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "29cd4": {
+      "importer": "gltf-material",
+      "uuid": "514bfbff-858e-4ec7-9769-8dfabf6a86a9@29cd4",
+      "displayName": "",
+      "id": "29cd4",
+      "name": "pudding_cherry.material",
+      "userData": {
+        "gltfIndex": 3
       },
       "ver": "1.0.14",
       "imported": true,
@@ -117,7 +133,8 @@
       "materials": [
         "514bfbff-858e-4ec7-9769-8dfabf6a86a9@ddb4d",
         "514bfbff-858e-4ec7-9769-8dfabf6a86a9@56bb2",
-        "514bfbff-858e-4ec7-9769-8dfabf6a86a9@71240"
+        "514bfbff-858e-4ec7-9769-8dfabf6a86a9@71240",
+        "514bfbff-858e-4ec7-9769-8dfabf6a86a9@29cd4"
       ],
       "scenes": [
         "514bfbff-858e-4ec7-9769-8dfabf6a86a9@cae7e"

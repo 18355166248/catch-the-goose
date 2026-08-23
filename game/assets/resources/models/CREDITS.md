@@ -8,6 +8,17 @@
 | `baoshi`（翡翠宝石） | Gem | Quaternius | CC0（公有领域） | https://poly.pizza/m/kbgiCMzdxg |
 | `yushi`（玉石簇） | Big Crystal | Quaternius | CC0（公有领域） | https://poly.pizza/m/pf5lzmgr2J |
 
+玉玺 `yuxi` 的狮钮基于 Sketchfab 扫描模型：
+
+| 游戏内 id | 原模型 | 作者 | 许可 | 来源 |
+|---|---|---|---|---|
+| `yuxi`（玉玺狮钮） | Chinese guardian lion | rvscanners | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | https://sketchfab.com/3d-models/chinese-guardian-lion-afdb632cc23f4c0c9bbaa1100010039f |
+
+本项目对狮钮做了分片体素融合、移动端减面、尺度归一化、暖玉与古金材质重建，并与原创
+玉玺印台、朱砂回纹组合。原始下载件未纳入版本库；处理脚本与完整署名见
+`scripts/prepare_yuxi_guardian_source.py` 和
+`assets-3d/sources/yuxi/rvscanners-chinese-guardian-lion/ATTRIBUTION.md`。
+
 ## ⚠️ 注意
 
 - CC0 模型（Quaternius）：可自由使用，无需署名，无附加限制。
@@ -28,5 +39,6 @@
 `candy`、`pudding`、`croissant` 与 `tray_dessert` 同样是原创程序化模型，生成脚本为
 `scripts/gen_dessert_theme.py`，设计记录见 `design/dessert-theme/README.md`。
 
-古玩铺补充的 `yuxi` 与 `ruyi` 由 `scripts/gen_antique_additions.py` 生成，用于把大师关
-补齐到 9 种；设计记录见 `design/antique-additions/README.md`。
+古玩铺的 `ruyi` 由 `scripts/gen_antique_additions.py` 生成；`yuxi` 的印台与装饰由
+`scripts/gen_antique_theme_v2.py` 生成，狮钮来源和修改说明见上文。设计记录见
+`design/antique-additions/README.md`。

@@ -13,7 +13,7 @@
       "name": "Sphere.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1112
+        "triangleCount": 1308
       },
       "ver": "1.1.1",
       "imported": true,
@@ -71,6 +71,22 @@
       ],
       "subMetas": {}
     },
+    "0cbd8": {
+      "importer": "gltf-material",
+      "uuid": "c957e9f4-c98b-48ae-a929-b6164f5acda2@0cbd8",
+      "displayName": "",
+      "id": "0cbd8",
+      "name": "pear_blush.material",
+      "userData": {
+        "gltfIndex": 3
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "08e44": {
       "importer": "gltf-scene",
       "uuid": "c957e9f4-c98b-48ae-a929-b6164f5acda2@08e44",
@@ -117,7 +133,8 @@
       "materials": [
         "c957e9f4-c98b-48ae-a929-b6164f5acda2@55dee",
         "c957e9f4-c98b-48ae-a929-b6164f5acda2@14fe9",
-        "c957e9f4-c98b-48ae-a929-b6164f5acda2@bbe21"
+        "c957e9f4-c98b-48ae-a929-b6164f5acda2@bbe21",
+        "c957e9f4-c98b-48ae-a929-b6164f5acda2@0cbd8"
       ],
       "scenes": [
         "c957e9f4-c98b-48ae-a929-b6164f5acda2@08e44"

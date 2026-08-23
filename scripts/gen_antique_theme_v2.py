@@ -468,28 +468,66 @@ def make_baoshi(output: Path) -> None:
 
 
 def make_hulu(output: Path) -> None:
-    # 用户确认采用高饱和蜜蜡琥珀方向；颜色分层靠实体切面与明暗材质，不使用会在密堆中消失的透明。
-    amber_deep = material("hulu_burnt_amber", (0.20, 0.028, 0.001, 1), metalness=0.0,
-                          roughness=0.30)
-    amber_mid = material("hulu_honey_amber", (0.58, 0.14, 0.003, 1), metalness=0.0,
-                         roughness=0.24)
-    amber_light = material("hulu_golden_highlight", (0.85, 0.30, 0.010, 1), metalness=0.0,
-                           roughness=0.20)
-    amber_relief = material("hulu_amber_relief", (0.36, 0.060, 0.002, 1), metalness=0.0,
+    # 旧版用三段扇形材质制造明暗，随机旋转后深棕扇区会整块朝向镜头，游戏里近乎发黑。
+    # 改为连续蜜蜡纹理：保留明暗变化，但把最低明度抬高，并让色带跨面平滑流动。
+    amber = bpy.data.materials.new("hulu_sunlit_honey_amber")
+    amber.use_nodes = True
+    amber_principled = amber.node_tree.nodes.get("Principled BSDF")
+    amber_principled.inputs["Metallic"].default_value = 0.0
+    amber_principled.inputs["Roughness"].default_value = 0.24
+    if "Coat Weight" in amber_principled.inputs:
+        amber_principled.inputs["Coat Weight"].default_value = 0.18
+        amber_principled.inputs["Coat Roughness"].default_value = 0.16
+
+    texture_width = 512
+    texture_height = 256
+    amber_image = bpy.data.images.new("hulu_continuous_honey_wax",
+                                      width=texture_width, height=texture_height)
+    amber_pixels = []
+    amber_shadow = Vector((0.62, 0.24, 0.025))
+    amber_base = Vector((0.95, 0.50, 0.080))
+    amber_highlight = Vector((1.00, 0.74, 0.19))
+    for y in range(texture_height):
+        v = y / (texture_height - 1)
+        for x in range(texture_width):
+            u = x / (texture_width - 1)
+            theta = u * math.tau
+            flowing = (0.52 * math.sin(theta * 2.0 + v * 4.2)
+                       + 0.24 * math.sin(theta * 5.0 - v * 7.0)
+                       + 0.10 * math.cos(theta * 11.0 + v * 13.0))
+            amount = 0.5 + 0.5 * max(-1.0, min(1.0, flowing))
+            color = amber_shadow.lerp(amber_base, min(1.0, amount * 1.45))
+            color = color.lerp(amber_highlight, max(0.0, amount - 0.58) * 1.45)
+            # 小幅乳蜡颗粒只打散纯色，不生成会在缩略图里变脏的黑斑。
+            wax = 0.018 * math.sin(theta * 19.0 + v * 31.0) * math.sin(theta * 7.0 - v * 17.0)
+            amber_pixels.extend((max(0.0, min(1.0, color.x + wax)),
+                                 max(0.0, min(1.0, color.y + wax)),
+                                 max(0.0, min(1.0, color.z + wax)), 1.0))
+    amber_image.pixels.foreach_set(amber_pixels)
+    amber_image.pack()
+    amber_texture = amber.node_tree.nodes.new("ShaderNodeTexImage")
+    amber_texture.image = amber_image
+    amber_texture.interpolation = "Linear"
+    amber_texture.extension = "REPEAT"
+    amber.node_tree.links.new(amber_texture.outputs["Color"],
+                              amber_principled.inputs["Base Color"])
+
+    amber_relief = material("hulu_golden_cloud_relief", (0.96, 0.52, 0.060, 1), metalness=0.12,
+                            roughness=0.25)
+    antique_gold = material("hulu_antique_gold", (0.78, 0.40, 0.060, 1), metalness=0.46,
                             roughness=0.32)
-    antique_gold = material("hulu_antique_gold", (0.36, 0.105, 0.009, 1), metalness=0.46,
-                            roughness=0.36)
-    vermilion = material("hulu_vermilion_cord", (0.55, 0.015, 0.008, 1), metalness=0.0,
-                         roughness=0.66)
-    cord_shadow = material("hulu_cord_shadow", (0.18, 0.003, 0.002, 1), metalness=0.0,
-                           roughness=0.82)
+    vermilion = material("hulu_vermilion_cord", (0.76, 0.025, 0.008, 1), metalness=0.0,
+                         roughness=0.58)
+    cord_shadow = material("hulu_cord_shadow", (0.32, 0.008, 0.004, 1), metalness=0.0,
+                           roughness=0.74)
 
     # 一张连续旋转曲面连接双肚与短腰；轮廓宽高接近，避免旧模型的两球拼接和前稿的细长瓶形。
-    segments = 32
+    segments = 48
     profile = [
-        (0.28, -1.00), (0.70, -0.95), (0.90, -0.73), (0.97, -0.40),
-        (0.91, -0.10), (0.49, 0.055),  # 腰部纵向极短，只承担明确收束。
-        (0.64, 0.15), (0.76, 0.38), (0.70, 0.64), (0.43, 0.82), (0.29, 0.88),
+        (0.28, -1.45), (0.68, -1.35), (0.92, -1.05), (0.99, -0.68),
+        (0.90, -0.32), (0.68, -0.08), (0.38, 0.10),  # 下肚纵向拉满，保持宽而不扁。
+        (0.43, 0.18), (0.57, 0.37), (0.64, 0.60), (0.55, 0.84),
+        (0.36, 1.04), (0.24, 1.13),
     ]
     vertices = []
     for ring_index, (radius, z) in enumerate(profile):
@@ -500,7 +538,6 @@ def make_hulu(output: Path) -> None:
             vertices.append((radius * rib * math.cos(angle),
                              radius * rib * math.sin(angle), z))
     faces = []
-    mat_indices = []
     for ring_index in range(len(profile) - 1):
         start = ring_index * segments
         next_start = start + segments
@@ -508,48 +545,61 @@ def make_hulu(output: Path) -> None:
             nxt = (index + 1) % segments
             faces.extend([(start + index, next_start + index, next_start + nxt),
                           (start + index, next_start + nxt, start + nxt)])
-            # 固定方向的暖亮带模拟蜜蜡内部明度层次，保证每次生成可复现。
-            sector = index % segments
-            material_index = 2 if sector in {2, 3, 4, 5} else (0 if sector in {18, 19, 20} else 1)
-            mat_indices.extend([material_index, material_index])
     mesh = bpy.data.meshes.new("continuous-plump-gourd-mesh")
     mesh.from_pydata(vertices, [], faces)
     mesh.update()
+    uv_layer = mesh.uv_layers.new(name="continuous-honey-wax-uv")
+    ring_count = len(profile)
+    for polygon in mesh.polygons:
+        raw_uvs = []
+        for loop_index in polygon.loop_indices:
+            vertex_index = mesh.loops[loop_index].vertex_index
+            raw_uvs.append(((vertex_index % segments) / segments,
+                            (vertex_index // segments) / (ring_count - 1)))
+        crosses_seam = max(uv[0] for uv in raw_uvs) - min(uv[0] for uv in raw_uvs) > 0.5
+        for loop_index, (u, v) in zip(polygon.loop_indices, raw_uvs):
+            uv_layer.data[loop_index].uv = (u + 1.0 if crosses_seam and u < 0.5 else u, v)
     body = bpy.data.objects.new("continuous-plump-amber-body", mesh)
     bpy.context.scene.collection.objects.link(body)
-    for mat in (amber_deep, amber_mid, amber_light):
-        mesh.materials.append(mat)
-    for polygon, mat_index in zip(mesh.polygons, mat_indices):
-        polygon.material_index = mat_index
+    mesh.materials.append(amber)
+    for polygon in mesh.polygons:
         polygon.use_smooth = True
 
     # 稳定底面用一块低矮圆片封口，物理落地时不会依赖尖点或悬空装饰。
     bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=0.30, depth=0.035,
-                                        location=(0, 0, -0.995))
+                                        location=(0, 0, -1.445))
     base = bpy.context.active_object
     base.name = "stable-amber-foot"
-    base.data.materials.append(amber_deep)
+    base.data.materials.append(amber)
     bevel(base, 0.018, 2)
 
     # 颈口只保留细金环，拒绝前稿的厚重金属腰带和笼架。
     bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=0.31, depth=0.10,
-                                        location=(0, 0, 0.89))
+                                        location=(0, 0, 1.14))
     neck_cap = bpy.context.active_object
     neck_cap.name = "thin-gold-neck-cap"
     neck_cap.data.materials.append(antique_gold)
     bevel(neck_cap, 0.035, 3)
 
+    # 游戏相机近俯视，纯几何腰谷会被上肚遮住；细腰箍只强调分界，不做厚重金属腰带。
+    bpy.ops.mesh.primitive_torus_add(major_radius=0.42, minor_radius=0.035,
+                                     major_segments=36, minor_segments=6,
+                                     location=(0, 0, 0.105))
+    waist_ring = bpy.context.active_object
+    waist_ring.name = "thin-gold-waist-ring"
+    waist_ring.data.materials.append(antique_gold)
+
     # 短绳环紧贴主体，长度不会主导归一化尺寸，也不会把现有方盒碰撞代理拉成细长尾巴。
     bpy.ops.mesh.primitive_torus_add(major_radius=0.18, minor_radius=0.042,
                                      major_segments=28, minor_segments=7,
-                                     location=(0, 0, 1.09), rotation=(math.pi / 2, 0, 0))
+                                     location=(0, 0, 1.36), rotation=(math.pi / 2, 0, 0))
     cord_loop = bpy.context.active_object
     cord_loop.name = "compact-red-cord-loop"
     cord_loop.data.materials.append(vermilion)
 
     knot_parts = []
     for index, (x, z, scale_x) in enumerate([
-        (-0.12, 0.96, 0.12), (0.12, 0.96, 0.12), (0.0, 1.00, 0.14), (0.0, 0.93, 0.13),
+        (-0.12, 1.22, 0.12), (0.12, 1.22, 0.12), (0.0, 1.28, 0.14), (0.0, 1.18, 0.13),
     ]):
         bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=1.0,
                                               location=(x, -0.015, z))
@@ -570,19 +620,24 @@ def make_hulu(output: Path) -> None:
          (0.05, -0.59), (-0.11, -0.53)],
         [(0.16, -0.49), (0.35, -0.35), (0.57, -0.39), (0.67, -0.52)],
     ]
-    for index, path in enumerate(cloud_paths_xz):
-        points = []
-        for x, z in path:
-            # 下肚截面近似椭圆，按 x 位置贴合正面，额外外推 0.018 避免浮雕陷入主体。
-            section_radius = 0.94
-            y = -math.sqrt(max(0.01, section_radius ** 2 - x ** 2)) - 0.018
-            points.append((x, y, z))
-        cloud_strokes.append(curve_stroke_3d(f"amber-cloud-{index}", points, 0.038,
-                                             amber_relief))
+    for quarter in range(4):
+        rotation = quarter * math.pi / 2
+        cos_rotation = math.cos(rotation)
+        sin_rotation = math.sin(rotation)
+        for index, path in enumerate(cloud_paths_xz):
+            points = []
+            for x, z in path:
+                # 下肚截面近似椭圆，先贴到正面，再绕四面复制；随机旋转时云纹不会整组消失。
+                section_radius = 0.98
+                y = -math.sqrt(max(0.01, section_radius ** 2 - x ** 2)) - 0.018
+                points.append((x * cos_rotation - y * sin_rotation,
+                               x * sin_rotation + y * cos_rotation, z))
+            cloud_strokes.append(curve_stroke_3d(
+                f"amber-cloud-{quarter}-{index}", points, 0.032, amber_relief))
     cloud_relief = join(cloud_strokes, "broad-amber-cloud-relief")
 
     normalize_export_parts(
-        [body, base, neck_cap, cord_loop, knot_system, cloud_relief],
+        [body, base, neck_cap, waist_ring, cord_loop, knot_system, cloud_relief],
         "hulu",
         output,
     )
@@ -955,6 +1010,345 @@ def make_banzhi(output: Path) -> None:
     )
 
 
+def make_yuxi(output: Path) -> None:
+    # 玉玺采用暖白、朱砂、古金三段配色，与前一件浅青玉扳指拉开明度和色相差异。
+    ivory = material("yuxi_warm_white_nephrite", (0.78, 0.69, 0.49, 1), metalness=0.0,
+                     roughness=0.31)
+    ivory_light = material("yuxi_milky_jade_highlight", (0.96, 0.86, 0.65, 1), metalness=0.0,
+                           roughness=0.27)
+    cinnabar = material("yuxi_cinnabar_carving", (0.58, 0.055, 0.018, 1), metalness=0.0,
+                        roughness=0.48)
+    gold = material("yuxi_antique_champagne_gold", (0.65, 0.34, 0.065, 1), metalness=0.46,
+                    roughness=0.40)
+    dark_gold = material("yuxi_gold_recess", (0.28, 0.095, 0.012, 1), metalness=0.30,
+                         roughness=0.58)
+
+    def rounded_cube(name: str, location: tuple[float, float, float],
+                     scale: tuple[float, float, float], mat: bpy.types.Material,
+                     bevel_width: float) -> bpy.types.Object:
+        bpy.ops.mesh.primitive_cube_add(size=1.0, location=location)
+        obj = bpy.context.active_object
+        obj.name = name
+        obj.scale = scale
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        obj.data.materials.append(mat)
+        # 主体需要圆润三段倒角；微型回纹只用单段，避免几十个小块无意义推高移动端面数。
+        bevel(obj, bevel_width, 3 if bevel_width >= 0.03 else 1)
+        return obj
+
+    def jade_blob(name: str, location: tuple[float, float, float],
+                  scale: tuple[float, float, float], mat: bpy.types.Material = ivory,
+                  subdivisions: int = 2, rotation_z: float = 0.0) -> bpy.types.Object:
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=subdivisions, radius=1.0,
+                                              location=location)
+        obj = bpy.context.active_object
+        obj.name = name
+        obj.scale = scale
+        obj.rotation_euler[2] = rotation_z
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+        obj.data.materials.append(mat)
+        for polygon in obj.data.polygons:
+            polygon.use_smooth = True
+        return obj
+
+    # 方印主体以一体圆角厚块为主，肩台和朱砂印面提供清晰的上下方向。
+    body = rounded_cube("warm-white-jade-seal-body", (0, 0, 0), (0.92, 0.92, 0.80),
+                        ivory, 0.12)
+    shoulder = rounded_cube("raised-jade-shoulder", (0, 0, 0.45), (0.72, 0.72, 0.10),
+                            ivory_light, 0.055)
+    stamp_face = rounded_cube("cinnabar-stamp-face", (0, 0, -0.425), (0.82, 0.82, 0.045),
+                              cinnabar, 0.035)
+
+    # 朱砂回纹带采用短实体块构成，不依赖不可读的小字；四面旋转后仍然保持印章识别。
+    band_parts = []
+    for side in range(4):
+        angle = side * math.pi / 2
+        outward = Vector((math.cos(angle), math.sin(angle), 0))
+        tangent = Vector((-math.sin(angle), math.cos(angle), 0))
+        for slot in range(-2, 3):
+            center = outward * 0.47 + tangent * (slot * 0.17)
+            part = rounded_cube(f"cinnabar-meander-{side}-{slot}",
+                                (center.x, center.y, -0.01 + 0.045 * ((slot + side) % 2)),
+                                (0.018 if side % 2 == 0 else 0.11,
+                                 0.11 if side % 2 == 0 else 0.018, 0.045), cinnabar, 0.012)
+            band_parts.append(part)
+        upper = rounded_cube(f"cinnabar-band-upper-{side}",
+                             (outward.x * 0.47, outward.y * 0.47, 0.10),
+                             (0.018 if side % 2 == 0 else 0.82,
+                              0.82 if side % 2 == 0 else 0.018, 0.018), cinnabar, 0.008)
+        lower = rounded_cube(f"cinnabar-band-lower-{side}",
+                             (outward.x * 0.47, outward.y * 0.47, -0.12),
+                             (0.018 if side % 2 == 0 else 0.82,
+                              0.82 if side % 2 == 0 else 0.018, 0.018), cinnabar, 0.008)
+        band_parts.extend([upper, lower])
+
+    # 瑞兽沿画面横向伏卧，直接用头、颈、胸、背、臀的连续比例建立侧影，不再用圆壳代替身体。
+    camera_front = Vector((0.59, -0.81, 0))
+    screen_axis = Vector((0.81, 0.59, 0))
+    beast_forward = -screen_axis
+    beast_side = camera_front
+    beast_angle = math.atan2(beast_forward.y, beast_forward.x)
+    beast_parts = [
+        jade_blob("guardian-arched-torso", (0.04, 0, 0.79), (0.43, 0.23, 0.21), ivory,
+                  2, beast_angle),
+        jade_blob("guardian-raised-chest", tuple(beast_forward * 0.20 + Vector((0, 0, 0.82))),
+                  (0.19, 0.18, 0.28), ivory_light, 2, beast_angle),
+        jade_blob("guardian-rear-haunch", tuple(-beast_forward * 0.25 + Vector((0, 0, 0.74))),
+                  (0.24, 0.21, 0.23), ivory, 2, beast_angle),
+    ]
+    head_center = beast_forward * 0.38 + Vector((0, 0, 0.99))
+    beast_parts.append(jade_blob("guardian-dragon-head", tuple(head_center), (0.25, 0.18, 0.19),
+                                 ivory_light, 2, beast_angle))
+    snout_center = head_center + beast_forward * 0.20 + Vector((0, 0, -0.035))
+    beast_parts.append(jade_blob("guardian-long-snout", tuple(snout_center), (0.18, 0.12, 0.085),
+                                 ivory_light, 1, beast_angle))
+    jaw_center = snout_center - Vector((0, 0, 0.082)) - beast_forward * 0.01
+    beast_parts.append(jade_blob("guardian-lower-jaw", tuple(jaw_center), (0.15, 0.105, 0.06),
+                                 ivory, 1, beast_angle))
+
+    # 鬃瓣沿后脑到肩部形成连续锯齿剪影，保留参考稿最重要的龙首层次。
+    for index in range(7):
+        mane_pos = head_center - beast_forward * (0.10 + index * 0.045)
+        mane_pos += beast_side * 0.015 + Vector((0, 0, 0.15 - index * 0.035))
+        beast_parts.append(jade_blob(f"guardian-mane-lobe-{index}", tuple(mane_pos),
+                                     (0.105, 0.065, 0.12), ivory_light, 1, beast_angle))
+
+    # 四足分出远近层，近侧两足再加三趾，保证不是身体下方四颗散球。
+    for forward_index, along in enumerate((0.22, -0.24)):
+        for side_index, lateral in enumerate((-0.15, 0.19)):
+            pos = beast_forward * along + beast_side * lateral + Vector((0, 0, 0.60))
+            paw_scale = (0.17, 0.105, 0.10) if lateral > 0 else (0.14, 0.085, 0.085)
+            beast_parts.append(jade_blob(f"guardian-paw-{forward_index}-{side_index}", tuple(pos),
+                                         paw_scale, ivory_light if lateral > 0 else ivory, 1,
+                                         beast_angle))
+            if lateral > 0:
+                for toe in (-1, 0, 1):
+                    toe_pos = pos + beast_forward * 0.10 + beast_side * (toe * 0.032)
+                    beast_parts.append(jade_blob(f"guardian-toe-{forward_index}-{toe}", tuple(toe_pos),
+                                                 (0.045, 0.03, 0.035), ivory_light, 1,
+                                                 beast_angle))
+
+    horn_parts = []
+    for sign in (-1, 1):
+        base = head_center + beast_side * (0.085 * sign) + Vector((0, 0, 0.13))
+        horn_path = []
+        for step in range(9):
+            t = step / 8
+            point = base - beast_forward * (0.30 * t)
+            point += beast_side * (0.055 * sign * t)
+            point.z += 0.16 * math.sin(math.pi * t) + 0.04 * t
+            horn_path.append(tuple(point))
+        horn_parts.append(curve_stroke_3d(
+            f"guardian-swept-horn-{sign}",
+            horn_path,
+            0.032, ivory_light))
+
+    # 大卷尾位于侧影后端并在竖直平面内盘卷，正面机位不会再被身体遮没。
+    rear = -beast_forward * 0.37 + beast_side * 0.04 + Vector((0, 0, 0.76))
+    tail_points = []
+    for step in range(17):
+        angle = step * math.tau / 7.0
+        radius = 0.25 * (1.0 - step / 21.0)
+        point = rear + beast_forward * (radius * math.cos(angle))
+        point.z += 0.05 + radius * math.sin(angle)
+        tail_points.append(tuple(point))
+    horn_parts.append(curve_stroke_3d("guardian-large-curled-tail", tail_points, 0.05,
+                                      ivory_light))
+    # 可见侧的卷鬃、背脊和肩胛云纹用实体浅浮雕建立雕刻层次，不能只靠一块光滑椭球冒充瑞兽。
+    visible_surface = beast_side * 0.205
+    crest_points = []
+    for step in range(9):
+        t = step / 8
+        point = beast_forward * (0.22 - 0.48 * t) + visible_surface
+        point.z = 0.96 - 0.17 * t + 0.055 * math.sin(math.pi * t)
+        crest_points.append(tuple(point))
+    horn_parts.append(curve_stroke_3d("guardian-back-crest", crest_points, 0.023, gold))
+    for index, (along, height, radius) in enumerate(((0.18, 0.85, 0.105),
+                                                     (-0.10, 0.80, 0.12),
+                                                     (-0.28, 0.77, 0.09))):
+        spiral = []
+        center = beast_forward * along + visible_surface + Vector((0, 0, height))
+        for step in range(13):
+            angle = step * math.tau / 5.8
+            current_radius = radius * (1.0 - step / 16.0)
+            point = center + beast_forward * (current_radius * math.cos(angle))
+            point.z += current_radius * 0.72 * math.sin(angle)
+            spiral.append(tuple(point))
+        horn_parts.append(curve_stroke_3d(f"guardian-carved-cloud-{index}", spiral, 0.018,
+                                          ivory_light))
+    for index, lift in enumerate((-0.075, 0.0, 0.075)):
+        beard_start = jaw_center + beast_side * 0.115 - beast_forward * 0.02 + Vector((0, 0, lift))
+        beard_path = [tuple(beard_start),
+                      tuple(beard_start - beast_forward * 0.09 - Vector((0, 0, 0.08))),
+                      tuple(beard_start - beast_forward * 0.17 + Vector((0, 0, -0.035 + lift * 0.2)))]
+        horn_parts.append(curve_stroke_3d(f"guardian-beard-lock-{index}", beard_path, 0.017,
+                                          ivory_light))
+
+    # 眉脊、眼、鼻、嘴和双须集中在可见侧面，少量深金线定义龙首而不制造玩具红眼。
+    eye_parts = []
+    visible_side = beast_side * 0.185
+    eye_pos = head_center + beast_forward * 0.10 + visible_side + Vector((0, 0, 0.045))
+    eye_parts.append(jade_blob("guardian-visible-eye", tuple(eye_pos), (0.034, 0.026, 0.032),
+                               cinnabar, 1))
+    brow_start = eye_pos - beast_forward * 0.08 + Vector((0, 0, 0.045))
+    brow_end = eye_pos + beast_forward * 0.09 + Vector((0, 0, 0.025))
+    eye_parts.append(curve_stroke_3d("guardian-brow-ridge", [tuple(brow_start), tuple(brow_end)],
+                                     0.018, gold))
+    nose_pos = snout_center + beast_forward * 0.16 + beast_side * 0.115 + Vector((0, 0, 0.005))
+    eye_parts.append(jade_blob("guardian-nose", tuple(nose_pos), (0.026, 0.022, 0.022),
+                               dark_gold, 1))
+    mouth_start = jaw_center + beast_forward * 0.01 + beast_side * 0.12
+    mouth_end = mouth_start + beast_forward * 0.11
+    eye_parts.append(curve_stroke_3d("guardian-mouth-line", [tuple(mouth_start), tuple(mouth_end)],
+                                     0.012, dark_gold))
+    for whisker_index, lift in enumerate((0.025, -0.025)):
+        start = snout_center + beast_forward * 0.08 + beast_side * 0.115 + Vector((0, 0, lift))
+        eye_parts.append(curve_stroke_3d(
+            f"guardian-whisker-{whisker_index}",
+            [tuple(start), tuple(start + beast_forward * 0.16 + Vector((0, 0, lift * 1.4))),
+             tuple(start + beast_forward * 0.25 + Vector((0, 0, lift * 0.4)))],
+            0.009, gold))
+
+    # 云座以连续金色方环和四个卷云节点承托兽钮，控制金色面积避免喧宾夺主。
+    collar_parts = []
+    ring_path = [(-0.36, -0.36), (0.36, -0.36), (0.36, 0.36), (-0.36, 0.36), (-0.36, -0.36)]
+    collar_parts.append(curve_stroke("gold-cloud-collar-ring", ring_path, 0.535, 0.045, gold))
+    for corner_x, corner_y in ((-0.3, -0.3), (0.3, -0.3), (0.3, 0.3), (-0.3, 0.3)):
+        spiral = []
+        for step in range(11):
+            angle = step * math.tau / 5.2
+            radius = 0.13 * (1.0 - step / 14.0)
+            spiral.append((corner_x + radius * math.cos(angle),
+                           corner_y + radius * math.sin(angle)))
+        collar_parts.append(curve_stroke(f"gold-cloud-curl-{corner_x}-{corner_y}",
+                                         spiral, 0.55, 0.036, dark_gold))
+
+    beast_body = join(beast_parts, "warm-jade-guardian-beast")
+    # 头颈胸背和四足先体素融合成连续玉雕，再减面回到移动端预算；避免球体交界线破坏雕塑感。
+    bpy.context.view_layer.objects.active = beast_body
+    beast_body.select_set(True)
+    beast_body.data.remesh_voxel_size = 0.022
+    bpy.ops.object.voxel_remesh()
+    decimate = beast_body.modifiers.new("mobile-sculpt-decimation", "DECIMATE")
+    decimate.ratio = 0.36
+    apply_modifiers(beast_body)
+    for polygon in beast_body.data.polygons:
+        polygon.use_smooth = True
+
+    normalize_export_parts(
+        [body, shoulder, stamp_face, join(band_parts, "cinnabar-meander-band"),
+         beast_body,
+         join(horn_parts, "guardian-horns-and-tail"), join(eye_parts, "cinnabar-eyes"),
+         join(collar_parts, "antique-gold-cloud-collar")],
+        "yuxi",
+        output,
+    )
+
+
+def make_yuxi_from_scan(output: Path) -> None:
+    """Build the yuxi around the licensed, game-optimized guardian-lion scan."""
+    jade = material("yuxi_honey_yellow_nephrite", (0.52, 0.30, 0.070, 1), metalness=0.0,
+                    roughness=0.28)
+    pale_jade = material("yuxi_light_honey_jade", (0.80, 0.55, 0.22, 1),
+                         metalness=0.0, roughness=0.25)
+    lion_jade = material("yuxi_warm_ivory_lion", (0.91, 0.75, 0.47, 1),
+                         metalness=0.0, roughness=0.23)
+    cinnabar = material("yuxi_cinnabar_inlay", (0.68, 0.025, 0.006, 1), metalness=0.0,
+                        roughness=0.40)
+    gold = material("yuxi_antique_champagne_gold", (0.70, 0.31, 0.045, 1), metalness=0.48,
+                    roughness=0.38)
+
+    # 玉面需要有柔和清漆高光，但不能使用透明混合；透明材质会在 Cocos 排序时产生黑边。
+    for jade_material in (jade, pale_jade, lion_jade):
+        principled = jade_material.node_tree.nodes.get("Principled BSDF")
+        if "Coat Weight" in principled.inputs:
+            principled.inputs["Coat Weight"].default_value = 0.20
+            principled.inputs["Coat Roughness"].default_value = 0.17
+
+    def rounded_cube(name: str, location: tuple[float, float, float],
+                     dimensions: tuple[float, float, float], mat: bpy.types.Material,
+                     bevel_width: float, segments: int = 3) -> bpy.types.Object:
+        bpy.ops.mesh.primitive_cube_add(size=1.0, location=location)
+        obj = bpy.context.active_object
+        obj.name = name
+        obj.scale = dimensions
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        obj.data.materials.append(mat)
+        bevel(obj, bevel_width, segments)
+        return obj
+
+    body = rounded_cube("warm-nephrite-seal-body", (0, 0, 0), (0.92, 0.92, 0.80),
+                        jade, 0.105)
+    shoulder = rounded_cube("milky-jade-raised-shoulder", (0, 0, 0.45),
+                            (0.90, 0.90, 0.10), pale_jade, 0.045)
+    stamp_face = rounded_cube("cinnabar-stamp-face", (0, 0, -0.425),
+                              (0.82, 0.82, 0.045), cinnabar, 0.028, 2)
+
+    # 四面朱砂回纹只承担远景识别，不用细小文字，避免缩小时变成暗噪点。
+    band_parts: list[bpy.types.Object] = []
+    for side in range(4):
+        angle = side * math.pi / 2
+        outward = Vector((math.cos(angle), math.sin(angle), 0))
+        tangent = Vector((-math.sin(angle), math.cos(angle), 0))
+        for slot in range(-2, 3):
+            center = outward * 0.47 + tangent * (slot * 0.17)
+            band_parts.append(rounded_cube(
+                f"cinnabar-meander-{side}-{slot}",
+                (center.x, center.y, -0.015 + 0.045 * ((slot + side) % 2)),
+                (0.018 if side % 2 == 0 else 0.11,
+                 0.11 if side % 2 == 0 else 0.018, 0.045),
+                cinnabar, 0.010, 1,
+            ))
+        for z in (-0.12, 0.10):
+            band_parts.append(rounded_cube(
+                f"cinnabar-band-{side}-{z}",
+                (outward.x * 0.47, outward.y * 0.47, z),
+                (0.018 if side % 2 == 0 else 0.82,
+                 0.82 if side % 2 == 0 else 0.018, 0.018),
+                cinnabar, 0.007, 1,
+            ))
+
+    collar = rounded_cube("antique-gold-guardian-collar", (0, 0, 0.515),
+                          (0.88, 0.88, 0.060), gold, 0.035)
+
+    source = ROOT / "assets-3d/processed/yuxi/yuxi.glb"
+    if not source.exists():
+        raise FileNotFoundError(
+            f"Prepared guardian source missing: {source}. Run prepare_yuxi_guardian_source.py first."
+        )
+    before = set(bpy.context.scene.objects)
+    bpy.ops.import_scene.gltf(filepath=str(source))
+    imported = [obj for obj in bpy.context.scene.objects if obj not in before]
+    lion_meshes = [obj for obj in imported if obj.type == "MESH"]
+    if len(lion_meshes) != 1:
+        raise RuntimeError(f"Expected one prepared guardian mesh, found {len(lion_meshes)}")
+    lion = lion_meshes[0]
+    world_matrix = lion.matrix_world.copy()
+    lion.parent = None
+    lion.matrix_world = world_matrix
+    lion.name = "licensed-warm-jade-guardian-lion"
+    lion.scale = (1.22, 1.22, 1.22)
+    lion.location.z = 0.545
+    bpy.ops.object.select_all(action="DESELECT")
+    lion.select_set(True)
+    bpy.context.view_layer.objects.active = lion
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+    lion.data.materials.clear()
+    lion.data.materials.append(lion_jade)
+    lion.data.materials.append(gold)
+    # 扫描件自带的双层方座正好承担参考图中的鎏金云座；按局部高度分材质，
+    # 保留狮子本体为暖玉，同时避免额外几何与原底座穿插。
+    for polygon in lion.data.polygons:
+        polygon.material_index = 1 if polygon.center.z < 0.34 else 0
+
+    normalize_export_parts(
+        [body, shoulder, stamp_face, join(band_parts, "cinnabar-meander-band"),
+         collar, lion],
+        "yuxi",
+        output,
+    )
+
+
 BUILDERS = {
     "tongqian": make_tongqian,
     "bracelet": make_bracelet,
@@ -962,6 +1356,7 @@ BUILDERS = {
     "hulu": make_hulu,
     "yuzhuo": make_yuzhuo,
     "banzhi": make_banzhi,
+    "yuxi": make_yuxi_from_scan,
 }
 
 

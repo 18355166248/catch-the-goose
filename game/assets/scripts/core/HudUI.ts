@@ -26,7 +26,7 @@ const TRAY_ICON_LAYOUT: Record<string, TrayIconLayout> = {
     banzhi: { offsetX: -0.5, offsetY: -0.5, contentW: 118, contentH: 108 },
     bracelet: { offsetX: -0.5, offsetY: -0.5, contentW: 118, contentH: 72 },
     goose: { offsetX: -10.5, offsetY: 12.5, contentW: 94, contentH: 102 },
-    hulu: { offsetX: -0.5, offsetY: 0.5, contentW: 82, contentH: 118 },
+    hulu: { offsetX: 0, offsetY: 5, contentW: 94, contentH: 134 },
     tongqian: { offsetX: -0.5, offsetY: -0.5, contentW: 118, contentH: 66 },
     yuzhuo: { offsetX: -0.5, offsetY: -0.5, contentW: 118, contentH: 68 },
 };

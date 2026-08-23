@@ -12,7 +12,7 @@
       "id": "48755",
       "name": "koi_eye.material",
       "userData": {
-        "gltfIndex": 2
+        "gltfIndex": 4
       },
       "ver": "1.0.14",
       "imported": true,
@@ -29,7 +29,7 @@
       "name": "Sphere.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1080
+        "triangleCount": 2024
       },
       "ver": "1.1.1",
       "imported": true,
@@ -39,12 +39,12 @@
       ],
       "subMetas": {}
     },
-    "ec4af": {
+    "bf6a6": {
       "importer": "gltf-material",
-      "uuid": "b31e2f14-65ac-4666-8b50-eb4c656880da@ec4af",
+      "uuid": "b31e2f14-65ac-4666-8b50-eb4c656880da@bf6a6",
       "displayName": "",
-      "id": "ec4af",
-      "name": "koi_teal.material",
+      "id": "bf6a6",
+      "name": "koi_pearl.material",
       "userData": {
         "gltfIndex": 0
       },
@@ -77,6 +77,22 @@
       "displayName": "",
       "id": "f5436",
       "name": "koi_fin.material",
+      "userData": {
+        "gltfIndex": 2
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "30e7c": {
+      "importer": "gltf-material",
+      "uuid": "b31e2f14-65ac-4666-8b50-eb4c656880da@30e7c",
+      "displayName": "",
+      "id": "30e7c",
+      "name": "koi_scale.material",
       "userData": {
         "gltfIndex": 3
       },
@@ -131,10 +147,11 @@
       "skeletons": [],
       "textures": [],
       "materials": [
-        "b31e2f14-65ac-4666-8b50-eb4c656880da@ec4af",
+        "b31e2f14-65ac-4666-8b50-eb4c656880da@bf6a6",
         "b31e2f14-65ac-4666-8b50-eb4c656880da@db986",
-        "b31e2f14-65ac-4666-8b50-eb4c656880da@48755",
-        "b31e2f14-65ac-4666-8b50-eb4c656880da@f5436"
+        "b31e2f14-65ac-4666-8b50-eb4c656880da@f5436",
+        "b31e2f14-65ac-4666-8b50-eb4c656880da@30e7c",
+        "b31e2f14-65ac-4666-8b50-eb4c656880da@48755"
       ],
       "scenes": [
         "b31e2f14-65ac-4666-8b50-eb4c656880da@b42da"

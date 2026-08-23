@@ -1,6 +1,7 @@
 node_modules
 dist
 build
+.DS_Store
 
 # Cocos Creator 编辑器生成目录
 game/library/
@@ -16,6 +17,12 @@ game/.creator/
 assets-3d/*.png
 # v2 生成脚本先写候选目录，三角度通过后才提升到 Cocos resources；候选 GLB 可重复生成。
 assets-3d/candidates/
+
+# 第三方扫描源体积很大，只在本地保留官方下载原件；仓库提交署名、处理脚本和游戏中间件。
+assets-3d/sources/**/source.zip
+assets-3d/sources/**/original/scene.bin
+assets-3d/sources/**/original/scene.gltf
+assets-3d/processed/**/guardian-lion-game.glb
 
 # Tripo 原始高模（15MB+，保留本地作源文件，不进仓库）
 assets-3d/*3d model.glb
@@ -38,6 +45,12 @@ audit/model-quality/before/
 audit/model-quality/frog-duck-v*/
 audit/model-quality/final/*.png
 audit/runtime/
+# 单件重建过程中会产生多轮候选图；只提交葫芦 canonical v2 与玉玺 before/final 证据。
+audit/model-quality/hulu-v3*/
+audit/model-quality/yuxi-v2/after/
+audit/model-quality/yuxi-v2/color-v*/
+audit/model-quality/yuxi-v2/scan-candidate*/
+audit/model-quality/yuxi-v2/source-*/
 
 # Python 工具（scripts/*.py）的 lint 缓存。会生成在运行目录下，
 # 包括 game/assets/ 内部——那是 Cocos 的资源扫描范围，别让它进去。

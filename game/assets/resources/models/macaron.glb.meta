@@ -13,7 +13,7 @@
       "name": "Cylinder.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1780
+        "triangleCount": 2652
       },
       "ver": "1.1.1",
       "imported": true,
@@ -71,6 +71,38 @@
       ],
       "subMetas": {}
     },
+    "cf601": {
+      "importer": "gltf-material",
+      "uuid": "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@cf601",
+      "displayName": "",
+      "id": "cf601",
+      "name": "macaron_highlight.material",
+      "userData": {
+        "gltfIndex": 3
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f5a98": {
+      "importer": "gltf-material",
+      "uuid": "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@f5a98",
+      "displayName": "",
+      "id": "f5a98",
+      "name": "macaron_berry.material",
+      "userData": {
+        "gltfIndex": 4
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "d8e0f": {
       "importer": "gltf-scene",
       "uuid": "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@d8e0f",
@@ -117,7 +149,9 @@
       "materials": [
         "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@13caf",
         "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@fed98",
-        "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@9076a"
+        "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@9076a",
+        "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@cf601",
+        "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@f5a98"
       ],
       "scenes": [
         "c151573a-ae6f-4a9d-8afa-7ec2060b10d8@d8e0f"

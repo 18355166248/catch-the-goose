@@ -5,6 +5,22 @@
   "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894",
   "files": [],
   "subMetas": {
+    "99842": {
+      "importer": "gltf-material",
+      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@99842",
+      "displayName": "",
+      "id": "99842",
+      "name": "cup_wrapper_rib.material",
+      "userData": {
+        "gltfIndex": 2
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "fe6ae": {
       "importer": "gltf-mesh",
       "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@fe6ae",
@@ -13,7 +29,7 @@
       "name": "Cone.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1304
+        "triangleCount": 1888
       },
       "ver": "1.1.1",
       "imported": true,
@@ -62,7 +78,7 @@
       "id": "f24a7",
       "name": "cup_frosting.material",
       "userData": {
-        "gltfIndex": 2
+        "gltfIndex": 3
       },
       "ver": "1.0.14",
       "imported": true,
@@ -78,7 +94,39 @@
       "id": "46ccd",
       "name": "cup_cherry.material",
       "userData": {
-        "gltfIndex": 3
+        "gltfIndex": 4
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "55a41": {
+      "importer": "gltf-material",
+      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@55a41",
+      "displayName": "",
+      "id": "55a41",
+      "name": "cup_sprinkle_cream.material",
+      "userData": {
+        "gltfIndex": 5
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f8d8e": {
+      "importer": "gltf-material",
+      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@f8d8e",
+      "displayName": "",
+      "id": "f8d8e",
+      "name": "cup_sprinkle_mint.material",
+      "userData": {
+        "gltfIndex": 6
       },
       "ver": "1.0.14",
       "imported": true,
@@ -133,8 +181,11 @@
       "materials": [
         "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@76be4",
         "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@53f92",
+        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@99842",
         "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@f24a7",
-        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@46ccd"
+        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@46ccd",
+        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@55a41",
+        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@f8d8e"
       ],
       "scenes": [
         "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@93c74"

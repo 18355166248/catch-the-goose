@@ -13,7 +13,7 @@
       "name": "Torus.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1140
+        "triangleCount": 1200
       },
       "ver": "1.1.1",
       "imported": true,
@@ -71,6 +71,38 @@
       ],
       "subMetas": {}
     },
+    "9d1a1": {
+      "importer": "gltf-material",
+      "uuid": "bd039aa1-9384-4ba0-8da3-9c48b80042e5@9d1a1",
+      "displayName": "",
+      "id": "9d1a1",
+      "name": "donut_sprinkle_pink.material",
+      "userData": {
+        "gltfIndex": 3
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "a4b44": {
+      "importer": "gltf-material",
+      "uuid": "bd039aa1-9384-4ba0-8da3-9c48b80042e5@a4b44",
+      "displayName": "",
+      "id": "a4b44",
+      "name": "donut_sprinkle_mint.material",
+      "userData": {
+        "gltfIndex": 4
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "d4216": {
       "importer": "gltf-scene",
       "uuid": "bd039aa1-9384-4ba0-8da3-9c48b80042e5@d4216",
@@ -117,7 +149,9 @@
       "materials": [
         "bd039aa1-9384-4ba0-8da3-9c48b80042e5@db63e",
         "bd039aa1-9384-4ba0-8da3-9c48b80042e5@5a1a5",
-        "bd039aa1-9384-4ba0-8da3-9c48b80042e5@554b0"
+        "bd039aa1-9384-4ba0-8da3-9c48b80042e5@554b0",
+        "bd039aa1-9384-4ba0-8da3-9c48b80042e5@9d1a1",
+        "bd039aa1-9384-4ba0-8da3-9c48b80042e5@a4b44"
       ],
       "scenes": [
         "bd039aa1-9384-4ba0-8da3-9c48b80042e5@d4216"

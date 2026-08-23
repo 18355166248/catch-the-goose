@@ -12,7 +12,7 @@
       "id": "84391",
       "name": "icecream_chip.material",
       "userData": {
-        "gltfIndex": 3
+        "gltfIndex": 4
       },
       "ver": "1.0.14",
       "imported": true,
@@ -29,7 +29,7 @@
       "name": "Cone.mesh",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1188
+        "triangleCount": 4016
       },
       "ver": "1.1.1",
       "imported": true,
@@ -87,6 +87,54 @@
       ],
       "subMetas": {}
     },
+    "5fba4": {
+      "importer": "gltf-material",
+      "uuid": "d63b9577-75bd-4911-b15c-06bcea2c04d1@5fba4",
+      "displayName": "",
+      "id": "5fba4",
+      "name": "icecream_waffle.material",
+      "userData": {
+        "gltfIndex": 3
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "15db3": {
+      "importer": "gltf-material",
+      "uuid": "d63b9577-75bd-4911-b15c-06bcea2c04d1@15db3",
+      "displayName": "",
+      "id": "15db3",
+      "name": "icecream_berry_sauce.material",
+      "userData": {
+        "gltfIndex": 5
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "7e8f1": {
+      "importer": "gltf-material",
+      "uuid": "d63b9577-75bd-4911-b15c-06bcea2c04d1@7e8f1",
+      "displayName": "",
+      "id": "7e8f1",
+      "name": "icecream_wafer.material",
+      "userData": {
+        "gltfIndex": 6
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "6d74f": {
       "importer": "gltf-scene",
       "uuid": "d63b9577-75bd-4911-b15c-06bcea2c04d1@6d74f",
@@ -134,7 +182,10 @@
         "d63b9577-75bd-4911-b15c-06bcea2c04d1@c25e8",
         "d63b9577-75bd-4911-b15c-06bcea2c04d1@12ac7",
         "d63b9577-75bd-4911-b15c-06bcea2c04d1@73f6d",
-        "d63b9577-75bd-4911-b15c-06bcea2c04d1@84391"
+        "d63b9577-75bd-4911-b15c-06bcea2c04d1@5fba4",
+        "d63b9577-75bd-4911-b15c-06bcea2c04d1@84391",
+        "d63b9577-75bd-4911-b15c-06bcea2c04d1@15db3",
+        "d63b9577-75bd-4911-b15c-06bcea2c04d1@7e8f1"
       ],
       "scenes": [
         "d63b9577-75bd-4911-b15c-06bcea2c04d1@6d74f"
