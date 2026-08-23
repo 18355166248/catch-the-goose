@@ -1,0 +1,85 @@
+{
+  "ok": true,
+  "verdict": "pass",
+  "confidence": 0.86,
+  "estimatedFidelity": 0.86,
+  "targetThreshold": 0.7,
+  "materialId": "honey",
+  "sourceImage": "/Users/xmly/Swell/code/game-workspace/catch-the-goose/design/antique-theme/banzhi-v2/banzhi-concept-sheet-v2.png",
+  "outDir": "/Users/xmly/Swell/code/game-workspace/catch-the-goose/design/antique-theme/banzhi-v2/reference-pbr/honey",
+  "palette": [
+    "#A4AF97",
+    "#C7CCB9",
+    "#648874",
+    "#76541B",
+    "#A18A59"
+  ],
+  "maps": {
+    "albedo": {
+      "path": "/Users/xmly/Swell/code/game-workspace/catch-the-goose/design/antique-theme/banzhi-v2/reference-pbr/honey/honey_albedo.png",
+      "url": "honey_albedo.png",
+      "channel": "albedo",
+      "source": "reference-pixel-extraction"
+    },
+    "roughness": {
+      "path": "/Users/xmly/Swell/code/game-workspace/catch-the-goose/design/antique-theme/banzhi-v2/reference-pbr/honey/honey_roughness.png",
+      "url": "honey_roughness.png",
+      "channel": "roughness",
+      "source": "reference-pixel-extraction"
+    },
+    "height": {
+      "path": "/Users/xmly/Swell/code/game-workspace/catch-the-goose/design/antique-theme/banzhi-v2/reference-pbr/honey/honey_height.png",
+      "url": "honey_height.png",
+      "channel": "height",
+      "source": "reference-pixel-extraction"
+    },
+    "normal": {
+      "path": "/Users/xmly/Swell/code/game-workspace/catch-the-goose/design/antique-theme/banzhi-v2/reference-pbr/honey/honey_normal.png",
+      "url": "honey_normal.png",
+      "channel": "normal",
+      "source": "reference-pixel-extraction"
+    },
+    "ao": {
+      "path": "/Users/xmly/Swell/code/game-workspace/catch-the-goose/design/antique-theme/banzhi-v2/reference-pbr/honey/honey_ao.png",
+      "url": "honey_ao.png",
+      "channel": "ao",
+      "source": "reference-pixel-extraction"
+    }
+  },
+  "diagnostics": {
+    "sourceWidth": 1367,
+    "sourceHeight": 1151,
+    "mapSize": 512,
+    "cropBBoxPixels": {
+      "x": 0,
+      "y": 0,
+      "width": 1367,
+      "height": 1151
+    },
+    "mask": {
+      "backgroundColor": "#E3D7C5",
+      "backgroundNoise": 12.728,
+      "transparentPixelFraction": 0.0,
+      "foregroundCoverage": 0.5125
+    },
+    "mapStats": {
+      "valueRange": 0.4979,
+      "heightP90Gradient": 0.08607,
+      "roughnessBase": 0.716,
+      "roughnessVariation": 0.165,
+      "normalStrength": 0.257,
+      "blurRadius": 10
+    },
+    "palette": [
+      "#A4AF97",
+      "#C7CCB9",
+      "#648874",
+      "#76541B",
+      "#A18A59"
+    ]
+  },
+  "warnings": [
+    "single-image inverse rendering cannot prove true physical PBR; confidence is capped"
+  ],
+  "limitation": "single-image PBR extraction is an estimate; 70%+ extraction confidence still needs render screenshot review"
+}

@@ -741,12 +741,227 @@ def make_yuzhuo(output: Path) -> None:
     )
 
 
+def make_banzhi(output: Path) -> None:
+    # 浅青蓝玉、乳白云雾和蜜糖皮色写入同一张连续贴图，避免古玩铺连续出现深绿色单色块。
+    jade = bpy.data.materials.new("banzhi_celadon_honey_jade")
+    jade.use_nodes = True
+    principled = jade.node_tree.nodes.get("Principled BSDF")
+    principled.inputs["Metallic"].default_value = 0.0
+    principled.inputs["Roughness"].default_value = 0.34
+    # 玉的“润”来自浅层散射而非镜面清漆；少量次表面让背光边缘泛白，同时避免塑料高光。
+    if "Subsurface Weight" in principled.inputs:
+        principled.inputs["Subsurface Weight"].default_value = 0.16
+        principled.inputs["Subsurface Radius"].default_value = (0.72, 1.0, 0.86)
+        principled.inputs["Subsurface Scale"].default_value = 0.11
+    if "Coat Weight" in principled.inputs:
+        principled.inputs["Coat Weight"].default_value = 0.07
+        principled.inputs["Coat Roughness"].default_value = 0.24
+    width, height = 512, 256
+    image = bpy.data.images.new("banzhi_celadon_honey_texture", width=width, height=height)
+    rough_image = bpy.data.images.new("banzhi_jade_roughness", width=width, height=height)
+    normal_image = bpy.data.images.new("banzhi_jade_micro_normal", width=width, height=height)
+    aqua = Vector((0.48, 0.78, 0.73))
+    cream = Vector((0.79, 0.90, 0.84))
+    turquoise = Vector((0.12, 0.55, 0.51))
+    honey = Vector((0.82, 0.48, 0.13))
+    pixels = []
+    rough_pixels = []
+    normal_pixels = []
+
+    def ss(a: float, b: float, value: float) -> float:
+        amount = max(0.0, min(1.0, (value - a) / (b - a)))
+        return amount * amount * (3.0 - 2.0 * amount)
+
+    def stone_field(u: float, v: float) -> float:
+        """多频低振幅场模拟棉絮和色根；只影响表面响应，不生成会读成裂纹的深色线。"""
+        return (0.50
+                + 0.23 * math.sin(math.tau * (2.1 * u + 0.28 * math.sin(math.tau * v)))
+                + 0.13 * math.sin(math.tau * (5.2 * u - 1.7 * v + 0.1 * math.sin(math.tau * 3 * u)))
+                + 0.08 * math.sin(math.tau * (11 * u + 7 * v)))
+
+    for y in range(height):
+        v = y / (height - 1)
+        for x in range(width):
+            u = x / width
+            field = stone_field(u, v)
+            cloudy = ss(0.38, 0.68, field) * (0.45 + 0.25 * math.sin(math.tau * 3 * v) ** 2)
+            color = aqua.lerp(cream, cloudy)
+            teal_field = 0.5 + 0.5 * math.sin(math.tau * (3.1 * u - 0.8 * v + 0.13 * field))
+            teal = ss(0.62, 0.90, teal_field)
+            color = color.lerp(turquoise, teal * 0.20)
+            # 糖色是侧面局部沁色而不是整圈深色底座：用环向软遮罩切断连续色带，保持玉体轻盈。
+            patch_center = 0.13
+            circular_distance = abs(((u - patch_center + 0.5) % 1.0) - 0.5)
+            side_patch = 1.0 - ss(0.14, 0.32, circular_distance)
+            honey_line = 0.42 + 0.08 * math.sin(math.tau * (1.3 * u + 0.12))
+            vertical_patch = ss(0.12, 0.24, v) * (1.0 - ss(honey_line, honey_line + 0.13, v))
+            honey_mask = side_patch * vertical_patch
+            color = color.lerp(honey, honey_mask * 0.72)
+            # 斜口是最强识别面，保持明确浅青而不是过曝乳白。
+            color = color.lerp(aqua, ss(0.78, 1.0, v) * 0.34)
+            grain = 0.022 * math.sin(math.tau * (17 * u + 11 * v)) * math.sin(math.tau * (9 * u - 13 * v))
+            pixels.extend((max(0.0, min(1.0, color.x + grain)),
+                           max(0.0, min(1.0, color.y + grain)),
+                           max(0.0, min(1.0, color.z + grain)), 1.0))
+            roughness = 0.30 + 0.10 * (1.0 - ss(0.34, 0.75, field)) + 0.06 * honey_mask
+            rough_pixels.extend((roughness, roughness, roughness, 1.0))
+            du = (stone_field(u + 1.0 / width, v) - stone_field(u - 1.0 / width, v)) * 2.2
+            dv = (stone_field(u, v + 1.0 / height) - stone_field(u, v - 1.0 / height)) * 2.2
+            normal = Vector((-du, -dv, 1.0)).normalized()
+            normal_pixels.extend((normal.x * 0.5 + 0.5, normal.y * 0.5 + 0.5,
+                                  normal.z * 0.5 + 0.5, 1.0))
+    image.pixels.foreach_set(pixels)
+    rough_image.pixels.foreach_set(rough_pixels)
+    normal_image.pixels.foreach_set(normal_pixels)
+    image.pack()
+    rough_image.pack()
+    normal_image.pack()
+    tex = jade.node_tree.nodes.new("ShaderNodeTexImage")
+    tex.image = image
+    tex.interpolation = "Linear"
+    tex.extension = "REPEAT"
+    jade.node_tree.links.new(tex.outputs["Color"], principled.inputs["Base Color"])
+    # 游戏固定顶光会让厚戒体下缘失去全部色相；复用玉色贴图作极弱自发光，仅托起暗部，模拟透光而非发光体。
+    if "Emission Color" in principled.inputs:
+        jade.node_tree.links.new(tex.outputs["Color"], principled.inputs["Emission Color"])
+        principled.inputs["Emission Strength"].default_value = 0.12
+    rough_tex = jade.node_tree.nodes.new("ShaderNodeTexImage")
+    rough_tex.image = rough_image
+    rough_tex.image.colorspace_settings.name = "Non-Color"
+    rough_tex.interpolation = "Linear"
+    jade.node_tree.links.new(rough_tex.outputs["Color"], principled.inputs["Roughness"])
+    normal_tex = jade.node_tree.nodes.new("ShaderNodeTexImage")
+    normal_tex.image = normal_image
+    normal_tex.image.colorspace_settings.name = "Non-Color"
+    normal_tex.interpolation = "Linear"
+    normal_map = jade.node_tree.nodes.new("ShaderNodeNormalMap")
+    normal_map.inputs["Strength"].default_value = 0.12
+    jade.node_tree.links.new(normal_tex.outputs["Color"], normal_map.inputs["Color"])
+    jade.node_tree.links.new(normal_map.outputs["Normal"], principled.inputs["Normal"])
+
+    relief_jade = material("banzhi_turquoise_relief", (0.055, 0.37, 0.34, 1), metalness=0.0,
+                           roughness=0.34)
+    gold = material("banzhi_warm_gold_liner", (0.72, 0.52, 0.24, 1), metalness=0.34,
+                    roughness=0.52)
+    worn_gold = material("banzhi_worn_gold_accents", (0.73, 0.40, 0.055, 1), metalness=0.56,
+                         roughness=0.32)
+
+    segments = 64
+    vertices = []
+    for index in range(segments):
+        theta = index * math.tau / segments
+        top_z = 0.54 + 0.14 * math.cos(theta)
+        vertices.extend([
+            (0.79 * math.cos(theta), 0.79 * math.sin(theta), -0.64),
+            (0.86 * math.cos(theta), 0.86 * math.sin(theta), top_z),
+            (0.47 * math.cos(theta), 0.47 * math.sin(theta), -0.60),
+            (0.50 * math.cos(theta), 0.50 * math.sin(theta), top_z - 0.055),
+        ])
+    faces = []
+    for index in range(segments):
+        nxt = (index + 1) % segments
+        a, b, c, d = index * 4, index * 4 + 1, index * 4 + 2, index * 4 + 3
+        na, nb, nc, nd = nxt * 4, nxt * 4 + 1, nxt * 4 + 2, nxt * 4 + 3
+        faces.extend([(a, na, nb), (a, nb, b), (c, d, nd), (c, nd, nc),
+                      (b, nb, nd), (b, nd, d), (a, c, nc), (a, nc, na)])
+    mesh = bpy.data.meshes.new("sloped-open-thumb-ring-mesh")
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+    uv_layer = mesh.uv_layers.new(name="banzhi-wrapped-uv")
+    for polygon in mesh.polygons:
+        raw = []
+        for loop_index in polygon.loop_indices:
+            vertex_index = mesh.loops[loop_index].vertex_index
+            u = (vertex_index // 4) / segments
+            kind = vertex_index % 4
+            v = 0.0 if kind in {0, 2} else 1.0
+            raw.append((u, v))
+        seam = max(u for u, _ in raw) - min(u for u, _ in raw) > 0.5
+        for loop_index, (u, v) in zip(polygon.loop_indices, raw):
+            uv_layer.data[loop_index].uv = (u + 1.0 if seam and u < 0.5 else u, v)
+    body = bpy.data.objects.new("celadon-sloped-thumb-ring-body", mesh)
+    bpy.context.scene.collection.objects.link(body)
+    mesh.materials.append(jade)
+    for polygon in mesh.polygons:
+        polygon.use_smooth = True
+
+    # 金内衬只覆盖内壁和开口薄缘，保留真实通孔，不用封口圆片制造假洞。
+    liner_vertices = []
+    for index in range(segments):
+        theta = index * math.tau / segments
+        top_z = 0.54 + 0.14 * math.cos(theta) - 0.065
+        liner_vertices.extend([(0.465 * math.cos(theta), 0.465 * math.sin(theta), -0.57),
+                               (0.465 * math.cos(theta), 0.465 * math.sin(theta), top_z),
+                               (0.505 * math.cos(theta), 0.505 * math.sin(theta), top_z)])
+    liner_faces = []
+    for index in range(segments):
+        nxt = (index + 1) % segments
+        a, b, c = index * 3, index * 3 + 1, index * 3 + 2
+        na, nb, nc = nxt * 3, nxt * 3 + 1, nxt * 3 + 2
+        liner_faces.extend([(a, b, nb), (a, nb, na), (b, c, nc), (b, nc, nb)])
+    liner_mesh = bpy.data.meshes.new("open-gold-liner-mesh")
+    liner_mesh.from_pydata(liner_vertices, [], liner_faces)
+    liner_mesh.update()
+    liner = bpy.data.objects.new("warm-gold-inner-liner", liner_mesh)
+    bpy.context.scene.collection.objects.link(liner)
+    liner_mesh.materials.append(gold)
+    for polygon in liner_mesh.polygons:
+        polygon.use_smooth = True
+
+    # 山云纹贴合面向游戏相机的外壁；粗玉色主线保证缩略图可读，金色只磨亮山脊高边。
+    relief_paths = [
+        [(-0.58, -0.16), (-0.34, 0.09), (-0.16, -0.05)],
+        [(-0.20, -0.02), (0.02, 0.27), (0.25, -0.03)],
+        [(0.18, -0.02), (0.40, 0.16), (0.60, -0.10)],
+        [(-0.62, -0.25), (-0.48, -0.15), (-0.34, -0.24), (-0.20, -0.15), (-0.05, -0.26)],
+        [(-0.05, -0.28), (0.12, -0.17), (0.28, -0.27), (0.44, -0.17), (0.62, -0.25)],
+    ]
+    # 两朵卷云用收缩螺旋而不是折线，和上方三座山峰形成明确的山云层级。
+    for center_x in (-0.38, 0.38):
+        spiral = []
+        for step in range(13):
+            angle = step * math.tau / 5.8
+            radius = 0.15 * (1.0 - step / 16.0)
+            spiral.append((center_x + radius * math.cos(angle),
+                           -0.20 + radius * 0.62 * math.sin(angle)))
+        relief_paths.append(spiral)
+    relief_parts = []
+    camera_radial = Vector((0.59, -0.81, 0.0))
+    camera_tangent = Vector((0.81, 0.59, 0.0))
+    for index, path in enumerate(relief_paths):
+        points = []
+        for x, z in path:
+            position = camera_radial * (math.sqrt(max(0.01, 0.81 ** 2 - x ** 2)) + 0.022)
+            position += camera_tangent * x
+            points.append((position.x, position.y, z))
+        relief_parts.append(curve_stroke_3d(f"mountain-cloud-relief-{index}", points, 0.044,
+                                            relief_jade))
+    gold_paths = [relief_paths[0], relief_paths[1], relief_paths[2]]
+    gold_parts = []
+    for index, path in enumerate(gold_paths):
+        points = []
+        for x, z in path:
+            position = camera_radial * (math.sqrt(max(0.01, 0.81 ** 2 - x ** 2)) + 0.068)
+            position += camera_tangent * x
+            points.append((position.x, position.y, z + 0.012))
+        gold_parts.append(curve_stroke_3d(f"worn-gold-ridge-{index}", points, 0.013,
+                                          worn_gold))
+
+    normalize_export_parts(
+        [body, liner, join(relief_parts, "broad-mountain-cloud-relief"),
+         join(gold_parts, "restrained-worn-gold-ridges")],
+        "banzhi",
+        output,
+    )
+
+
 BUILDERS = {
     "tongqian": make_tongqian,
     "bracelet": make_bracelet,
     "baoshi": make_baoshi,
     "hulu": make_hulu,
     "yuzhuo": make_yuzhuo,
+    "banzhi": make_banzhi,
 }
 
 
