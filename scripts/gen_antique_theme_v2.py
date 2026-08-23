@@ -588,11 +588,165 @@ def make_hulu(output: Path) -> None:
     )
 
 
+def make_yuzhuo(output: Path) -> None:
+    # 首版用分面材质模拟飘花，边界会读成马赛克；改用嵌入 GLB 的连续纹理，让色根跨面平滑流动。
+    jade = bpy.data.materials.new("yuzhuo_continuous_jade_marbling")
+    jade.use_nodes = True
+    jade_principled = jade.node_tree.nodes.get("Principled BSDF")
+    jade_principled.inputs["Metallic"].default_value = 0.0
+    jade_principled.inputs["Roughness"].default_value = 0.24
+
+    texture_width = 512
+    texture_height = 256
+    jade_image = bpy.data.images.new("yuzhuo_white_emerald_marbling",
+                                     width=texture_width, height=texture_height)
+    pixels = []
+
+    def smoothstep(edge0: float, edge1: float, value: float) -> float:
+        amount = max(0.0, min(1.0, (value - edge0) / (edge1 - edge0)))
+        return amount * amount * (3.0 - 2.0 * amount)
+
+    cream_rgb = Vector((0.78, 0.75, 0.61))
+    pale_rgb = Vector((0.40, 0.55, 0.29))
+    emerald_rgb = Vector((0.055, 0.29, 0.070))
+    for y in range(texture_height):
+        phi = y * math.tau / texture_height
+        for x in range(texture_width):
+            theta = x * math.tau / texture_width
+            broad = (0.58 * math.sin(2 * theta + 0.35)
+                     + 0.30 * math.sin(5 * theta - 0.9)
+                     + 0.14 * math.cos(3 * phi - theta))
+            flowing = (broad + 0.12 * math.sin(13 * theta + 1.7 * math.sin(2 * phi))
+                       + 0.07 * math.sin(23 * theta - 3 * phi))
+            pale_amount = smoothstep(-0.18, 0.22, flowing)
+            deep_amount = smoothstep(0.34, 0.78, flowing)
+            color = cream_rgb.lerp(pale_rgb, pale_amount)
+            color = color.lerp(emerald_rgb, deep_amount * 0.88)
+
+            # 不叠加深色细线：在游戏缩略图里它会被误读为裂纹；只用连续色根表达天然玉纹。
+            # 轻微乳白颗粒打散纯色，但幅度受控，不生成首版那种像素块。
+            grain = 0.018 * math.sin(31 * theta + 17 * phi) * math.sin(19 * theta - 13 * phi)
+            pixels.extend((max(0.0, min(1.0, color.x + grain)),
+                           max(0.0, min(1.0, color.y + grain)),
+                           max(0.0, min(1.0, color.z + grain)), 1.0))
+    jade_image.pixels.foreach_set(pixels)
+    jade_image.pack()
+    texture_node = jade.node_tree.nodes.new("ShaderNodeTexImage")
+    texture_node.image = jade_image
+    texture_node.interpolation = "Linear"
+    texture_node.extension = "REPEAT"
+    jade.node_tree.links.new(texture_node.outputs["Color"], jade_principled.inputs["Base Color"])
+
+    antique_gold = material("yuzhuo_antique_gold", (0.23, 0.058, 0.003, 1), metalness=0.52,
+                            roughness=0.38)
+    gold_highlight = material("yuzhuo_worn_gold_edge", (0.46, 0.17, 0.010, 1), metalness=0.58,
+                             roughness=0.29)
+
+    # 主环必须保持真正正圆；天然感只交给玉色纹理，避免几何起伏在固定机位下读成椭圆或变形。
+    major_segments = 64
+    minor_segments = 16
+    vertices = []
+    for major_index in range(major_segments):
+        theta = major_index * math.tau / major_segments
+        major_radius = 1.0
+        tube_radius = 0.25
+        for minor_index in range(minor_segments):
+            phi = minor_index * math.tau / minor_segments
+            polished = 1.0
+            local_radius = tube_radius * polished
+            vertices.append(((major_radius + local_radius * math.cos(phi)) * math.cos(theta),
+                             (major_radius + local_radius * math.cos(phi)) * math.sin(theta),
+                             local_radius * math.sin(phi)))
+
+    faces = []
+    for major_index in range(major_segments):
+        next_major = (major_index + 1) % major_segments
+        for minor_index in range(minor_segments):
+            next_minor = (minor_index + 1) % minor_segments
+            a = major_index * minor_segments + minor_index
+            b = next_major * minor_segments + minor_index
+            c = next_major * minor_segments + next_minor
+            d = major_index * minor_segments + next_minor
+            faces.extend([(a, b, c), (a, c, d)])
+
+    mesh = bpy.data.meshes.new("hand-polished-jade-bangle-mesh")
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+    uv_layer = mesh.uv_layers.new(name="continuous-marble-uv")
+    for polygon in mesh.polygons:
+        raw_uvs = []
+        for loop_index in polygon.loop_indices:
+            vertex_index = mesh.loops[loop_index].vertex_index
+            raw_uvs.append((vertex_index // minor_segments / major_segments,
+                            vertex_index % minor_segments / minor_segments))
+        seam_u = max(uv[0] for uv in raw_uvs) - min(uv[0] for uv in raw_uvs) > 0.5
+        seam_v = max(uv[1] for uv in raw_uvs) - min(uv[1] for uv in raw_uvs) > 0.5
+        for loop_index, (u, v) in zip(polygon.loop_indices, raw_uvs):
+            uv_layer.data[loop_index].uv = ((u + 1.0 if seam_u and u < 0.5 else u),
+                                            (v + 1.0 if seam_v and v < 0.5 else v))
+    body = bpy.data.objects.new("plump-white-and-emerald-jade-bangle", mesh)
+    bpy.context.scene.collection.objects.link(body)
+    mesh.materials.append(jade)
+    for polygon in mesh.polygons:
+        polygon.use_smooth = True
+
+    # 金缮环真正包住圆条截面，不用悬浮贴片；位置偏左上，固定俯视与随机旋转都能形成识别点。
+    clasp_theta = math.radians(148)
+    clasp_center = Vector((math.cos(clasp_theta), math.sin(clasp_theta), 0.0))
+    tangent = Vector((-math.sin(clasp_theta), math.cos(clasp_theta), 0.0))
+    bpy.ops.mesh.primitive_torus_add(major_radius=0.30, minor_radius=0.026,
+                                     major_segments=28, minor_segments=6,
+                                     location=clasp_center)
+    collar = bpy.context.active_object
+    collar.name = "gold-repair-collar"
+    collar.rotation_mode = "QUATERNION"
+    collar.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(tangent)
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+    collar.data.materials.append(antique_gold)
+
+    # 四瓣云扣由一组相互重叠的低矮实体构成，并增加较小亮边层，避免三瓣布局读成蝴蝶结。
+    cloud_parts = []
+    cloud_highlights = []
+    radial = Vector((math.cos(clasp_theta), math.sin(clasp_theta), 0.0))
+    plaque_center = clasp_center + radial * 0.04 + Vector((0, 0, 0.295))
+    for index, (along_tangent, along_radial, sx, sy) in enumerate([
+        (-0.115, 0.0, 0.16, 0.14), (0.115, 0.0, 0.16, 0.14),
+        (0.0, 0.09, 0.17, 0.15), (0.0, -0.085, 0.17, 0.15),
+    ]):
+        location = plaque_center + tangent * along_tangent + radial * along_radial
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=1.0, location=location)
+        lobe = bpy.context.active_object
+        lobe.name = f"cloud-clasp-lobe-{index}"
+        lobe.scale = (sx, sy, 0.045)
+        lobe.rotation_euler[2] = clasp_theta
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+        lobe.data.materials.append(antique_gold)
+        cloud_parts.append(lobe)
+
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=1.0,
+                                              location=location + Vector((0, 0, 0.035)))
+        highlight = bpy.context.active_object
+        highlight.name = f"cloud-clasp-highlight-{index}"
+        highlight.scale = (sx * 0.52, sy * 0.52, 0.020)
+        highlight.rotation_euler[2] = clasp_theta
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+        highlight.data.materials.append(gold_highlight)
+        cloud_highlights.append(highlight)
+
+    normalize_export_parts(
+        [body, collar, join(cloud_parts, "four-lobed-cloud-clasp"),
+         join(cloud_highlights, "worn-cloud-clasp-highlight")],
+        "yuzhuo",
+        output,
+    )
+
+
 BUILDERS = {
     "tongqian": make_tongqian,
     "bracelet": make_bracelet,
     "baoshi": make_baoshi,
     "hulu": make_hulu,
+    "yuzhuo": make_yuzhuo,
 }
 
 
