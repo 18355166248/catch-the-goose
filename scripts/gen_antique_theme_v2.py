@@ -86,6 +86,27 @@ def curve_stroke(name: str, points: list[tuple[float, float]], z: float,
     return bpy.context.active_object
 
 
+def curve_stroke_3d(name: str, points: list[tuple[float, float, float]], radius: float,
+                    mat: bpy.types.Material) -> bpy.types.Object:
+    """在任意曲面方向生成粗线浮雕，适合无法投影到统一 XY 平面的装饰路径。"""
+    curve = bpy.data.curves.new(name, "CURVE")
+    curve.dimensions = "3D"
+    curve.resolution_u = 2
+    curve.bevel_depth = radius
+    curve.bevel_resolution = 2
+    spline = curve.splines.new("POLY")
+    spline.points.add(len(points) - 1)
+    for point, (x, y, z) in zip(spline.points, points):
+        point.co = (x, y, z, 1.0)
+    obj = bpy.data.objects.new(name, curve)
+    bpy.context.scene.collection.objects.link(obj)
+    obj.data.materials.append(mat)
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    bpy.ops.object.convert(target="MESH")
+    return bpy.context.active_object
+
+
 def normalize_export_parts(objects: list[bpy.types.Object], name: str, output: Path) -> None:
     """整套部件共享中心与比例，避免候选导出后凸缘、钱文和主体相互错位。"""
     bpy.ops.object.select_all(action="DESELECT")
@@ -446,7 +467,133 @@ def make_baoshi(output: Path) -> None:
     )
 
 
-BUILDERS = {"tongqian": make_tongqian, "bracelet": make_bracelet, "baoshi": make_baoshi}
+def make_hulu(output: Path) -> None:
+    # 用户确认采用高饱和蜜蜡琥珀方向；颜色分层靠实体切面与明暗材质，不使用会在密堆中消失的透明。
+    amber_deep = material("hulu_burnt_amber", (0.20, 0.028, 0.001, 1), metalness=0.0,
+                          roughness=0.30)
+    amber_mid = material("hulu_honey_amber", (0.58, 0.14, 0.003, 1), metalness=0.0,
+                         roughness=0.24)
+    amber_light = material("hulu_golden_highlight", (0.85, 0.30, 0.010, 1), metalness=0.0,
+                           roughness=0.20)
+    amber_relief = material("hulu_amber_relief", (0.36, 0.060, 0.002, 1), metalness=0.0,
+                            roughness=0.32)
+    antique_gold = material("hulu_antique_gold", (0.36, 0.105, 0.009, 1), metalness=0.46,
+                            roughness=0.36)
+    vermilion = material("hulu_vermilion_cord", (0.55, 0.015, 0.008, 1), metalness=0.0,
+                         roughness=0.66)
+    cord_shadow = material("hulu_cord_shadow", (0.18, 0.003, 0.002, 1), metalness=0.0,
+                           roughness=0.82)
+
+    # 一张连续旋转曲面连接双肚与短腰；轮廓宽高接近，避免旧模型的两球拼接和前稿的细长瓶形。
+    segments = 32
+    profile = [
+        (0.28, -1.00), (0.70, -0.95), (0.90, -0.73), (0.97, -0.40),
+        (0.91, -0.10), (0.49, 0.055),  # 腰部纵向极短，只承担明确收束。
+        (0.64, 0.15), (0.76, 0.38), (0.70, 0.64), (0.43, 0.82), (0.29, 0.88),
+    ]
+    vertices = []
+    for ring_index, (radius, z) in enumerate(profile):
+        for index in range(segments):
+            angle = index * math.tau / segments
+            # 八向极浅起伏打散完美球面高光，同时不把主体变成南瓜。
+            rib = 1.0 + 0.018 * math.cos(8 * angle) * (0.35 if ring_index == 5 else 1.0)
+            vertices.append((radius * rib * math.cos(angle),
+                             radius * rib * math.sin(angle), z))
+    faces = []
+    mat_indices = []
+    for ring_index in range(len(profile) - 1):
+        start = ring_index * segments
+        next_start = start + segments
+        for index in range(segments):
+            nxt = (index + 1) % segments
+            faces.extend([(start + index, next_start + index, next_start + nxt),
+                          (start + index, next_start + nxt, start + nxt)])
+            # 固定方向的暖亮带模拟蜜蜡内部明度层次，保证每次生成可复现。
+            sector = index % segments
+            material_index = 2 if sector in {2, 3, 4, 5} else (0 if sector in {18, 19, 20} else 1)
+            mat_indices.extend([material_index, material_index])
+    mesh = bpy.data.meshes.new("continuous-plump-gourd-mesh")
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+    body = bpy.data.objects.new("continuous-plump-amber-body", mesh)
+    bpy.context.scene.collection.objects.link(body)
+    for mat in (amber_deep, amber_mid, amber_light):
+        mesh.materials.append(mat)
+    for polygon, mat_index in zip(mesh.polygons, mat_indices):
+        polygon.material_index = mat_index
+        polygon.use_smooth = True
+
+    # 稳定底面用一块低矮圆片封口，物理落地时不会依赖尖点或悬空装饰。
+    bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=0.30, depth=0.035,
+                                        location=(0, 0, -0.995))
+    base = bpy.context.active_object
+    base.name = "stable-amber-foot"
+    base.data.materials.append(amber_deep)
+    bevel(base, 0.018, 2)
+
+    # 颈口只保留细金环，拒绝前稿的厚重金属腰带和笼架。
+    bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=0.31, depth=0.10,
+                                        location=(0, 0, 0.89))
+    neck_cap = bpy.context.active_object
+    neck_cap.name = "thin-gold-neck-cap"
+    neck_cap.data.materials.append(antique_gold)
+    bevel(neck_cap, 0.035, 3)
+
+    # 短绳环紧贴主体，长度不会主导归一化尺寸，也不会把现有方盒碰撞代理拉成细长尾巴。
+    bpy.ops.mesh.primitive_torus_add(major_radius=0.18, minor_radius=0.042,
+                                     major_segments=28, minor_segments=7,
+                                     location=(0, 0, 1.09), rotation=(math.pi / 2, 0, 0))
+    cord_loop = bpy.context.active_object
+    cord_loop.name = "compact-red-cord-loop"
+    cord_loop.data.materials.append(vermilion)
+
+    knot_parts = []
+    for index, (x, z, scale_x) in enumerate([
+        (-0.12, 0.96, 0.12), (0.12, 0.96, 0.12), (0.0, 1.00, 0.14), (0.0, 0.93, 0.13),
+    ]):
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=1.0,
+                                              location=(x, -0.015, z))
+        knot = bpy.context.active_object
+        knot.name = f"cord-knot-{index}"
+        knot.scale = (scale_x, 0.075, 0.085)
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        knot.data.materials.append(vermilion if index % 2 == 0 else cord_shadow)
+        knot_parts.append(knot)
+    knot_system = join(knot_parts, "compact-red-knot")
+
+    # 同材质宽云纹使用实体粗线；路径贴近下肚正面，随机旋转时也至少保留一段可见浮雕。
+    cloud_strokes = []
+    cloud_paths_xz = [
+        [(-0.68, -0.47), (-0.56, -0.31), (-0.37, -0.30), (-0.28, -0.44),
+         (-0.38, -0.55), (-0.53, -0.50)],
+        [(-0.28, -0.44), (-0.08, -0.29), (0.12, -0.36), (0.18, -0.50),
+         (0.05, -0.59), (-0.11, -0.53)],
+        [(0.16, -0.49), (0.35, -0.35), (0.57, -0.39), (0.67, -0.52)],
+    ]
+    for index, path in enumerate(cloud_paths_xz):
+        points = []
+        for x, z in path:
+            # 下肚截面近似椭圆，按 x 位置贴合正面，额外外推 0.018 避免浮雕陷入主体。
+            section_radius = 0.94
+            y = -math.sqrt(max(0.01, section_radius ** 2 - x ** 2)) - 0.018
+            points.append((x, y, z))
+        cloud_strokes.append(curve_stroke_3d(f"amber-cloud-{index}", points, 0.038,
+                                             amber_relief))
+    cloud_relief = join(cloud_strokes, "broad-amber-cloud-relief")
+
+    normalize_export_parts(
+        [body, base, neck_cap, cord_loop, knot_system, cloud_relief],
+        "hulu",
+        output,
+    )
+
+
+BUILDERS = {
+    "tongqian": make_tongqian,
+    "bracelet": make_bracelet,
+    "baoshi": make_baoshi,
+    "hulu": make_hulu,
+}
 
 
 def main() -> None:
