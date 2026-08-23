@@ -4,8 +4,8 @@ import os
 from mathutils import Vector
 
 
-SOURCE_DIR = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\models"
-OUTPUT_DIR = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\icons"
+SOURCE_DIR = r"F:\FrontEnd\code\game-workspace\catch-the-goose\game\assets\resources\models"
+OUTPUT_DIR = r"F:\FrontEnd\code\game-workspace\catch-the-goose\game\assets\resources\icons"
 
 
 def look_at(obj, target):

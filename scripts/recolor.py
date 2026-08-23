@@ -1,6 +1,6 @@
 import bpy, os
 
-MODELS = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\models"
+MODELS = r"F:\FrontEnd\code\game-workspace\catch-the-goose\game\assets\resources\models"
 
 # 目标:纯色不透明。断开 baseColor 贴图(现有贴图色不对/半透),给纯色 + 关透射 + OPAQUE。
 JOBS = {

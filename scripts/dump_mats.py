@@ -1,6 +1,6 @@
 import bpy, os
 
-MODELS = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\models"
+MODELS = r"F:\FrontEnd\code\game-workspace\catch-the-goose\game\assets\resources\models"
 CHECK = ["pixiu", "mile", "baicai", "pingankou", "hulu"]
 
 
