@@ -86,8 +86,37 @@ def curve_stroke(name: str, points: list[tuple[float, float]], z: float,
     return bpy.context.active_object
 
 
-def normalize_export_parts(objects: list[bpy.types.Object], name: str, output: Path) -> None:
-    """整套部件共享中心与比例，避免候选导出后凸缘、钱文和主体相互错位。"""
+def apply_hierarchy(objects: list[bpy.types.Object], parents: dict[str, str]) -> None:
+    """按 sculpt-spec 的 componentTree 建父子节点树。
+
+    导出前必须建好层级，否则 GLB 里所有部件都是并列根节点：
+    父件一动，子件留在原地。序列帧动画靠的就是「转父件带动子件」
+    （转大臂要带着小臂和手走），所以扁平结构等于不能做动作。
+
+    必须在归一化的 transform_apply 之后调用：先建父子再 apply，
+    父件的变换会二次叠加到子件上。此刻各对象变换已是单位阵、
+    几何位于世界坐标，所以取父件世界矩阵的逆做 parent inverse，
+    子件不会跳位。
+    """
+    by_name = {obj.name: obj for obj in objects}
+    for child_name, parent_name in parents.items():
+        child = by_name.get(child_name)
+        parent = by_name.get(parent_name)
+        if child is None or parent is None:
+            raise SystemExit(
+                f"层级声明与实际部件对不上: {child_name} -> {parent_name}；"
+                f"现有部件 {sorted(by_name)}")
+        child.parent = parent
+        child.matrix_parent_inverse = parent.matrix_world.inverted()
+    bpy.context.view_layer.update()
+
+
+def normalize_export_parts(objects: list[bpy.types.Object], name: str, output: Path,
+                           parents: dict[str, str] | None = None) -> None:
+    """整套部件共享中心与比例，避免候选导出后凸缘、钱文和主体相互错位。
+
+    parents 是 {子部件名: 父部件名}，镜像该模型 sculpt-spec.json 的 componentTree。
+    """
     bpy.ops.object.select_all(action="DESELECT")
     for obj in objects:
         obj.select_set(True)
@@ -110,6 +139,9 @@ def normalize_export_parts(objects: list[bpy.types.Object], name: str, output: P
         bpy.context.view_layer.objects.active = obj
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
+    if parents:
+        apply_hierarchy(objects, parents)
+
     output.mkdir(parents=True, exist_ok=True)
     bpy.ops.object.select_all(action="DESELECT")
     for obj in objects:
@@ -121,7 +153,9 @@ def normalize_export_parts(objects: list[bpy.types.Object], name: str, output: P
         use_selection=True,
     )
     triangles = sum(len(poly.vertices) - 2 for obj in objects for poly in obj.data.polygons)
-    print("BUILT", name, "parts=", [obj.name for obj in objects], "triangles=", triangles)
+    nested = sum(1 for obj in objects if obj.parent in objects)
+    print("BUILT", name, "parts=", [obj.name for obj in objects],
+          "triangles=", triangles, "nested=", nested)
 
 
 def make_tongqian(output: Path) -> None:
@@ -215,6 +249,8 @@ def make_tongqian(output: Path) -> None:
         patina_parts.append(spot)
     patina_marks = join(patina_parts, "patina-marks")
 
+    # tongqian-sculpt-spec.json 里四个宏部件都直挂 root，没有嵌套关系，
+    # 铜钱本身也没有可活动的部位，因此不传 parents（保持扁平是符合规格的，不是漏掉）。
     normalize_export_parts([body, outer_rim, inner_rim, glyphs, patina_marks], "tongqian", output)
 
 
@@ -322,6 +358,13 @@ def make_bracelet(output: Path) -> None:
          charm_loop, charm_cap, charm],
         "bracelet",
         output,
+        # 镜像 bracelet-sculpt-spec.json：charm-loop 挂在 focal-bead 上，
+        # jade-charm 再挂在 charm-loop 上。这样晃动挂坠时环和玉牌会跟着走。
+        parents={
+            "charm-loop": "focal-cloud-relief",
+            "charm-cap": "charm-loop",
+            "pale-jade-charm": "charm-loop",
+        },
     )
 
 
@@ -443,6 +486,13 @@ def make_baoshi(output: Path) -> None:
          join(lotus_panels, "lotus-setting-panels")],
         "baoshi",
         output,
+        # 镜像 baoshi-sculpt-spec.json：bezel / prong-system / lotus-panels
+        # 都挂在 setting-base 下，宝石本身按 spec 留在根层。
+        parents={
+            "raised-gold-bezel": "octagonal-setting-base",
+            "protective-prong-system": "octagonal-setting-base",
+            "lotus-setting-panels": "octagonal-setting-base",
+        },
     )
 
 
