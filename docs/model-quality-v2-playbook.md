@@ -229,7 +229,7 @@ python3 /Users/xmly/.agents/skills/img2threejs/forge/stage2_spec/validate_sculpt
 | 6 | 古玩铺 | `banzhi` | 已完成 | 本提交 |
 | 7 | 古玩铺 | `yuxi` | 已完成 | 本提交 |
 | 8 | 古玩铺 | `ruyi` | 已完成 | 本提交 |
-| 9 | 池塘农场 | `carrot` | 待评估 | — |
+| 9 | 池塘农场 | `carrot` | 运行时验收 | 待用户确认 |
 | 10 | 池塘农场 | `corn` | 待评估 | — |
 | 11 | 池塘农场 | `eggplant` | 待评估 | — |
 | 12 | 池塘农场 | `frog` | 待评估 | — |
