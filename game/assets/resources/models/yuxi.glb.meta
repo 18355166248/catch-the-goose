@@ -111,24 +111,6 @@
       ],
       "subMetas": {}
     },
-    "2f6d1": {
-      "importer": "gltf-mesh",
-      "uuid": "5bb81f2b-1832-4be9-899a-d3ba9b33d3b7@2f6d1",
-      "displayName": "",
-      "id": "2f6d1",
-      "name": "Cube.mesh",
-      "userData": {
-        "gltfIndex": 5,
-        "triangleCount": 188
-      },
-      "ver": "1.1.1",
-      "imported": true,
-      "files": [
-        ".bin",
-        ".json"
-      ],
-      "subMetas": {}
-    },
     "057a2": {
       "importer": "gltf-material",
       "uuid": "5bb81f2b-1832-4be9-899a-d3ba9b33d3b7@057a2",
@@ -189,6 +171,24 @@
       "ver": "1.0.14",
       "imported": true,
       "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "2f6d1": {
+      "importer": "gltf-mesh",
+      "uuid": "5bb81f2b-1832-4be9-899a-d3ba9b33d3b7@2f6d1",
+      "displayName": "",
+      "id": "2f6d1",
+      "name": "Cube.mesh",
+      "userData": {
+        "gltfIndex": 5,
+        "triangleCount": 188
+      },
+      "ver": "1.1.1",
+      "imported": true,
+      "files": [
+        ".bin",
         ".json"
       ],
       "subMetas": {}
