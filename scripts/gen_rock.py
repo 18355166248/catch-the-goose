@@ -11,8 +11,8 @@
 import bpy, os, bmesh, random
 from mathutils import Vector
 
-MODELS = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\models"
-ICONS = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\icons"
+MODELS = r"F:\FrontEnd\code\game-workspace\catch-the-goose\game\assets\resources\models"
+ICONS = r"F:\FrontEnd\code\game-workspace\catch-the-goose\game\assets\resources\icons"
 ROCK_COLOR = (0.20, 0.21, 0.24, 1.0)   # 冷灰，略偏蓝，闷暗
 
 

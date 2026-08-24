@@ -104,8 +104,35 @@ def normalize_export(o, name):
     print("BUILT", name, "faces=", len(o.data.polygons))
 
 
-def normalize_export_parts(objects, name):
-    """多部件模型统一归一化后导出，保留部件名供 Cocos 侧完整遍历 MeshRenderer。"""
+def apply_hierarchy(objects, parents):
+    """按 sculpt-spec 的 componentTree 建父子节点树。
+
+    导出前必须建好层级，否则 GLB 里所有部件都是并列根节点：
+    父件一动，子件留在原地。序列帧动画靠的就是「转父件带动子件」，
+    扁平结构等于不能做动作。
+
+    必须在归一化的 transform_apply 之后调用：先建父子再 apply，
+    父件的变换会二次叠加到子件上。此刻各对象变换已是单位阵、
+    几何位于世界坐标，所以取父件世界矩阵的逆做 parent inverse，子件不会跳位。
+    """
+    by_name = {o.name: o for o in objects}
+    for child_name, parent_name in parents.items():
+        child = by_name.get(child_name)
+        parent = by_name.get(parent_name)
+        if child is None or parent is None:
+            raise SystemExit(
+                "层级声明与实际部件对不上: %s -> %s；现有部件 %s"
+                % (child_name, parent_name, sorted(by_name)))
+        child.parent = parent
+        child.matrix_parent_inverse = parent.matrix_world.inverted()
+    bpy.context.view_layer.update()
+
+
+def normalize_export_parts(objects, name, parents=None):
+    """多部件模型统一归一化后导出，保留部件名供 Cocos 侧完整遍历 MeshRenderer。
+
+    parents 是 {子部件名: 父部件名}，镜像该模型 sculpt-spec.json 的 componentTree。
+    """
     bpy.ops.object.select_all(action='DESELECT')
     for o in objects:
         o.select_set(True)
@@ -128,6 +155,9 @@ def normalize_export_parts(objects, name):
         o.scale = (scale, scale, scale)
         bpy.context.view_layer.objects.active = o
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    if parents:
+        apply_hierarchy(objects, parents)
+
     bpy.ops.object.select_all(action='DESELECT')
     for o in objects:
         o.select_set(True)
@@ -135,7 +165,9 @@ def normalize_export_parts(objects, name):
     bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, name + ".glb"),
                               export_format='GLB', use_selection=True)
     faces = sum(len(o.data.polygons) for o in objects if o.type == 'MESH')
-    print("BUILT", name, "parts=", [o.name for o in objects], "faces=", faces)
+    nested = sum(1 for o in objects if o.parent in objects)
+    print("BUILT", name, "parts=", [o.name for o in objects], "faces=", faces,
+          "nested=", nested)
 
 
 def add_stem_leaf(top_z, m_stem, m_leaf, stem_r=0.06, stem_h=0.28, leaf=True):
@@ -323,7 +355,13 @@ def make_apple():
     bpy.ops.object.convert(target='MESH')
     leaf = join([leaf, bpy.context.active_object], "leaf")
 
-    normalize_export_parts([body, stem, leaf], "apple")
+    # apple-sculpt-spec.json 的 componentTree 里 stem/leaf 的 parent 都写成 root，
+    # 但同一条目的 attachment.parentSocket 分别是 crown-socket（在果体上）和
+    # stem-base-socket（在果柄上）——真实连接关系是 果体 → 果柄 → 叶片。
+    # parent 字段是扁平默认值（confidence 0.5），这里按 socket 建实际层级，
+    # 否则转果体时果柄和叶子会留在原地。
+    normalize_export_parts([body, stem, leaf], "apple",
+                           parents={"stem": "fruit-body", "leaf": "stem"})
 
 
 def make_banana():

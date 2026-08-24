@@ -2,8 +2,8 @@
 import bpy, os
 from mathutils import Vector
 
-MODELS = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\models"
-OUT = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\icons"
+MODELS = r"F:\FrontEnd\code\game-workspace\catch-the-goose\game\assets\resources\models"
+OUT = r"F:\FrontEnd\code\game-workspace\catch-the-goose\game\assets\resources\icons"
 ITEMS = ["apple", "banana", "orange", "grape",
          "strawberry", "pear", "lemon", "cherry"]
 

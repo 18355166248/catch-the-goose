@@ -2,7 +2,7 @@ import bpy, os
 from mathutils import Vector
 
 CD = r"C:\Users\Administrator\AppData\Local\Temp\cand_models"
-OUT = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\models"
+OUT = r"F:\FrontEnd\code\game-workspace\catch-the-goose\game\assets\resources\models"
 
 # id: (源文件, 改色 baseColor 或 None 保留, metallic, roughness)
 JOBS = {

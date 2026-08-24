@@ -1,7 +1,7 @@
 import bpy, os, math
 from mathutils import Vector
 
-MODELS = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\models"
+MODELS = r"F:\FrontEnd\code\game-workspace\catch-the-goose\game\assets\resources\models"
 OUT = r"C:\Users\Administrator\AppData\Local\Temp\model_thumbs"
 os.makedirs(OUT, exist_ok=True)
 ITEMS = ["goose", "baicai", "mile", "pixiu", "banzhi", "bracelet",

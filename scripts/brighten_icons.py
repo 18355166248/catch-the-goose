@@ -14,7 +14,7 @@ import sys
 import numpy as np
 from PIL import Image
 
-ICONS = r"F:\FrontEnd\code\catch-the-goose\game\assets\resources\icons"
+ICONS = r"F:\FrontEnd\code\game-workspace\catch-the-goose\game\assets\resources\icons"
 BACKUP = os.path.join(os.environ.get("TEMP", "."), "icons_backup")
 
 GAMMA = 0.60   # 越小越亮（暗部提升更强），1.0 = 不变
