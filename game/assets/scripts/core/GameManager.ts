@@ -269,8 +269,9 @@ export class GameManager extends Component {
     /**
      * 最大边统一归一化只能保证“最长尺寸相同”，不能保证俯视面积相同。香蕉、胡萝卜、
      * 如意等细长件因此会比球形件少占很多像素，在手机上既显小又难点。这里只给轮廓偏细
-     * 的模型做 4%~8% 的温和补偿；缩放同时用于视觉和 Jolt 代理，不制造点击错位。
-     * 数值刻意不超过 1.08，避免破坏按统一 itemScale 反解出来的堆积层数。
+     * 的模型做温和补偿；缩放同时用于视觉和 Jolt 代理，不制造点击错位。
+     * 纸杯换为原始模型中的小视图后，最长边从旧主模型的 0.796 缩至 0.286。
+     * 因此按 2.78 倍还原至旧最大纸杯的实际尺寸，而不是只做观感补偿。
      */
     private static readonly ITEM_SCALE_MULTIPLIER: Readonly<Record<string, number>> = {
         banana: 1.08,
@@ -285,6 +286,7 @@ export class GameManager extends Component {
         frog: 1.07,
         koi: 1.06,
         duck: 1.07,
+        cupcake: 2.78,
         icecream: 1.06,
         cake_slice: 1.05,
         candy: 1.08,

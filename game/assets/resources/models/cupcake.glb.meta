@@ -2,49 +2,35 @@
   "ver": "2.3.14",
   "importer": "gltf",
   "imported": true,
-  "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894",
+  "uuid": "113267ba-f7ce-4924-8b2b-0033d90af292",
   "files": [],
   "subMetas": {
-    "99842": {
-      "importer": "gltf-material",
-      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@99842",
+    "92111": {
+      "importer": "gltf-embeded-image",
+      "uuid": "113267ba-f7ce-4924-8b2b-0033d90af292@92111",
       "displayName": "",
-      "id": "99842",
-      "name": "cup_wrapper_rib.material",
-      "userData": {
-        "gltfIndex": 2
-      },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
-    "fe6ae": {
-      "importer": "gltf-mesh",
-      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@fe6ae",
-      "displayName": "",
-      "id": "fe6ae",
-      "name": "Cone.mesh",
+      "id": "92111",
+      "name": "texture_pbr_20250901_normal.image",
       "userData": {
         "gltfIndex": 0,
-        "triangleCount": 1888
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
       },
-      "ver": "1.1.1",
+      "ver": "1.0.3",
       "imported": true,
       "files": [
-        ".bin",
-        ".json"
+        ".json",
+        ".png"
       ],
       "subMetas": {}
     },
-    "76be4": {
+    "99380": {
       "importer": "gltf-material",
-      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@76be4",
+      "uuid": "113267ba-f7ce-4924-8b2b-0033d90af292@99380",
       "displayName": "",
-      "id": "76be4",
-      "name": "cup_paper.material",
+      "id": "99380",
+      "name": "Material.001.material",
       "userData": {
         "gltfIndex": 0
       },
@@ -55,80 +41,127 @@
       ],
       "subMetas": {}
     },
-    "53f92": {
-      "importer": "gltf-material",
-      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@53f92",
+    "7035a": {
+      "importer": "gltf-mesh",
+      "uuid": "113267ba-f7ce-4924-8b2b-0033d90af292@7035a",
       "displayName": "",
-      "id": "53f92",
-      "name": "cup_cake.material",
+      "id": "7035a",
+      "name": "node_0.mesh",
       "userData": {
-        "gltfIndex": 1
+        "gltfIndex": 0,
+        "triangleCount": 5952
       },
-      "ver": "1.0.14",
+      "ver": "1.1.1",
+      "imported": true,
+      "files": [
+        ".bin",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "7e97f": {
+      "importer": "gltf-embeded-image",
+      "uuid": "113267ba-f7ce-4924-8b2b-0033d90af292@7e97f",
+      "displayName": "",
+      "id": "7e97f",
+      "name": "texture_pbr_20250901.image",
+      "userData": {
+        "gltfIndex": 1,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".json",
+        ".png"
+      ],
+      "subMetas": {}
+    },
+    "df027": {
+      "importer": "gltf-embeded-image",
+      "uuid": "113267ba-f7ce-4924-8b2b-0033d90af292@df027",
+      "displayName": "",
+      "id": "df027",
+      "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness.image",
+      "userData": {
+        "gltfIndex": 2,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".json",
+        ".png"
+      ],
+      "subMetas": {}
+    },
+    "3effa": {
+      "importer": "texture",
+      "uuid": "113267ba-f7ce-4924-8b2b-0033d90af292@3effa",
+      "displayName": "",
+      "id": "3effa",
+      "name": "UnnamedTexture-0.texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "linear",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "113267ba-f7ce-4924-8b2b-0033d90af292@7e97f"
+      },
+      "ver": "1.0.22",
       "imported": true,
       "files": [
         ".json"
       ],
       "subMetas": {}
     },
-    "f24a7": {
-      "importer": "gltf-material",
-      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@f24a7",
+    "221a5": {
+      "importer": "texture",
+      "uuid": "113267ba-f7ce-4924-8b2b-0033d90af292@221a5",
       "displayName": "",
-      "id": "f24a7",
-      "name": "cup_frosting.material",
+      "id": "221a5",
+      "name": "UnnamedTexture-1.texture",
       "userData": {
-        "gltfIndex": 3
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "linear",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "113267ba-f7ce-4924-8b2b-0033d90af292@92111"
       },
-      "ver": "1.0.14",
+      "ver": "1.0.22",
       "imported": true,
       "files": [
         ".json"
       ],
       "subMetas": {}
     },
-    "46ccd": {
-      "importer": "gltf-material",
-      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@46ccd",
+    "0089c": {
+      "importer": "texture",
+      "uuid": "113267ba-f7ce-4924-8b2b-0033d90af292@0089c",
       "displayName": "",
-      "id": "46ccd",
-      "name": "cup_cherry.material",
+      "id": "0089c",
+      "name": "UnnamedTexture-2.texture",
       "userData": {
-        "gltfIndex": 4
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "linear",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "113267ba-f7ce-4924-8b2b-0033d90af292@df027"
       },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
-    "55a41": {
-      "importer": "gltf-material",
-      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@55a41",
-      "displayName": "",
-      "id": "55a41",
-      "name": "cup_sprinkle_cream.material",
-      "userData": {
-        "gltfIndex": 5
-      },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
-    "f8d8e": {
-      "importer": "gltf-material",
-      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@f8d8e",
-      "displayName": "",
-      "id": "f8d8e",
-      "name": "cup_sprinkle_mint.material",
-      "userData": {
-        "gltfIndex": 6
-      },
-      "ver": "1.0.14",
+      "ver": "1.0.22",
       "imported": true,
       "files": [
         ".json"
@@ -137,7 +170,7 @@
     },
     "93c74": {
       "importer": "gltf-scene",
-      "uuid": "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@93c74",
+      "uuid": "113267ba-f7ce-4924-8b2b-0033d90af292@93c74",
       "displayName": "",
       "id": "93c74",
       "name": "cupcake.prefab",
@@ -153,7 +186,20 @@
     }
   },
   "userData": {
-    "imageMetas": [],
+    "imageMetas": [
+      {
+        "name": "texture_pbr_20250901_normal",
+        "uri": "113267ba-f7ce-4924-8b2b-0033d90af292@92111"
+      },
+      {
+        "name": "texture_pbr_20250901",
+        "uri": "113267ba-f7ce-4924-8b2b-0033d90af292@7e97f"
+      },
+      {
+        "name": "texture_pbr_20250901_metallic-texture_pbr_20250901_roughness",
+        "uri": "113267ba-f7ce-4924-8b2b-0033d90af292@df027"
+      }
+    ],
     "lods": {
       "enable": false,
       "hasBuiltinLOD": false,
@@ -174,21 +220,19 @@
     },
     "assetFinder": {
       "meshes": [
-        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@fe6ae"
+        "113267ba-f7ce-4924-8b2b-0033d90af292@7035a"
       ],
       "skeletons": [],
-      "textures": [],
+      "textures": [
+        "113267ba-f7ce-4924-8b2b-0033d90af292@3effa",
+        "113267ba-f7ce-4924-8b2b-0033d90af292@221a5",
+        "113267ba-f7ce-4924-8b2b-0033d90af292@0089c"
+      ],
       "materials": [
-        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@76be4",
-        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@53f92",
-        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@99842",
-        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@f24a7",
-        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@46ccd",
-        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@55a41",
-        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@f8d8e"
+        "113267ba-f7ce-4924-8b2b-0033d90af292@99380"
       ],
       "scenes": [
-        "1455d1f7-99f3-4f1c-9e8c-ec86e3063894@93c74"
+        "113267ba-f7ce-4924-8b2b-0033d90af292@93c74"
       ]
     }
   }
