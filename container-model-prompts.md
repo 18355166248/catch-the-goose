@@ -116,3 +116,109 @@ game-ready PBR. Single centered object.
 3. 我登记 manifest、加载摆放、把隐形物理围栏对齐到开口（物件精确落筐内）
 
 先出**第一个**端到端跑通、确认手感，再逐套配齐。
+
+---
+
+# v2 · 农场与甜品容器重做（2026-08-28）
+
+这两件在游戏里不好看的主因是**和背景撞色**，单看模型反而看不出来。
+
+## 背景色实测（新容器定色的依据）
+
+| 皮肤 | 背景图 | 中央区域主色 | 旧容器 | 问题 |
+| --- | --- | --- | --- | --- |
+| `picnic` | `bg_farm.jpg` | RGB(227,193,75) 金黄 | 粉橙藤编 | 同色系，压在背景上糊成一片 |
+| `dessert` | `bg_dessert.jpg` | RGB(249,200,137) 杏色 | 白 + 粉边 | 同属暖色，明度接近，轮廓不跳 |
+
+## 出图方式（`cupcake` 首件的教训，务必遵守）
+
+**概念图只出单一 3/4 视角，不要三视图拼版。** `cupcake` 那张是四宫格，图生 3D
+把**四个视图各重建成一个独立实体**，顶视图还变成一片斜立的椭圆薄片。要三视图就
+单独出一张给人看，别喂给图生 3D。
+
+生成后走 `scripts/prepare_generated_model.py` → `gltf-transform resize` →
+`scripts/tune_generated_material.py` → `gltf-transform prune`。
+
+## 工程约束（两件都适用）
+
+- **开口必须正方形**：都用默认矩形物理边界，长宽不等会让物件贴到看不见的墙上。
+- **平底 + 直墙**：都**不开** `meshCollider`，物理走环墙拼的直壁；做成曲面碗底会和
+  物理边界对不上（`bowl_jade` 那种才需要开）。
+- **不要把手**。`tray_dessert` 现在的双侧金把手正是 `SceneSkin.ts` 里
+  `containerSpan: 5.0` 要补偿的东西 —— 把手撑大 AABB，按完整包围盒缩放后内盘反而被压小。
+  **新模型去掉把手后要删掉那一行**，回到缺省 4.0。
+- **墙高 = 开口宽的 1/4 ~ 1/3**。旧 `basket_farm` 只有 16%，浅得没有存在感。
+- **节点名**必须等于模型 id，用 `--name` 参数。
+
+---
+
+## A. `basket_farm` 池塘农场 · 深胡桃藤编方托盘 ✅ 已完成
+
+生成件 43.6MB / 50,310 面，处理后 25,000 面 / 1,045KB，开口 1.000×0.989、墙高比 18.8%。
+
+```
+A single three-quarter view of one square woven rattan serving tray, equal width
+and depth, low straight walls about one quarter of the opening width, empty
+interior with a flat woven base, real over-under basket weaving where dark walnut
+rattan strands cross honey-toned strands, one continuous unbroken rolled rim
+running evenly around all four sides, soft rounded corners, warm matte finish.
+Stylized smooth cute casual mobile-game prop, game-ready PBR.
+Single centered object on a clean off-white background, soft studio light.
+```
+
+**实测结论（对后续容器同样适用）**：
+
+1. **编织是几何做的，不是法线贴图。** 贴图 256/512/1024 三档渲染几乎无差别，而面数从
+   6,000 提到 49,488 时编织才真正立起来。**2.5 万面是收益拐点**，6,000 面会糊成一片。
+   证据见 `audit/model-quality/basket_farm-v3/face-budget-study.png`。
+2. **滚边上的"疙瘩"是材质不是几何。** 生成件带 `KHR_materials_specular:[2,2,2]`，
+   高光噪点糊在滚边上。**Blender 侧断开节点链接删不掉它** —— glTF 导入器把它存在材质
+   自定义属性里，导出时原样写回，必须在 glTF JSON 层处理（`tune_generated_material.py`）。
+3. 体积代价：1,045KB vs 旧版 208KB。若要压到 ~300KB，需从高模烘焙法线贴图到 6,000 面低模。
+
+---
+
+## B. `tray_dessert` 甜品小镇 · 草莓糖霜方盘
+
+- **石板蓝釉版本已废弃。** `glazed ceramic serving dish` + `crackled glaze` + `gold rim`
+  这套词的先验是**高端餐瓷 / 日式陶器**，出来是个冷峻的香皂碟，一点不甜。
+  **教训：甜品容器的「甜」不靠颜色，靠形制** —— 糖霜滴落、厚卷边、荷叶褶边这类烘焙语言。
+  金边尤其要避开，那是高端餐瓷的符号。
+- **新定色**：奶油白盘身 + 草莓粉糖霜从口沿淌下。与杏色背景靠**明度**分离（奶油白更亮、
+  更中性）；粉色取比 `cupcake` 玫瑰粉**更深更饱和**的草莓粉，靠饱和度区分。
+  糖霜滴落与 `donut` 的可可釉属同一套造型语言，正好构成主题统一 —— playbook 要求
+  「主题统一优先依靠造型语言，而不依靠全组染成同色」。
+- 滴落沿外壁向下淌、不向外扩，不撑大 AABB，`containerSpan` 仍可回到缺省 4.0。
+
+**概念图 prompt（单一 3/4 视角）· 主推**
+```
+A single three-quarter view of one square dessert serving dish, equal width and
+depth, low straight walls about one quarter of the opening width, empty interior
+with a flat almond-cream base, a thick rounded rolled rim running evenly around
+all four sides, glossy strawberry-pink icing pouring over the rim and running down
+the outer walls in soft uneven rounded drips that stop partway down, creamy white
+glaze below the drips, playful bakery feel.
+Stylized smooth cute casual mobile-game prop, game-ready PBR.
+Single centered object on a clean off-white background, soft studio light.
+```
+
+**文生 3D prompt**
+```
+A square dessert serving dish with equal width and depth, low straight walls about
+one quarter of the opening width, a flat almond-cream interior base, a thick
+rounded rolled rim running evenly around all four sides, and glossy strawberry-pink
+icing pouring over the rim down the outer walls in soft uneven rounded drips that
+stop partway down, with creamy white glaze below. Playful bakery feel. Stylized
+smooth cute casual mobile-game prop, game-ready PBR. Single centered object.
+```
+
+**备选 · 荷叶褶边奶油盘**（若糖霜滴落生成得太碎，换这个）
+```
+A single three-quarter view of one square dessert serving dish, equal width and
+depth, low straight walls about one quarter of the opening width, empty interior
+with a flat almond-cream base, the entire top edge formed by a continuous ruffled
+scalloped frill like piped cream running evenly around all four sides, creamy white
+glaze on the walls warming to soft strawberry pink at the frill, playful bakery feel.
+Stylized smooth cute casual mobile-game prop, game-ready PBR.
+Single centered object on a clean off-white background, soft studio light.
+```
