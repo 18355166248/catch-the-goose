@@ -95,14 +95,14 @@ export const SKINS: SceneSkin[] = [
     },
     {
         id: 'dessert', name: '甜品小镇',
-        swatch: [new Color(236, 153, 174), new Color(202, 154, 82)],
+        // 取自 tray_dessert 贴图的两个主色：草莓粉褶边 + 奶油白盘身。
+        // 原来的金褐 (202,154,82) 对应旧模型的金边与金把手，新盘没有金色了。
+        swatch: [new Color(224, 144, 144), new Color(224, 208, 192)],
         // 场景图的中央鹅卵石广场承接独立陶瓷托盘，建筑与甜品造型只围在四周；
         // 这样背景保持主题感，又不会在可点击区域制造真假甜点混淆。
         backdrop: WHITE(),
         backdropTex: 'bg_dessert',
         containerModel: 'tray_dessert',
-        // 设计稿的双侧把手会扩大模型 AABB；5.0 让内盘仍覆盖原来的矩形物理边界。
-        containerSpan: 5.0,
     },
 ];
 
