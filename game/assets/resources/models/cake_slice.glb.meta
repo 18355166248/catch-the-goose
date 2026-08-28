@@ -5,24 +5,6 @@
   "uuid": "e3db565f-cf95-439a-a423-c8eff8fffb9c",
   "files": [],
   "subMetas": {
-    "8977c": {
-      "importer": "gltf-mesh",
-      "uuid": "e3db565f-cf95-439a-a423-c8eff8fffb9c@8977c",
-      "displayName": "",
-      "id": "8977c",
-      "name": "cakeMesh.mesh",
-      "userData": {
-        "gltfIndex": 0,
-        "triangleCount": 1772
-      },
-      "ver": "1.1.1",
-      "imported": true,
-      "files": [
-        ".bin",
-        ".json"
-      ],
-      "subMetas": {}
-    },
     "e7702": {
       "importer": "gltf-mesh",
       "uuid": "e3db565f-cf95-439a-a423-c8eff8fffb9c@e7702",

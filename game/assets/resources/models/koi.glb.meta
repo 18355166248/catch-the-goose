@@ -21,22 +21,6 @@
       ],
       "subMetas": {}
     },
-    "ec4af": {
-      "importer": "gltf-material",
-      "uuid": "b31e2f14-65ac-4666-8b50-eb4c656880da@ec4af",
-      "displayName": "",
-      "id": "ec4af",
-      "name": "koi_teal.material",
-      "userData": {
-        "gltfIndex": 0
-      },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
     "825ed": {
       "importer": "gltf-mesh",
       "uuid": "b31e2f14-65ac-4666-8b50-eb4c656880da@825ed",

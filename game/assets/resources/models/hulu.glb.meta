@@ -41,81 +41,6 @@
       ],
       "subMetas": {}
     },
-    "c4b99": {
-      "importer": "gltf-embeded-image",
-      "uuid": "2c80e844-c110-422e-8b97-50c13e042c0f@c4b99",
-      "displayName": "",
-      "id": "c4b99",
-      "name": "hulu_continuous_honey_wax.image",
-      "userData": {
-        "gltfIndex": 0,
-        "fixAlphaTransparencyArtifacts": true,
-        "hasAlpha": false,
-        "type": "texture"
-      },
-      "ver": "1.0.3",
-      "imported": true,
-      "files": [
-        ".json",
-        ".png"
-      ],
-      "subMetas": {}
-    },
-    "e39f7": {
-      "importer": "texture",
-      "uuid": "2c80e844-c110-422e-8b97-50c13e042c0f@e39f7",
-      "displayName": "",
-      "id": "e39f7",
-      "name": "UnnamedTexture.texture",
-      "userData": {
-        "wrapModeS": "repeat",
-        "wrapModeT": "repeat",
-        "minfilter": "linear",
-        "magfilter": "linear",
-        "mipfilter": "linear",
-        "anisotropy": 0,
-        "isUuid": true,
-        "imageUuidOrDatabaseUri": "2c80e844-c110-422e-8b97-50c13e042c0f@c4b99"
-      },
-      "ver": "1.0.22",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
-    "9c4e3": {
-      "importer": "gltf-material",
-      "uuid": "2c80e844-c110-422e-8b97-50c13e042c0f@9c4e3",
-      "displayName": "",
-      "id": "9c4e3",
-      "name": "hulu_golden_cloud_relief.material",
-      "userData": {
-        "gltfIndex": 0
-      },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
-    "f4ac4": {
-      "importer": "gltf-material",
-      "uuid": "2c80e844-c110-422e-8b97-50c13e042c0f@f4ac4",
-      "displayName": "",
-      "id": "f4ac4",
-      "name": "hulu_sunlit_honey_amber.material",
-      "userData": {
-        "gltfIndex": 3
-      },
-      "ver": "1.0.14",
-      "imported": true,
-      "files": [
-        ".json"
-      ],
-      "subMetas": {}
-    },
     "1e446": {
       "importer": "gltf-mesh",
       "uuid": "2c80e844-c110-422e-8b97-50c13e042c0f@1e446",
@@ -206,6 +131,65 @@
       ],
       "subMetas": {}
     },
+    "c4b99": {
+      "importer": "gltf-embeded-image",
+      "uuid": "2c80e844-c110-422e-8b97-50c13e042c0f@c4b99",
+      "displayName": "",
+      "id": "c4b99",
+      "name": "hulu_continuous_honey_wax.image",
+      "userData": {
+        "gltfIndex": 0,
+        "fixAlphaTransparencyArtifacts": true,
+        "hasAlpha": false,
+        "type": "texture"
+      },
+      "ver": "1.0.3",
+      "imported": true,
+      "files": [
+        ".json",
+        ".png"
+      ],
+      "subMetas": {}
+    },
+    "e39f7": {
+      "importer": "texture",
+      "uuid": "2c80e844-c110-422e-8b97-50c13e042c0f@e39f7",
+      "displayName": "",
+      "id": "e39f7",
+      "name": "UnnamedTexture.texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "linear",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "2c80e844-c110-422e-8b97-50c13e042c0f@c4b99"
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "9c4e3": {
+      "importer": "gltf-material",
+      "uuid": "2c80e844-c110-422e-8b97-50c13e042c0f@9c4e3",
+      "displayName": "",
+      "id": "9c4e3",
+      "name": "hulu_golden_cloud_relief.material",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
     "cf7f5": {
       "importer": "gltf-material",
       "uuid": "2c80e844-c110-422e-8b97-50c13e042c0f@cf7f5",
@@ -230,6 +214,22 @@
       "name": "hulu_cord_shadow.material",
       "userData": {
         "gltfIndex": 2
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f4ac4": {
+      "importer": "gltf-material",
+      "uuid": "2c80e844-c110-422e-8b97-50c13e042c0f@f4ac4",
+      "displayName": "",
+      "id": "f4ac4",
+      "name": "hulu_sunlit_honey_amber.material",
+      "userData": {
+        "gltfIndex": 3
       },
       "ver": "1.0.14",
       "imported": true,
