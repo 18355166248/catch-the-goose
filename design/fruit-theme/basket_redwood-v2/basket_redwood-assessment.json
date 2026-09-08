@@ -1,0 +1,42 @@
+{
+  "reference": "design/fruit-theme/basket_redwood-v2/basket_redwood-hero-reference-v1.png",
+  "source": "Original image generated with built-in imagegen",
+  "use": "Human-reviewed shape and material reference for deterministic Blender modelling, not a photogrammetric reconstruction",
+  "baselineProblems": [
+    "Oversaturated metallic-looking yellow highlights",
+    "No clear distinction between rim, wall and floor"
+  ],
+  "macro": [
+    "Square opening with thick rounded wood rim",
+    "Warm walnut shell and honey woven solid floor",
+    "Quiet satin response; fruits remain foreground"
+  ],
+  "unseenAreas": [
+    "Underside inferred as solid wood base",
+    "Weave reduced to 12 strips in each direction",
+    "Opening dimensions follow game wall X=2.70, depth=2.84 rather than illustration perspective"
+  ],
+  "qualityContract": {
+    "purpose": "Cocos Creator 3.8.8 H5 matching game, readable at 50–100 screen pixels",
+    "maxMaterials": 6,
+    "maxTextureSize": 512,
+    "normalizedMaxEdge": 1,
+    "stopConditions": [
+      "Any floating connection, non-manifold mesh or inverted normal",
+      "Unreadable game-camera silhouette or baked bright reflection",
+      "Budget exceeded or Cocos UUID changed"
+    ],
+    "maxTriangles": 8500,
+    "recognition": [
+      "Square opening with thick rounded wood rim",
+      "Warm walnut shell and honey woven solid floor",
+      "Quiet satin response; fruits remain foreground"
+    ],
+    "approximations": [
+      "Underside inferred as solid wood base",
+      "Weave reduced to 12 strips in each direction",
+      "Opening dimensions follow game wall X=2.70, depth=2.84 rather than illustration perspective"
+    ]
+  },
+  "decision": "Build candidate, compare front/side/back before promotion"
+}

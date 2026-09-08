@@ -1,0 +1,18 @@
+[
+  {
+    "component": "wooden-shell",
+    "implementation": "solid flat floor, rounded corners, vertical wood grain"
+  },
+  {
+    "component": "rolled-rim",
+    "implementation": "continuous unbroken rim without handles"
+  },
+  {
+    "component": "woven-floor",
+    "implementation": "over-under weave visible from above"
+  },
+  {
+    "component": "brass-fasteners",
+    "implementation": "small restrained corner accents"
+  }
+]

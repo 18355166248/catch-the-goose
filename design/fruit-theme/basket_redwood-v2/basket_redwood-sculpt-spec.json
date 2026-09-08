@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "basket_redwood",
+  "reference": "design/fruit-theme/basket_redwood-v2/basket_redwood-hero-reference-v1.png",
+  "generator": "scripts/gen_basket_redwood_v2.py",
+  "qualityContract": {
+    "purpose": "Cocos Creator 3.8.8 H5 matching game, readable at 50–100 screen pixels",
+    "maxMaterials": 6,
+    "maxTextureSize": 512,
+    "normalizedMaxEdge": 1,
+    "stopConditions": [
+      "Any floating connection, non-manifold mesh or inverted normal",
+      "Unreadable game-camera silhouette or baked bright reflection",
+      "Budget exceeded or Cocos UUID changed"
+    ],
+    "maxTriangles": 8500,
+    "recognition": [
+      "Square opening with thick rounded wood rim",
+      "Warm walnut shell and honey woven solid floor",
+      "Quiet satin response; fruits remain foreground"
+    ],
+    "approximations": [
+      "Underside inferred as solid wood base",
+      "Weave reduced to 12 strips in each direction",
+      "Opening dimensions follow game wall X=2.70, depth=2.84 rather than illustration perspective"
+    ]
+  },
+  "components": [
+    {
+      "name": "wooden-shell",
+      "parent": "basket_redwood",
+      "topology": "closed rounded rectangle shell plus solid base",
+      "dimensions": "outer 3.80 x 3.80; inside 2.72 x 2.84; base top z=0.35, wall top z=1.21",
+      "material": "matte chestnut wood",
+      "connection": "base and wall overlap 0.04",
+      "features": "solid flat floor, rounded corners, vertical wood grain"
+    },
+    {
+      "name": "rolled-rim",
+      "parent": "wooden-shell",
+      "topology": "closed swept rounded-rectangle moulding",
+      "dimensions": "outer width/depth 4.0; opening 2.70 x 2.84; top z=1.34",
+      "material": "satin chestnut with broad grain",
+      "connection": "rim overlaps shell 0.10",
+      "features": "continuous unbroken rim without handles"
+    },
+    {
+      "name": "woven-floor",
+      "parent": "wooden-shell",
+      "topology": "24 solid interleaving rectangular ribbons",
+      "dimensions": "12 strips per direction; z=0.35 +/-0.012; width 0.20",
+      "material": "two shades of honey rattan",
+      "connection": "ribbons embedded into base 0.04 and pass under inner rim",
+      "features": "over-under weave visible from above"
+    },
+    {
+      "name": "brass-fasteners",
+      "parent": "wooden-shell",
+      "topology": "eight low-profile closed rivets",
+      "dimensions": "eight rivets, radius 0.043, depth 0.029, paired on four corners",
+      "material": "muted brass metallic=0.3 roughness=0.5",
+      "connection": "each rivet partially embedded in exterior wall",
+      "features": "small restrained corner accents"
+    }
+  ],
+  "detailInventory": [
+    {
+      "component": "wooden-shell",
+      "implementation": "solid flat floor, rounded corners, vertical wood grain"
+    },
+    {
+      "component": "rolled-rim",
+      "implementation": "continuous unbroken rim without handles"
+    },
+    {
+      "component": "woven-floor",
+      "implementation": "over-under weave visible from above"
+    },
+    {
+      "component": "brass-fasteners",
+      "implementation": "small restrained corner accents"
+    }
+  ]
+}

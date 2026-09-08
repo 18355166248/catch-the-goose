@@ -1,0 +1,23 @@
+{
+  "id": "basket_redwood",
+  "triangles": 8348,
+  "materials": 5,
+  "components": [
+    "brass-fasteners",
+    "rolled-rim",
+    "wooden-shell",
+    "woven-floor"
+  ],
+  "normalizedBounds": [
+    1.0,
+    1.0,
+    0.3384999930858612
+  ],
+  "bytes": 514368,
+  "closedMeshes": true,
+  "uuid": "82b77047-d7d0-493d-a4d2-c2944e3baddb",
+  "cocosMeshes": 4,
+  "cocosMaterials": 5,
+  "beforeTriangles": 7474,
+  "beforeBytes": 453888
+}
