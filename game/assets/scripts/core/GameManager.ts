@@ -1763,7 +1763,7 @@ export class GameManager extends Component {
     private static readonly PROP_NAMES: Record<PropKind, string> = { remove: '移出', magnet: '凑齐', shuffle: '打乱' };
 
     private loadProps() {
-        this.propCounts = { ...this.propCounts, ...SaveData.getProps({}) };
+        this.propCounts = SaveData.getProps(this.propCounts);
         this.refreshPropHud();
     }
 

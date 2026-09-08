@@ -9,6 +9,7 @@ import { MODEL_PREFAB_UUID } from './ModelManifest';
  */
 export class PrefabCache {
     private cache = new Map<string, Prefab>();
+    private loading = new Map<string, Promise<void>>();
 
     get(id: string): Prefab | undefined {
         return this.cache.get(id);
@@ -23,13 +24,24 @@ export class PrefabCache {
         const requested = Array.from(new Set(ids));
         await Promise.all(requested
             .filter(id => !this.cache.has(id))
-            .map(async id => {
-                const prefab = await PrefabCache.loadOne(id);
-                if (prefab) this.cache.set(id, prefab);
-            }));
+            .map(id => this.load(id)));
         // 失败项显式交给玩法层。过去这里返回 void，玩法层会静默跳过缺失模型，
         // 关卡件数随网络/资源错误缩水，玩家甚至可能拿到一个“更容易”的坏关卡。
         return requested.filter(id => !this.cache.has(id));
+    }
+
+    /** 重叠的批次共享在途加载；失败后移除 Promise，下次重试仍会发起真实请求。 */
+    private load(id: string): Promise<void> {
+        const existing = this.loading.get(id);
+        if (existing) return existing;
+        const task = PrefabCache.loadOne(id).then(prefab => {
+            if (prefab) this.cache.set(id, prefab);
+        }).then(
+            () => { this.loading.delete(id); },
+            error => { this.loading.delete(id); throw error; },
+        );
+        this.loading.set(id, task);
+        return task;
     }
 
     /** 单个 glb 预制体：先试路径，再退回 uuid。失败返回 null（调用方决定降级策略）。 */

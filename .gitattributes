@@ -1,0 +1,2 @@
+# Git for Windows 也保留 Shell 脚本的 LF，避免 Bash 把 CR 当作命令参数。
+*.sh text eol=lf

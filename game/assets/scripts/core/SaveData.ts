@@ -31,8 +31,45 @@ export class SaveData {
         try { sys.localStorage.setItem(key, value); } catch { /* 存储不可用则仅本局生效 */ }
     }
 
-    private static readJson<T>(key: string, fallback: T): T {
-        try { return JSON.parse(SaveData.read(key) ?? '') ?? fallback; } catch { return fallback; }
+    private static readObject(key: string): Record<string, unknown> {
+        try {
+            const value: unknown = JSON.parse(SaveData.read(key) ?? '');
+            return SaveData.isObject(value) ? value : {};
+        } catch { return {}; }
+    }
+
+    private static isObject(value: unknown): value is Record<string, unknown> {
+        return typeof value === 'object' && value !== null && !Array.isArray(value);
+    }
+
+    private static isCount(value: unknown): value is number {
+        return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+    }
+
+    /** JSON 能解析不代表结构正确；坏记录逐条丢弃，保留其他关卡的有效成绩。 */
+    private static cleanBest(value: unknown): Record<number, BestRecord> {
+        const best: Record<number, BestRecord> = {};
+        if (!SaveData.isObject(value)) return best;
+        for (const key of Object.keys(value)) {
+            const record = value[key];
+            if (!/^(0|[1-9]\d*)$/.test(key) || !SaveData.isCount(Number(key))
+                || !SaveData.isObject(record)
+                || !SaveData.isCount(record.stars) || record.stars > 3
+                || typeof record.progress !== 'number' || !Number.isFinite(record.progress)
+                || record.progress < 0 || record.progress > 100) continue;
+            best[Number(key)] = { stars: record.stars, progress: record.progress };
+            if (SaveData.isCount(record.score)) best[Number(key)].score = record.score;
+        }
+        return best;
+    }
+
+    private static readBest(): Record<string, Record<number, BestRecord>> {
+        const all: Record<string, Record<number, BestRecord>> = Object.create(null);
+        const raw = SaveData.readObject(SaveData.BEST);
+        for (const theme of Object.keys(raw)) {
+            if (SaveData.isObject(raw[theme])) all[theme] = SaveData.cleanBest(raw[theme]);
+        }
+        return all;
     }
 
     /** 当天日期键，用于每日免费次数的跨天重置。 */
@@ -47,8 +84,8 @@ export class SaveData {
      * 兼容旧版纯数字存档（解析为 number，无 date 字段 → 视为非今天 → 重开）。
      */
     static getLevel(): number | null {
-        const raw = SaveData.readJson<{ date?: string; index?: number } | null>(SaveData.LEVEL, null);
-        return raw && raw.date === SaveData.todayKey() && typeof raw.index === 'number'
+        const raw = SaveData.readObject(SaveData.LEVEL);
+        return raw.date === SaveData.todayKey() && SaveData.isCount(raw.index)
             ? raw.index : null;
     }
     static setLevel(index: number): void {
@@ -57,8 +94,8 @@ export class SaveData {
 
     /** 仅当存档日期是今天才沿用剩余次数，否则回落 fallback（跨天自动重置）。 */
     static getDaily(fallback: number): number {
-        const raw = SaveData.readJson<{ date?: string; left?: number } | null>(SaveData.DAILY, null);
-        return raw && raw.date === SaveData.todayKey() && typeof raw.left === 'number'
+        const raw = SaveData.readObject(SaveData.DAILY);
+        return raw.date === SaveData.todayKey() && SaveData.isCount(raw.left)
             ? raw.left : fallback;
     }
     static setDaily(left: number): void {
@@ -66,12 +103,12 @@ export class SaveData {
     }
 
     static getBest(themeId: string): Record<number, BestRecord> {
-        const all = SaveData.readJson<Record<string, Record<number, BestRecord>>>(SaveData.BEST, {});
+        const all = SaveData.readBest();
         if (all[themeId]) return all[themeId];
 
         // v1 只按难度存成绩，四个主题会互相覆盖。升级时把旧成绩归到玩家当前主题，
         // 既不丢历史数据，也不把一张地图的纪录复制成四张地图都已通关。
-        const legacy = SaveData.readJson<Record<number, BestRecord>>(SaveData.BEST_LEGACY, {});
+        const legacy = SaveData.cleanBest(SaveData.readObject(SaveData.BEST_LEGACY));
         if (Object.keys(all).length === 0 && Object.keys(legacy).length > 0) {
             all[themeId] = legacy;
             SaveData.write(SaveData.BEST, JSON.stringify(all));
@@ -80,8 +117,8 @@ export class SaveData {
         return {};
     }
     static setBest(themeId: string, best: Record<number, BestRecord>): void {
-        const all = SaveData.readJson<Record<string, Record<number, BestRecord>>>(SaveData.BEST, {});
-        all[themeId] = best;
+        const all = SaveData.readBest();
+        all[themeId] = SaveData.cleanBest(best);
         SaveData.write(SaveData.BEST, JSON.stringify(all));
     }
 
@@ -107,8 +144,14 @@ export class SaveData {
         else SaveData.write(SaveData.THEME, id);
     }
 
-    static getProps<T>(fallback: T): T {
-        return SaveData.readJson<T>(SaveData.PROP, fallback);
+    static getProps<K extends string>(fallback: Record<K, number>): Record<K, number> {
+        const raw = SaveData.readObject(SaveData.PROP);
+        const counts = { ...fallback };
+        for (const key of Object.keys(fallback) as K[]) {
+            const value = raw[key];
+            if (SaveData.isCount(value)) counts[key] = value;
+        }
+        return counts;
     }
     static setProps(counts: unknown): void {
         SaveData.write(SaveData.PROP, JSON.stringify(counts));

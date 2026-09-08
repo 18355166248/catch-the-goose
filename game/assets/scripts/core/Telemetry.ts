@@ -3,6 +3,8 @@ import { sys } from 'cc';
 type EventProps = Record<string, string | number | boolean | null | undefined>;
 
 interface TelemetryEvent {
+    /** 仅用于本地队列确认，不发送到收集端。 */
+    queueId: string;
     name: string;
     at: string;
     sessionId: string;
@@ -27,6 +29,7 @@ export class Telemetry {
     private static initialized = false;
     private static flushing = false;
     private static sessionId = '';
+    private static nextEventId = 0;
 
     static init(): void {
         if (Telemetry.initialized) return;
@@ -50,6 +53,7 @@ export class Telemetry {
     static track(name: string, props: EventProps = {}): void {
         if (!Telemetry.initialized) Telemetry.init();
         const event: TelemetryEvent = {
+            queueId: Telemetry.makeEventId(),
             name,
             at: new Date().toISOString(),
             sessionId: Telemetry.sessionId,
@@ -71,19 +75,26 @@ export class Telemetry {
     }
 
     static async flush(): Promise<void> {
+        if (!Telemetry.initialized) Telemetry.init();
         const endpoint = Telemetry.config().telemetryEndpoint?.trim();
         if (!endpoint || Telemetry.flushing) return;
         const queue = Telemetry.readQueue();
         if (queue.length === 0) return;
+        // 旧版事件没有本地 ID，先落盘，以便响应回来时仍能准确识别同一批。
+        Telemetry.writeQueue(queue);
         Telemetry.flushing = true;
         try {
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ events: queue }),
+                body: JSON.stringify({ events: queue.map(({ queueId, ...event }) => event) }),
                 keepalive: true,
             });
-            if (response.ok) Telemetry.writeQueue([]);
+            if (response.ok) {
+                // 请求期间 track 可能追加事件，甚至触发 200 条裁剪；不能清空队列或按长度截断。
+                const sent = new Set(queue.map(event => event.queueId));
+                Telemetry.writeQueue(Telemetry.readQueue().filter(event => !sent.has(event.queueId)));
+            }
         } catch {
             // 离线/弱网是正常状态，保留队列等待后续重试，不把观测失败升级成游戏错误。
         } finally {
@@ -98,7 +109,17 @@ export class Telemetry {
     private static readQueue(): TelemetryEvent[] {
         try {
             const value = JSON.parse(sys.localStorage.getItem(Telemetry.STORE) ?? '[]');
-            return Array.isArray(value) ? value : [];
+            if (!Array.isArray(value)) return [];
+            return value.filter(event => event && typeof event === 'object'
+                && typeof event.name === 'string' && typeof event.at === 'string'
+                && typeof event.sessionId === 'string'
+                && event.props && typeof event.props === 'object' && !Array.isArray(event.props))
+                .slice(-Telemetry.MAX_QUEUE)
+                .map(event => ({
+                    ...event,
+                    queueId: typeof event.queueId === 'string' && event.queueId
+                        ? event.queueId : Telemetry.makeEventId(),
+                }));
         } catch { return []; }
     }
 
@@ -110,6 +131,10 @@ export class Telemetry {
         const cryptoApi = (globalThis as any).crypto;
         if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
         return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    private static makeEventId(): string {
+        return `${Telemetry.sessionId}:${Telemetry.nextEventId++}`;
     }
 
     private static trim(value: string): string {
