@@ -167,6 +167,10 @@ def render(name: str, output: Path, azimuth: float, models_dir: Path,
     bpy.context.view_layer.update()
     final_low, final_high = bounds(meshes)
 
+    # A flat container sits lower than an upright item at the shared baseline.
+    # Keep before/after camera geometry identical, with enough room for its front edge.
+    bpy.context.scene.camera.data.ortho_scale = 1.70 if name.startswith('basket_') else 1.48
+
     output.mkdir(parents=True, exist_ok=True)
     bpy.context.scene.render.filepath = str(output / f"{name}.png")
     bpy.ops.render.render(write_still=True)
@@ -183,11 +187,14 @@ def main() -> None:
     if not options.models_dir.is_absolute():
         options.models_dir = ROOT / options.models_dir
     requested = {item.strip() for item in options.only.split(",") if item.strip()}
-    setup_scene()
-    names = list(dict.fromkeys(item for family in THEMES.values() for item in family))
+    # 显式指定的容器也必须渲染；过去 --only basket_redwood 会静默输出零张图。
+    names = sorted(requested) if requested else list(dict.fromkeys(
+        item for family in THEMES.values() for item in family))
     for name in names:
-        if requested and name not in requested:
-            continue
+        if Path(name).name != name or not (options.models_dir / f"{name}.glb").is_file():
+            raise SystemExit(f"Unknown or missing model: {name}")
+    setup_scene()
+    for name in names:
         render(name, options.output, options.azimuth, options.models_dir, options.map_stripped)
 
 
