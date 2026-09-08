@@ -1,0 +1,43 @@
+{
+  "reference": "design/farm-theme/corn-v2/corn-hero-reference-v1.png",
+  "source": "Original image generated with built-in imagegen",
+  "use": "Human-reviewed shape and material reference for deterministic Blender modelling, not a photogrammetric reconstruction",
+  "baselineProblems": [
+    "Sparse spiky studs instead of kernels",
+    "Large bare smooth areas on cob",
+    "Flat green patches without leaf anatomy"
+  ],
+  "macro": [
+    "Tapered ear covered in regular dense kernel rows",
+    "Fresh green thick folded husks",
+    "Golden top and distinct green base"
+  ],
+  "unseenAreas": [
+    "12 rows x 9 layers instead of botanical kernel density",
+    "Back and underside inferred with same complete kernel coverage",
+    "Up to6700 triangles justified by actual silhouette kernels and thick leaves visible on phone"
+  ],
+  "qualityContract": {
+    "purpose": "Cocos Creator 3.8.8 H5 matching game, readable at 50–100 screen pixels",
+    "maxMaterials": 6,
+    "maxTextureSize": 512,
+    "normalizedMaxEdge": 1,
+    "stopConditions": [
+      "Any floating connection, non-manifold mesh or inverted normal",
+      "Unreadable game-camera silhouette or baked bright reflection",
+      "Budget exceeded or Cocos UUID changed"
+    ],
+    "maxTriangles": 6700,
+    "recognition": [
+      "Tapered ear covered in regular dense kernel rows",
+      "Fresh green thick folded husks",
+      "Golden top and distinct green base"
+    ],
+    "approximations": [
+      "12 rows x 9 layers instead of botanical kernel density",
+      "Back and underside inferred with same complete kernel coverage",
+      "Up to6700 triangles justified by actual silhouette kernels and thick leaves visible on phone"
+    ]
+  },
+  "decision": "Build candidate, compare front/side/back before promotion"
+}

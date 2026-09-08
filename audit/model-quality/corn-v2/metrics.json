@@ -1,0 +1,24 @@
+{
+  "id": "corn",
+  "triangles": 6576,
+  "materials": 6,
+  "components": [
+    "cob-core",
+    "cut-stalk",
+    "folded-husks",
+    "husk-veins",
+    "kernel-rows"
+  ],
+  "normalizedBounds": [
+    0.6061517000198364,
+    0.6161227226257324,
+    0.9999999403953552
+  ],
+  "bytes": 190644,
+  "closedMeshes": true,
+  "uuid": "52b82397-2916-4750-b5f0-d6733daa2da8",
+  "cocosMeshes": 5,
+  "cocosMaterials": 6,
+  "beforeTriangles": 1852,
+  "beforeBytes": 68616
+}

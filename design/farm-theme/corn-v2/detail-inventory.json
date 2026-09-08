@@ -1,0 +1,22 @@
+[
+  {
+    "component": "cob-core",
+    "implementation": "no holes through ear"
+  },
+  {
+    "component": "kernel-rows",
+    "implementation": "rounded rectangular shape, regular rows without studs"
+  },
+  {
+    "component": "folded-husks",
+    "implementation": "thick central crease, curling leaf tips"
+  },
+  {
+    "component": "husk-veins",
+    "implementation": "broad restrained central vein"
+  },
+  {
+    "component": "cut-stalk",
+    "implementation": "compact attached stalk"
+  }
+]

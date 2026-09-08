@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "id": "corn",
+  "reference": "design/farm-theme/corn-v2/corn-hero-reference-v1.png",
+  "generator": "scripts/gen_corn_v2.py",
+  "qualityContract": {
+    "purpose": "Cocos Creator 3.8.8 H5 matching game, readable at 50–100 screen pixels",
+    "maxMaterials": 6,
+    "maxTextureSize": 512,
+    "normalizedMaxEdge": 1,
+    "stopConditions": [
+      "Any floating connection, non-manifold mesh or inverted normal",
+      "Unreadable game-camera silhouette or baked bright reflection",
+      "Budget exceeded or Cocos UUID changed"
+    ],
+    "maxTriangles": 6700,
+    "recognition": [
+      "Tapered ear covered in regular dense kernel rows",
+      "Fresh green thick folded husks",
+      "Golden top and distinct green base"
+    ],
+    "approximations": [
+      "12 rows x 9 layers instead of botanical kernel density",
+      "Back and underside inferred with same complete kernel coverage",
+      "Up to6700 triangles justified by actual silhouette kernels and thick leaves visible on phone"
+    ]
+  },
+  "components": [
+    {
+      "name": "cob-core",
+      "parent": "corn",
+      "topology": "closed tapered lathe",
+      "dimensions": "z -0.68 to 0.84; radius 0.27 below shoulder, taper to 0.016 at top",
+      "material": "ochre gold",
+      "connection": "continuous center under kernels",
+      "features": "no holes through ear"
+    },
+    {
+      "name": "kernel-rows",
+      "parent": "cob-core",
+      "topology": "108 closed bevelled rounded kernels",
+      "dimensions": "12 circumferential rows x 9 axial levels; tangential width follows circumference, radial depth 0.135, axial height 0.13–0.17",
+      "material": "two warm yellow shades",
+      "connection": "inner kernel face overlaps core, adjacent kernels nearly touch",
+      "features": "rounded rectangular shape, regular rows without studs"
+    },
+    {
+      "name": "folded-husks",
+      "parent": "cob-core",
+      "topology": "three closed folded double-sided blades",
+      "dimensions": "three azimuths; base z=-0.80; curled tips z=0.35; half-width at middle 0.295",
+      "material": "deep and fresh greens",
+      "connection": "bases overlap core and stalk at least0.06",
+      "features": "thick central crease, curling leaf tips"
+    },
+    {
+      "name": "husk-veins",
+      "parent": "folded-husks",
+      "topology": "three closed narrow curves",
+      "dimensions": "one central vein per blade, radius0.008",
+      "material": "light green",
+      "connection": "embedded0.004 into blade surface",
+      "features": "broad restrained central vein"
+    },
+    {
+      "name": "cut-stalk",
+      "parent": "cob-core",
+      "topology": "short closed tapered cylinder",
+      "dimensions": "z -0.97 to-0.68 radius0.13",
+      "material": "pale olive-green",
+      "connection": "overlap0.11 into core and leaves",
+      "features": "compact attached stalk"
+    }
+  ],
+  "detailInventory": [
+    {
+      "component": "cob-core",
+      "implementation": "no holes through ear"
+    },
+    {
+      "component": "kernel-rows",
+      "implementation": "rounded rectangular shape, regular rows without studs"
+    },
+    {
+      "component": "folded-husks",
+      "implementation": "thick central crease, curling leaf tips"
+    },
+    {
+      "component": "husk-veins",
+      "implementation": "broad restrained central vein"
+    },
+    {
+      "component": "cut-stalk",
+      "implementation": "compact attached stalk"
+    }
+  ]
+}
