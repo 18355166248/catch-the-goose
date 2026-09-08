@@ -230,7 +230,7 @@ python3 /Users/xmly/.agents/skills/img2threejs/forge/stage2_spec/validate_sculpt
 | 7 | 古玩铺 | `yuxi` | 已完成 | 本提交 |
 | 8 | 古玩铺 | `ruyi` | 已完成 | 本提交 |
 | 9 | 池塘农场 | `carrot` | 运行时验收 | 待用户确认 |
-| 10 | 池塘农场 | `corn` | 待评估 | — |
+| 10 | 池塘农场 | `corn` | 已完成 | `d294da8` |
 | 11 | 池塘农场 | `eggplant` | 待评估 | — |
 | 12 | 池塘农场 | `frog` | 待评估 | — |
 | 13 | 池塘农场 | `pumpkin` | 待评估 | — |
@@ -250,3 +250,14 @@ python3 /Users/xmly/.agents/skills/img2threejs/forge/stage2_spec/validate_sculpt
 
 每完成一件，必须同时更新状态、commit 和 `audit/model-quality/README.md`，让列表、证据与代码
 始终保持一致。
+
+### 2026-09-08 补充批次
+
+本轮还覆盖原 26 件列表之外的水果木筐与香蕉。逐件证据在同名 `audit/model-quality/<id>-v2/`；
+Windows 下使用的仓库内规格校验器及其与旧流程的区别见 [模型复现工具](model-refresh-tools.md)。
+
+| 主题 | 模型 | 状态 | 提交 |
+| --- | --- | --- | --- |
+| 水果摊 | `basket_redwood` | 已完成 | `3300684` |
+| 水果摊 | `banana` | 已完成 | `1a378cc` |
+| 池塘农场 | `corn` | 已完成 | `d294da8` |
