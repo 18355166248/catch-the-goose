@@ -1,0 +1,23 @@
+{
+  "id": "banana",
+  "triangles": 1568,
+  "materials": 3,
+  "components": [
+    "blossom-tip",
+    "curved-peel",
+    "stem",
+    "stem-cut"
+  ],
+  "normalizedBounds": [
+    0.9999999403953552,
+    0.4441509246826172,
+    0.1783410608768463
+  ],
+  "bytes": 65580,
+  "closedMeshes": true,
+  "uuid": "21e8800f-082b-4adf-bff1-b93346203522",
+  "cocosMeshes": 4,
+  "cocosMaterials": 3,
+  "beforeTriangles": 1488,
+  "beforeBytes": 40172
+}

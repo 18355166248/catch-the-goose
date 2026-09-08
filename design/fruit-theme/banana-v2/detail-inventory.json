@@ -1,0 +1,18 @@
+[
+  {
+    "component": "curved-peel",
+    "implementation": "swollen middle and two distinct taper profiles"
+  },
+  {
+    "component": "stem",
+    "implementation": "stout short neck, no separate bead"
+  },
+  {
+    "component": "stem-cut",
+    "implementation": "dark cut face"
+  },
+  {
+    "component": "blossom-tip",
+    "implementation": "small asymmetrical tip"
+  }
+]

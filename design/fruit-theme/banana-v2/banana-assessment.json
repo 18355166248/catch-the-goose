@@ -1,0 +1,41 @@
+{
+  "reference": "design/fruit-theme/banana-v2/banana-hero-reference-v1.png",
+  "source": "Original image generated with built-in imagegen",
+  "use": "Human-reviewed shape and material reference for deterministic Blender modelling, not a photogrammetric reconstruction",
+  "baselineProblems": [
+    "Thin boomerang silhouette",
+    "Identical bead-like ends",
+    "Bright detached-looking stripe"
+  ],
+  "macro": [
+    "Thick crescent with asymmetrical ends",
+    "Short thicker olive stem and tiny dark blossom",
+    "Warm yellow peel with five subtle longitudinal ribs"
+  ],
+  "unseenAreas": [
+    "Back mirrors full-volume peel anatomy",
+    "Freckles and fine peel seams use deterministic 256px texture rather than geometry"
+  ],
+  "qualityContract": {
+    "purpose": "Cocos Creator 3.8.8 H5 matching game, readable at 50–100 screen pixels",
+    "maxMaterials": 6,
+    "maxTextureSize": 512,
+    "normalizedMaxEdge": 1,
+    "stopConditions": [
+      "Any floating connection, non-manifold mesh or inverted normal",
+      "Unreadable game-camera silhouette or baked bright reflection",
+      "Budget exceeded or Cocos UUID changed"
+    ],
+    "maxTriangles": 3200,
+    "recognition": [
+      "Thick crescent with asymmetrical ends",
+      "Short thicker olive stem and tiny dark blossom",
+      "Warm yellow peel with five subtle longitudinal ribs"
+    ],
+    "approximations": [
+      "Back mirrors full-volume peel anatomy",
+      "Freckles and fine peel seams use deterministic 256px texture rather than geometry"
+    ]
+  },
+  "decision": "Build candidate, compare front/side/back before promotion"
+}

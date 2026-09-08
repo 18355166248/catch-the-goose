@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "id": "banana",
+  "reference": "design/fruit-theme/banana-v2/banana-hero-reference-v1.png",
+  "generator": "scripts/gen_banana_v2.py",
+  "qualityContract": {
+    "purpose": "Cocos Creator 3.8.8 H5 matching game, readable at 50–100 screen pixels",
+    "maxMaterials": 6,
+    "maxTextureSize": 512,
+    "normalizedMaxEdge": 1,
+    "stopConditions": [
+      "Any floating connection, non-manifold mesh or inverted normal",
+      "Unreadable game-camera silhouette or baked bright reflection",
+      "Budget exceeded or Cocos UUID changed"
+    ],
+    "maxTriangles": 3200,
+    "recognition": [
+      "Thick crescent with asymmetrical ends",
+      "Short thicker olive stem and tiny dark blossom",
+      "Warm yellow peel with five subtle longitudinal ribs"
+    ],
+    "approximations": [
+      "Back mirrors full-volume peel anatomy",
+      "Freckles and fine peel seams use deterministic 256px texture rather than geometry"
+    ]
+  },
+  "components": [
+    {
+      "name": "curved-peel",
+      "parent": "banana",
+      "topology": "single continuous closed swept five-lobed tube",
+      "dimensions": "centerline x -1.5 to1.5, y=-0.83*sin(pi*t); max radius0.31, depth0.57",
+      "material": "satin yellow peel with subtle golden groove shading",
+      "connection": "single uninterrupted body with capped ends",
+      "features": "swollen middle and two distinct taper profiles"
+    },
+    {
+      "name": "stem",
+      "parent": "curved-peel",
+      "topology": "closed tapered curved stem",
+      "dimensions": "length0.28 radius0.12 to0.095 at first end",
+      "material": "olive yellow-green",
+      "connection": "starts 0.07 inside peel end",
+      "features": "stout short neck, no separate bead"
+    },
+    {
+      "name": "stem-cut",
+      "parent": "stem",
+      "topology": "closed flat end cap",
+      "dimensions": "radius0.095 thickness0.015",
+      "material": "muted brown",
+      "connection": "embedded in terminal stem section",
+      "features": "dark cut face"
+    },
+    {
+      "name": "blossom-tip",
+      "parent": "curved-peel",
+      "topology": "closed tapered small blossom",
+      "dimensions": "length0.08 radius0.065 to0.025",
+      "material": "deep brown",
+      "connection": "starts0.04 inside peel",
+      "features": "small asymmetrical tip"
+    }
+  ],
+  "detailInventory": [
+    {
+      "component": "curved-peel",
+      "implementation": "swollen middle and two distinct taper profiles"
+    },
+    {
+      "component": "stem",
+      "implementation": "stout short neck, no separate bead"
+    },
+    {
+      "component": "stem-cut",
+      "implementation": "dark cut face"
+    },
+    {
+      "component": "blossom-tip",
+      "implementation": "small asymmetrical tip"
+    }
+  ]
+}

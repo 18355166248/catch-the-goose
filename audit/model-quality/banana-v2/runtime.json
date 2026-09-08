@@ -1,0 +1,116 @@
+[
+  {
+    "theme": "fruit",
+    "id": "banana",
+    "width": 390,
+    "height": 844,
+    "initial": {
+      "physics": true,
+      "total": 36,
+      "parts": [
+        "curved-peel",
+        "blossom-tip",
+        "stem",
+        "stem-cut"
+      ],
+      "containerParts": [
+        "wooden-shell",
+        "brass-fasteners",
+        "rolled-rim",
+        "woven-floor"
+      ],
+      "contained": true
+    },
+    "slotParts": [
+      "curved-peel",
+      "blossom-tip",
+      "stem",
+      "stem-cut"
+    ],
+    "final": {
+      "removed": 3,
+      "tray": 0,
+      "thawed": true,
+      "valid": true,
+      "score": 100
+    },
+    "errors": [],
+    "status": "passed"
+  },
+  {
+    "theme": "fruit",
+    "id": "banana",
+    "width": 347,
+    "height": 603,
+    "initial": {
+      "physics": true,
+      "total": 36,
+      "parts": [
+        "curved-peel",
+        "blossom-tip",
+        "stem",
+        "stem-cut"
+      ],
+      "containerParts": [
+        "wooden-shell",
+        "brass-fasteners",
+        "rolled-rim",
+        "woven-floor"
+      ],
+      "contained": true
+    },
+    "slotParts": [
+      "curved-peel",
+      "blossom-tip",
+      "stem",
+      "stem-cut"
+    ],
+    "final": {
+      "removed": 3,
+      "tray": 0,
+      "thawed": true,
+      "valid": true,
+      "score": 100
+    },
+    "errors": [],
+    "status": "passed"
+  },
+  {
+    "theme": "fruit",
+    "id": "banana",
+    "width": 1280,
+    "height": 720,
+    "initial": {
+      "physics": true,
+      "total": 36,
+      "parts": [
+        "curved-peel",
+        "blossom-tip",
+        "stem",
+        "stem-cut"
+      ],
+      "containerParts": [
+        "wooden-shell",
+        "brass-fasteners",
+        "rolled-rim",
+        "woven-floor"
+      ],
+      "contained": true
+    },
+    "slotParts": [
+      "curved-peel",
+      "blossom-tip",
+      "stem",
+      "stem-cut"
+    ],
+    "final": {
+      "removed": 3,
+      "tray": 0,
+      "thawed": true,
+      "valid": true,
+      "score": 100
+    },
+    "errors": [],
+    "status": "passed"
+  }
+]
